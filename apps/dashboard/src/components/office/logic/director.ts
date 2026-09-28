@@ -3,7 +3,7 @@
 import type { AgentStatus } from '@rizehubhq/shared';
 import { IDLE_LABEL, buildIndexes, clip, toTileAgent } from '../../../lib/data/derive';
 import type { HqSnapshot, PlanPayload } from '../../../lib/data/types';
-import { OFFICE, assignmentsFor, buildOfficeMap, deskFor, spotsOf, type OfficeMap, type Spot } from './map';
+import { OFFICE, assignmentsFor, buildOfficeMap, deskFor, spotsOf, type Facing, type OfficeMap, type Spot } from './map';
 import type { GestureName, Goal, LoopName } from './motion';
 import { assignSpots } from './spots';
 
@@ -51,6 +51,23 @@ export function workLoop(agentId: string, department: string): LoopName {
   if (department === 'dev') return 'type';
   if (department === 'design') return 'draw';
   return 'write';
+}
+
+/** What the CEO does at a spot (anything he can walk up to: chairs, sofas, the gym, the coffee bar, his bed). */
+export function ceoGoalAt(s: Spot): Goal {
+  const loop: LoopName = s.kind === 'bed' ? 'sleep'
+    : s.kind === 'ceo' ? 'ceo_desk'
+    : s.kind === 'ceo_sofa' ? 'sofa'
+    : s.kind === 'boardroom' ? 'meeting'
+    : s.kind === 'boardroom_head' ? 'present'
+    : s.kind === 'whiteboard' ? 'whiteboard'
+    : SPOT_LOOP[s.kind]?.(s) ?? 'stand';
+  return spotGoal(s, loop);
+}
+
+/** The CEO taking a free desk chair for a while. */
+export function ceoSeatGoal(seat: { id: string; x: number; y: number; face: Facing }): Goal {
+  return { key: `seat:${seat.id}`, x: seat.x, y: seat.y, face: seat.face, seated: true, loop: 'desk_idle' };
 }
 
 const SPOT_LOOP: Record<string, (s: Spot) => LoopName> = {

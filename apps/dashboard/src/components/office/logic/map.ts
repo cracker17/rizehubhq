@@ -27,7 +27,7 @@ export interface Desk extends Seat { agentId: string }
 
 export type SpotKind =
   | 'coffee' | 'lounge_sofa' | 'lobby' | 'ping_pong' | 'foosball' | 'chat'
-  | 'boardroom' | 'boardroom_head' | 'qa_bench' | 'whiteboard' | 'ceo' | 'gym';
+  | 'boardroom' | 'boardroom_head' | 'qa_bench' | 'whiteboard' | 'ceo' | 'gym' | 'bed' | 'ceo_sofa';
 export type Pose = 'stand' | 'sit';
 export interface Spot { id: string; kind: SpotKind; x: number; y: number; face: Facing; pose: Pose; pair?: string; room: RoomId; via?: number; loop?: string }
 

@@ -210,12 +210,12 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
                 <div className="flex items-center justify-between text-[15px] font-bold tracking-tight">
                   <span>Sales pipeline</span><span className="flex items-center gap-1 text-[11px] font-semibold text-[#1f9d6b]"><span className="h-2 w-2 animate-pulse rounded-full bg-[#1f9d6b]" />live</span>
                 </div>
-                <div className="mt-1 grid flex-1 grid-cols-4 items-end gap-2">
+                <div className="mt-1 grid min-h-0 flex-1 grid-cols-4 items-end gap-3">
                   {board.map((b) => (
-                    <div key={b.label} className="flex h-full flex-col justify-end">
+                    <div key={b.label} className="flex h-full min-w-0 flex-col justify-end">
                       <div className="rounded-t-sm" style={{ height: `${Math.max(8, b.pct)}%`, background: b.color }} />
                       <div className="mt-0.5 text-center text-[17px] font-bold leading-none tabular-nums">{b.value}</div>
-                      <div className="text-center text-[10px] font-semibold uppercase leading-tight tracking-wide text-[#5b6472]">{b.label}</div>
+                      <div className="truncate text-center text-[10px] font-semibold uppercase leading-tight text-[#5b6472]">{b.label}</div>
                     </div>
                   ))}
                 </div>
@@ -246,7 +246,7 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
 
           {/* meeting label over the Boardroom */}
           {meeting && (
-            <div className="absolute" style={{ ...at([1105, 205]), transform: 'translate(-50%, -100%) scale(var(--inv))' }}>
+            <div className="absolute" style={{ ...at([1555, 205]), transform: 'translate(-50%, -100%) scale(var(--inv))' }}>
               <span className="flex max-w-[16rem] items-center gap-1.5 truncate whitespace-nowrap rounded-full bg-[var(--color-primary)] px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg sm:max-w-[22rem]">
                 <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-white" /> <span className="truncate">{meeting.label}</span>
               </span>
@@ -255,7 +255,7 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
 
           {/* awaiting CEO approval → chat bubble above the CEO office */}
           {pending.length > 0 && (
-            <Link href="/approvals" className="pointer-events-auto absolute" style={{ ...at(LAYOUT.ceoBubble ?? [1232, 548]), transform: 'translate(-50%, -100%) scale(var(--inv))' }}
+            <Link href="/approvals" className="pointer-events-auto absolute" style={{ ...at(LAYOUT.ceoBubble ?? [1682, 548]), transform: 'translate(-50%, -100%) scale(var(--inv))' }}
               aria-label={`${pending.length} approval${pending.length === 1 ? '' : 's'} waiting for you`}>
               <span className="relative flex animate-bounce items-center gap-1.5 whitespace-nowrap rounded-2xl bg-[#8b5cf6] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_6px_16px_rgba(80,40,160,.45)] ring-2 ring-white/70 [animation-duration:2.2s]">
                 <MessageSquareMore size={14} aria-hidden /> {pending.length} to approve
@@ -347,9 +347,9 @@ export function salesBoard(snap: HqSnapshot) {
   const count = (types: string[]) => recent.filter((t) => types.includes(t.work_type)).length;
   const rows = [
     { label: 'Found', value: count(['lead-finder-search', 'lead-report']), color: '#94a3b8' },
-    { label: 'Researched', value: count(['lead-qualification']), color: '#60a5fa' },
-    { label: 'Contacted', value: count(['outreach-draft', 'follow-up-email', 'dm-reply-draft']), color: '#a78bfa' },
-    { label: 'Proposals', value: count(['proposal']), color: '#1f9d6b' },
+    { label: 'Research', value: count(['lead-qualification']), color: '#60a5fa' },
+    { label: 'Contact', value: count(['outreach-draft', 'follow-up-email', 'dm-reply-draft']), color: '#a78bfa' },
+    { label: 'Proposal', value: count(['proposal']), color: '#1f9d6b' },
   ];
   const max = Math.max(1, ...rows.map((r) => r.value));
   return rows.map((r) => ({ ...r, pct: Math.round((r.value / max) * 100) }));

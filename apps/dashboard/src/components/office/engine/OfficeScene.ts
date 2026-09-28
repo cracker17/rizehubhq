@@ -8,7 +8,7 @@ import { OFFICE, type Facing, type OfficeMap } from '../logic/map';
 import { findPath, nearestNode } from '../logic/pathfinding';
 import type { Pt } from '../logic/iso';
 import { createMotion, setGoal, tick, trigger, type Goal, type Motion } from '../logic/motion';
-import { deskGoal, type AgentView, type OfficeEvent, type OfficeModel, type ScreenApp } from '../logic/director';
+import { ceoGoalAt, ceoSeatGoal, deskGoal, type AgentView, type OfficeEvent, type OfficeModel, type ScreenApp } from '../logic/director';
 import { hashString, mulberry32 } from '../logic/rng';
 import { CEO_LOOK, lookFor } from './looks';
 import { gameState, loadManifestSheets, manifestFactory, type CharacterFactory, type CharacterView, type OfficeManifest } from './characters';
@@ -78,8 +78,8 @@ interface Char {
 
 // Night: warm lamps and the fireplace (1x picture px, radius).
 const LAMPS: [number, number, number][] = [
-  [252, 118, 70], [320, 420, 60], [640, 405, 60], [165, 573, 55], [312, 662, 55], [996, 143, 70],
-  [1262, 455, 70], [1100, 480, 55], [458, 210, 45], [800, 505, 110],
+  [702, 118, 70], [770, 420, 60], [1090, 405, 60], [615, 573, 55], [762, 662, 55], [1446, 143, 70],
+  [1712, 455, 70], [1550, 480, 55], [908, 210, 45], [1250, 505, 110], [2024, 468, 55], [1818, 640, 45],
 ];
 
 export class OfficeScene extends Phaser.Scene {
@@ -109,6 +109,9 @@ export class OfficeScene extends Phaser.Scene {
   private drag: { x: number; y: number; moved: boolean; camX: number; camY: number } | null = null;
   private pinch: { d: number; zoom: number } | null = null;
   private near: string | null = null;
+  /** CEO life: last time the person drove the avatar, when the current activity started, whether he holds a coffee. */
+  private ceoLife = { lastUser: -1e9, since: 0, key: '', mug: false, next: 0 };
+  private zzz: Phaser.GameObjects.Text[] = [];
   private readyFired = false;
   private cleanup: (() => void)[] = [];
 
@@ -131,6 +134,7 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   create() {
+    (globalThis as unknown as { __office?: unknown }).__office = this; // debugging handle (preview / tests)
     const manifest = (this.cache.json.get('office-manifest') as OfficeManifest | undefined) ?? null;
     this.factory = manifestFactory(manifest, FIGURE_SCALE, S);
     this.cameras.main.setBackgroundColor('#15131f');
@@ -156,8 +160,9 @@ export class OfficeScene extends Phaser.Scene {
       const p = W(x, y);
       this.glows.push(this.add.image(p.x, p.y, 'glow').setScale((r * S) / 64).setTint(0xffc98a).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(NIGHT_DEPTH + 1));
     }
-    const f = W(800, 505);
+    const f = W(1250, 505);
     this.fire = this.add.image(f.x, f.y, 'glow').setScale((90 * S) / 64).setTint(0xff9a3c).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.18).setDepth(FX_DEPTH - 1);
+    this.zzz = [0, 1, 2].map(() => this.add.text(0, 0, 'z', { fontFamily: 'ui-rounded, system-ui, sans-serif', fontStyle: '800', fontSize: `${14 * S}px`, color: '#e9e4ff', stroke: '#3b2f7a', strokeThickness: 3 * S }).setOrigin(0.5).setDepth(FX_DEPTH + 2).setVisible(false));
     this.setupInput();
     this.fitView();
     const ceo = this.map.ceoSeat;
@@ -271,7 +276,7 @@ export class OfficeScene extends Phaser.Scene {
     if (this.opts.startZoom === 'close' || w < 640) {
       // Phones: start closer on the Dev Team / Design Studio side (drag to look around).
       this.zoomLevel = Math.max(this.coverZoom(), 0.36);
-      const c = W(420, 330);
+      const c = W(870, 330);
       this.camX = c.x; this.camY = c.y;
     } else {
       this.zoomLevel = this.coverZoom();
@@ -407,22 +412,119 @@ export class OfficeScene extends Phaser.Scene {
     const hit = hits[0];
     if (hit && hit.id !== CEO_ID) { this.hooks.onSelect(hit.id); return; }
     if (!this.opts.avatar) return;
-    // Click-to-walk for the CEO avatar: to the closest walkable point (graph node) or back to the chair.
+    // Click-to-walk for the CEO avatar: onto a chair, sofa, the gym, the coffee bar or his bed when the tap is
+    // on one (and nobody else is using it), else to the closest walkable point (graph node).
+    this.ceoLife.lastUser = this.time.now;
     const t = PROJ.toTile(w.x / S, w.y / S);
     const ceo = this.chars.get(CEO_ID)!;
-    const seat = this.map.ceoSeat;
-    if (Math.hypot(t.x - seat.x, t.y - seat.y) < 0.8) {
-      setGoal(ceo.motion, { key: 'spot:ceo-chair', x: seat.x, y: seat.y, face: seat.face, seated: true, loop: 'ceo_desk' });
-      return;
-    }
+    const goal = this.ceoTarget(t);
+    if (goal) { this.ceoGo(goal); this.followId = CEO_ID; return; }
     const n = nearestNode(this.map, t);
     const face = this.facingOnScreen(ceo.motion.pos, n.pos);
     setGoal(ceo.motion, { key: `node:${n.id}`, x: n.pos.x, y: n.pos.y, face, seated: false, loop: 'stand' });
+    this.ceoLife.mug = false;
     this.followId = CEO_ID;
+  }
+
+  /** Keys (spot:/desk:/seat:) that someone other than the CEO is using or heading to. */
+  private takenKeys() {
+    const out = new Set<string>();
+    for (const c of this.chars.values()) {
+      if (c.id === CEO_ID || c.hidden || !c.motion.goal) continue;
+      out.add(c.motion.goal.key);
+      if (c.motion.goal.key.startsWith('desk:')) { const d = this.map.desks.find((x) => x.agentId === c.motion.goal!.key.slice(5)); if (d) out.add(`seat:${d.id}`); }
+    }
+    return out;
+  }
+
+  /** The spot or free desk chair nearest to a tile point (within ~1 tile), as a CEO goal. */
+  private ceoTarget(t: Pt, maxD = 1.0): Goal | null {
+    const taken = this.takenKeys();
+    let best: Goal | null = null;
+    let bestD = maxD;
+    for (const s of this.map.spots) {
+      const g = s.kind === 'ceo' ? { key: 'spot:ceo-chair', x: s.x, y: s.y, face: s.face, seated: true, loop: 'ceo_desk' as const } : ceoGoalAt(s);
+      if (taken.has(g.key)) continue;
+      const d = Math.hypot(t.x - s.x, t.y - s.y);
+      if (d < bestD) { bestD = d; best = g; }
+    }
+    const owned = new Set(this.map.desks.map((d) => d.id));
+    for (const seat of this.map.seats) {
+      if (seat.kind === 'ceo' || seat.kind === 'board' || owned.has(seat.id)) continue;
+      const g = ceoSeatGoal(seat);
+      if (taken.has(g.key)) continue;
+      const d = Math.hypot(t.x - seat.x, t.y - seat.y);
+      if (d < bestD) { bestD = d; best = g; }
+    }
+    return best;
+  }
+
+  private ceoGo(g: Goal) {
+    const ceo = this.chars.get(CEO_ID);
+    if (!ceo) return;
+    // Coffee in hand stays in hand on the way to a seat; anything else puts it down.
+    if (g.loop === 'coffee') this.ceoLife.mug = true;
+    else if (!(g.loop === 'sofa' || g.loop === 'lobby_sit')) this.ceoLife.mug = false;
+    setGoal(ceo.motion, g);
+    this.ceoLife.key = g.key;
+    this.ceoLife.since = this.time.now;
+  }
+
+  /** When nobody drives the avatar, the CEO lives his day: desk, coffee then the lounge, the gym, the sofa — and bed at night. */
+  private ceoRoutine(now: number) {
+    const ceo = this.chars.get(CEO_ID);
+    if (!ceo || now - this.ceoLife.lastUser < 90_000) return;
+    const m = ceo.motion;
+    const night = this.ambient.lamps > 0.55;
+    const key = m.goal?.key ?? '';
+    const arrived = m.at === key && m.phase !== 'walking';
+    if (night) {
+      if (key !== 'spot:ceo-bed') { const bed = this.map.spots.find((s) => s.kind === 'bed'); if (bed) this.ceoGo(ceoGoalAt(bed)); }
+      return;
+    }
+    if (key === 'spot:ceo-bed') this.ceoLife.next = 0; // morning: get up
+    if (!arrived && key !== 'spot:ceo-bed' && m.phase === 'walking') return;
+    if (now < this.ceoLife.next && key !== 'spot:ceo-bed') return;
+    const free = (kind: string) => { const taken = this.takenKeys(); return this.map.spots.filter((s) => s.kind === kind && !taken.has(`spot:${s.id}`)); };
+    const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+    let g: Goal | null = null;
+    let stay = 60_000;
+    if (key.startsWith('spot:coffee')) {
+      // Coffee made: go and drink it on a sofa.
+      const sofas = [...free('lounge_sofa'), ...free('ceo_sofa')];
+      if (sofas.length) { g = ceoGoalAt(pick(sofas)); stay = 45_000; }
+    } else {
+      const r = Math.random();
+      const seat = this.map.ceoSeat;
+      if (r < 0.5 || key !== 'spot:ceo-chair' && r < 0.62) { g = { key: 'spot:ceo-chair', x: seat.x, y: seat.y, face: seat.face, seated: true, loop: 'ceo_desk' }; stay = 120_000 + Math.random() * 120_000; }
+      else if (r < 0.74) { const c = free('coffee'); if (c.length) { g = ceoGoalAt(pick(c)); stay = 9_000; } }
+      else if (r < 0.86) { const c = free('gym').filter((s) => s.loop === 'treadmill'); if (c.length) { g = ceoGoalAt(pick(c)); stay = 50_000; } }
+      else { const c = free('ceo_sofa'); if (c.length) { g = ceoGoalAt(pick(c)); stay = 50_000; } }
+    }
+    if (g && g.key !== key) this.ceoGo(g);
+    this.ceoLife.next = now + stay;
+  }
+
+  /** The CEO asleep: his figure goes under the duvet (the bed sprite with him in it), with drifting Zzz. */
+  private ceoSleep(t: number) {
+    const ceo = this.chars.get(CEO_ID);
+    const m = ceo?.motion;
+    const asleep = !!m && m.goal?.key === 'spot:ceo-bed' && m.at === 'spot:ceo-bed' && m.phase !== 'walking';
+    this.furniture.setShown('bed', !asleep);
+    this.furniture.setShown('bed-asleep', asleep);
+    if (ceo && asleep) ceo.view.object.setVisible(false);
+    const bed = this.furniture.placed.get('bed-asleep');
+    this.zzz.forEach((z, i) => {
+      if (!asleep || !bed) { z.setVisible(false); return; }
+      const k = ((t * 0.35 + i / 3) % 1);
+      const hx = bed.anchor.x + 22 * S; const hy = bed.anchor.y - 150 * S; // above the pillow
+      z.setVisible(true).setPosition(hx + k * 26 * S + Math.sin(t * 2 + i) * 3 * S, hy - k * 40 * S).setAlpha(Math.sin(k * Math.PI)).setScale(0.6 + k * 0.7);
+    });
   }
 
   private stepKeys() {
     if (!this.keys.size) return;
+    this.ceoLife.lastUser = this.time.now;
     const ceo = this.chars.get(CEO_ID);
     if (!ceo) return;
     const m = ceo.motion;
@@ -492,6 +594,7 @@ export class OfficeScene extends Phaser.Scene {
       const m = c.motion;
       const gk = m.goal?.key ?? '';
       const goalSeat = gk.startsWith('desk:') ? this.map.desks.find((d) => d.agentId === gk.slice(5))?.id ?? null
+        : gk.startsWith('seat:') ? gk.slice(5)
         : gk === 'spot:ceo-chair' && this.map.seats.some((x) => x.id === 'ceo') ? 'ceo' : null;
       if (goalSeat) c.seat = goalSeat;
       else if (c.seat) {
@@ -526,6 +629,8 @@ export class OfficeScene extends Phaser.Scene {
     this.screenLayer.update(t);
     this.suite.update(dt, t, this.ambient);
     this.props.update(dt, t, [...this.chars.values()].map((c) => ({ id: c.id, motion: c.motion, hidden: c.hidden })), this.ambient.lamps);
+    this.ceoRoutine(time);
+    this.ceoSleep(t);
     this.drawFx(t, rally);
 
     if (this.followId) {
@@ -545,14 +650,31 @@ export class OfficeScene extends Phaser.Scene {
   private drawFx(t: number, rally: number) {
     const g = this.fx;
     g.clear();
+    // the CEO's coffee: a mug in his hand while he carries it and drinks it on the sofa, with a curl of steam
+    const boss = this.chars.get(CEO_ID);
+    if (boss && this.ceoLife.mug && boss.view.object.visible && !(boss.motion.phase === 'standing' && boss.motion.loop === 'coffee')) {
+      const m = boss.motion;
+      const seated = m.phase === 'seated';
+      const sip = seated ? Math.max(0, Math.sin(t * 0.9)) ** 8 : 0; // now and then a sip
+      const o = boss.view.object;
+      const x = o.x + (seated ? 7 : 9) * S; const y = o.y - (seated ? 34 : 40) * S - sip * 16 * S;
+      g.fillStyle(0xf4f1ea, 1); g.fillRoundedRect(x - 3 * S, y - 4 * S, 6 * S, 7 * S, 1.5 * S);
+      g.lineStyle(1 * S, 0x2a2a2a, 0.9); g.strokeRoundedRect(x - 3 * S, y - 4 * S, 6 * S, 7 * S, 1.5 * S);
+      g.lineStyle(1.2 * S, 0xf4f1ea, 1); g.beginPath(); g.arc(x + 3.4 * S, y - 0.5 * S, 1.8 * S, -1.2, 1.2); g.strokePath();
+      g.fillStyle(0x5a3a22, 1); g.fillRect(x - 2.2 * S, y - 3.4 * S, 4.4 * S, 1.2 * S);
+      for (let i = 0; i < 2; i++) {
+        const k = (t * 0.6 + i * 0.5) % 1;
+        g.fillStyle(0xffffff, 0.35 * (1 - k)); g.fillCircle(x + Math.sin(t * 3 + i * 2) * 1.5 * S, y - 6 * S - k * 10 * S, (1.4 + k * 1.6) * S);
+      }
+    }
     // fireplace flicker
     this.fire.setAlpha(0.16 + this.ambient.lamps * 0.5 + Math.sin(t * 7.3) * 0.03 + Math.sin(t * 13.1) * 0.02);
     // ping-pong ball when both players are at the table
     const at = (key: string) => [...this.chars.values()].find((c) => !c.hidden && c.motion.goal?.key === key && c.motion.at === key);
     if (rally >= 0 && at('spot:pp-a') && at('spot:pp-b')) {
       const s = rally < 0.5 ? rally * 2 : 2 - rally * 2;
-      const A = W(988, 612);
-      const B = W(866, 700);
+      const A = W(1438, 612);
+      const B = W(1316, 700);
       const x = A.x + (B.x - A.x) * s;
       const y = A.y + (B.y - A.y) * s;
       const h = (8 + Math.abs(Math.sin(s * Math.PI * 2)) * 18) * S;
@@ -579,7 +701,8 @@ export class OfficeScene extends Phaser.Scene {
       const seated = m.phase === 'seated' || m.phase === 'sitting_down';
       const wp = world(m.pos.x, m.pos.y);
       const p = { x: wp.x * scale + tx, y: (wp.y - (seated ? 50 : 66) * FIGURE_SCALE) * scale + ty };
-      const tag = { id: c.id, x: p.x, y: p.y, visible: !c.hidden && inside(p) };
+      const asleep = c.id === CEO_ID && m.goal?.key === 'spot:ceo-bed' && m.at === 'spot:ceo-bed';
+      const tag = { id: c.id, x: p.x, y: p.y, visible: !c.hidden && !asleep && inside(p) };
       if (c.id === CEO_ID) ceoTag = tag; else tags.push(tag);
     }
     this.hooks.onFrame({ zoom: this.zoomLevel, width: cw, height: ch, view: { scale, tx, ty }, tags, ceo: ceoTag, near: this.near });

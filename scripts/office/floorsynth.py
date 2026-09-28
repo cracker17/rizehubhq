@@ -39,7 +39,7 @@ if __name__ == '__main__':
     src = cv.imread(sys.argv[1]); floor = cv.imread(sys.argv[2], 0) > 0; furn = cv.imread(sys.argv[3], 0) > 0
     mat = sys.argv[4]; out = sys.argv[5]
     H, W = floor.shape
-    ys, xs = np.where(floor); x0, x1, y0, y1 = xs.min()-2, xs.max()+3, ys.min()-2, ys.max()+3
+    ys, xs = np.where(floor); x0, x1, y0, y1 = max(0, xs.min()-2), min(W, xs.max()+3), max(0, ys.min()-2), min(H, ys.max()+3)
     sub = src[y0:y1, x0:x1]; fl = floor[y0:y1, x0:x1]; fu = cv.dilate(furn[y0:y1, x0:x1].astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
     gray = cv.cvtColor(sub, cv.COLOR_BGR2GRAY)
     known = fl & ~fu & (gray > 60)

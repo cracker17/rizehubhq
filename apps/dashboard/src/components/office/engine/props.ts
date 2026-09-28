@@ -15,19 +15,18 @@ const w = (x: number, y: number): Pt => ({ x: x * S, y: y * S });
 
 // quads: TL, TR, BR, BL
 /** Box around the fireplace opening (1x px). */
-const FIRE_BOX = [756, 484, 818, 550];
-const ARCADE: [number, number][] = [[1116, 548], [1136, 556], [1135, 575], [1117, 566]];
-const WATER = { cx: 465, top: 498, bottom: 530, rx: 11 };
-const ESPRESSO = { steam: [551, 434] as [number, number], spout: [566, 447] as [number, number], cup: [566, 461] as [number, number], button: [556, 441] as [number, number] };
+const FIRE_BOX = [1206, 484, 1268, 550];
+const ARCADE: [number, number][] = [[1566, 548], [1586, 556], [1585, 575], [1567, 566]];
+const WATER = { cx: 915, top: 498, bottom: 530, rx: 11 };
+const ESPRESSO = { steam: [1001, 434] as [number, number], spout: [1016, 447] as [number, number], cup: [1016, 461] as [number, number], button: [1006, 441] as [number, number] };
 
 /** Plants cut out of the picture: leaf box, pivot (top of the pot) and floor y. */
 const PLANTS: { box: [number, number, number, number]; pivot: [number, number]; base: number }[] = [
-  { box: [685, 425, 748, 510], pivot: [717, 508], base: 535 },
-  { box: [222, 438, 302, 510], pivot: [262, 508], base: 532 },
-  { box: [450, 600, 485, 630], pivot: [465, 628], base: 645 },
-  { box: [805, 555, 865, 624], pivot: [835, 622], base: 645 },
-  { box: [1085, 145, 1142, 204], pivot: [1112, 202], base: 228 },
-  { box: [530, 88, 595, 124], pivot: [556, 122], base: 142 },
+  { box: [672, 438, 752, 510], pivot: [712, 508], base: 532 },
+  { box: [900, 600, 935, 630], pivot: [915, 628], base: 645 },
+  { box: [1255, 555, 1315, 624], pivot: [1285, 622], base: 645 },
+  { box: [1535, 145, 1592, 204], pivot: [1562, 202], base: 228 },
+  { box: [980, 88, 1045, 124], pivot: [1006, 122], base: 142 },
 ];
 
 interface Plant { img: Phaser.GameObjects.Image; tile: Pt; amp: number; vel: number; ang: number; phase: number }

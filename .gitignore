@@ -11,3 +11,5 @@ workspaces/*
 supabase/.temp/
 supabase/.branches/
 dist-preview/
+scripts/office/lama.onnx
+scripts/office/__pycache__/

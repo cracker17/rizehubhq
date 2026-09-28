@@ -69,3 +69,18 @@ line, so a person can be in front of one end of a desk and behind the other.
 - `extend_ceo.py` widens the picture to 1560 px and paints the CEO suite (floor, window wall, slat wall,
   the doorway view into the Game Hall). Luxury furniture sprites (executive desk, leather chair, sofa, marble
   table, bookshelf, plant, arc lamp) are a Magnific sheet, matted and built by `build_furniture.py`.
+
+## Full gym, QA doorway, CEO bedroom (v5)
+- **Dev Team floor strip**: the leftover painted strip in front of the Dev Team's low front wall was repainted as the
+  room's concrete (floorsynth + a light-matching pass), so the floor meets the wall cleanly.
+- **Gym**: `extend_gym.py` widens the picture by 450 px on the left (every layout x was shifted by +450) and builds the
+  whole gym: window wall with blinds continued from the Dev Team, the divider's gym-side face with a long mirror, rubber
+  floor, low cut front wall. Equipment is sprites (two treadmills, bike, rack, bench, mat, plants).
+- **Coffee Corner ↔ QA Lab**: the plant by the fireplace was inpainted and a doorway cut into the QA wall there (the
+  scene draws the sliding glass leaf); the old "door" by the fireplace is a wall again. The foosball table was lifted
+  out (LaMa) and set down away from the wall so players fit on both sides.
+- **CEO bedroom**: `extend_bedroom.py` widens the picture by 170 px on the right and builds a glass-walled bedroom behind
+  the CEO suite (walnut floor, window wall with live sky, slatted headboard wall, glass partition with a sliding door).
+- **Props** (Magnific sheet: laptop front/back, king bed, the same bed with the CEO asleep) → `furniture-src/` →
+  `build_furniture.py`. Mirrored sources (`*_m.png`) give the other orientation. The COO's MacBook stands on the
+  boardroom table (`z` lifts a sprite off the floor); the bed swaps to the sleeping version when the CEO goes to bed.

@@ -18,6 +18,7 @@ SCALE = {  # 1x picture px per source px
     'desk_dual': 0.45, 'desk_single': 0.45, 'desk_design': 0.45, 'desk_qa': 0.5, 'desk_exec': 0.45,
     'chair_ur': 0.2, 'chair_dl': 0.2, 'chair_dr': 0.2,
     'ceo_desk': 0.39, 'ceo_chair': 0.16, 'sofa': 0.36, 'coffee_table': 0.2, 'bookshelf': 0.34, 'ceo_plant': 0.25, 'floor_lamp': 0.3,
+    'bed': 0.75, 'bed_sleep': 0.83, 'laptop_back': 0.45, 'laptop_front': 0.4, 'laptop_back_m': 0.45, 'laptop_front_m': 0.4, 'bookshelf_m': 0.34,
     'treadmill': 0.3, 'dumbbell_rack': 0.22, 'bench': 0.24, 'bike': 0.24, 'yoga_mat': 0.24, 'plant': 0.2,
 }
 SCREENS = {  # monitor faces in source px (TL, TR, BR, BL)

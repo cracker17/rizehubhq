@@ -107,14 +107,21 @@ export class FurnitureLayer {
     const slices: Placed['slices'] = [];
     for (let cx = 0; cx < it.w; cx += SLICE) {
       const w = Math.min(SLICE, it.w - cx);
-      const img = this.scene.add.image(left, anchor.y - it.ay, furnKey(f.sprite)).setOrigin(0, 0);
+      const img = this.scene.add.image(left, anchor.y - it.ay - (f.z ?? 0) * S, furnKey(f.sprite)).setOrigin(0, 0);
       img.setCrop(cx, 0, w, it.h);
       const depth = lineY(front, left + cx + w / 2);
       img.setDepth(depth);
+      if (f.hidden) img.setVisible(false);
       images.push(img);
       slices.push({ cx, w, depth });
     }
-    this.placed.set(f.id, { id: f.id, item: it, anchor, front, images, origin: { x: left, y: anchor.y - it.ay }, slices, depthAt: (x) => lineY(front, x) });
+    this.placed.set(f.id, { id: f.id, item: it, anchor, front, images, origin: { x: left, y: anchor.y - it.ay - (f.z ?? 0) * S }, slices, depthAt: (x) => lineY(front, x) });
+  }
+
+  /** Show or hide a placed sprite (e.g. swap the made bed for the bed with the CEO asleep in it). */
+  setShown(id: string, on: boolean) {
+    const p = this.placed.get(id);
+    if (p && p.images[0]?.visible !== on) p.images.forEach((i) => i.setVisible(on));
   }
 
   /** (Re)build chairs for the seats of a map. */

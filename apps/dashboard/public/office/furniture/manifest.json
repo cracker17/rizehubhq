@@ -195,6 +195,69 @@
    "W": 1.528,
    "D": 0.419
   },
+  "bed": {
+   "src": "/office/furniture/bed.webp",
+   "w": 351,
+   "h": 380,
+   "ax": 164.76,
+   "ay": 351.33,
+   "W": 1.997,
+   "D": 2.384
+  },
+  "bed_sleep": {
+   "src": "/office/furniture/bed_sleep.webp",
+   "w": 355,
+   "h": 403,
+   "ax": 165.04,
+   "ay": 374.09,
+   "W": 1.997,
+   "D": 2.428
+  },
+  "laptop_back": {
+   "src": "/office/furniture/laptop_back.webp",
+   "w": 85,
+   "h": 86,
+   "ax": 54.32,
+   "ay": 74.73,
+   "W": 0.659,
+   "D": 0.353
+  },
+  "laptop_front": {
+   "src": "/office/furniture/laptop_front.webp",
+   "w": 88,
+   "h": 99,
+   "ax": 46.24,
+   "ay": 89.36,
+   "W": 0.561,
+   "D": 0.5
+  },
+  "laptop_back_m": {
+   "src": "/office/furniture/laptop_back_m.webp",
+   "w": 85,
+   "h": 86,
+   "ax": 28.48,
+   "ay": 78.56,
+   "W": 0.329,
+   "D": 0.707
+  },
+  "laptop_front_m": {
+   "src": "/office/furniture/laptop_front_m.webp",
+   "w": 88,
+   "h": 99,
+   "ax": 39.36,
+   "ay": 90.38,
+   "W": 0.466,
+   "D": 0.601
+  },
+  "bookshelf_m": {
+   "src": "/office/furniture/bookshelf_m.webp",
+   "w": 145,
+   "h": 267,
+   "ax": 31.12,
+   "ay": 259.73,
+   "W": 0.367,
+   "D": 1.459
+  },
   "treadmill": {
    "src": "/office/furniture/treadmill.webp",
    "w": 192,

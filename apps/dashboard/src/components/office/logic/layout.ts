@@ -18,7 +18,13 @@ export interface LayoutDesk {
 }
 export interface LayoutSpot { id: string; kind: string; at: XY; face: Facing; pose: 'stand' | 'sit'; room: string; via: string; pair?: string; loop?: string }
 /** A sprite from public/office/furniture placed with its floor anchor at `at`. */
-export interface LayoutFurniture { id: string; sprite: string; at: XY; flip?: boolean }
+export interface LayoutFurniture {
+  id: string; sprite: string; at: XY; flip?: boolean;
+  /** Lift above the floor point `at` (1x px) for things standing on a table top; depth still follows the floor. */
+  z?: number;
+  /** Start hidden (an alternative look swapped in by the scene, e.g. the CEO's bed with him asleep in it). */
+  hidden?: boolean;
+}
 /** A swinging door: floor edge of the leaf from hinge to free end, leaf height (all 1x picture px). */
 export interface LayoutDoor {
   id: string; kind: 'glass' | 'wood'; hinge: XY; free: XY; h: number; swing: 1 | -1; opening?: XY[];

@@ -368,10 +368,9 @@ test('gym: reachable from the lobby, equipment spots have their loops', () => {
   const from = OFFICE.entrance;
   assert.ok(findPath(OFFICE, from, tread), 'gym is reachable from the entrance');
   assert.ok(findPath(OFFICE, deskFor(OFFICE, 'web-dev')!, curl), 'gym is reachable from the Dev Team');
-  const out = assignSpots(OFFICE, [{ id: 'a', activity: 'gym' }, { id: 'b', activity: 'gym' }, { id: 'c', activity: 'gym' }]);
-  assert.equal(OFFICE.spots.find((s) => s.id === out.get('a'))!.kind, 'gym');
-  assert.equal(OFFICE.spots.find((s) => s.id === out.get('b'))!.kind, 'gym');
-  assert.notEqual(OFFICE.spots.find((s) => s.id === out.get('c'))!.kind, 'gym'); // two machines: the third falls back
+  const out = assignSpots(OFFICE, [{ id: 'a', activity: 'gym' }, { id: 'b', activity: 'gym' }, { id: 'c', activity: 'gym' }, { id: 'd', activity: 'gym' }]);
+  for (const id of ['a', 'b', 'c']) assert.equal(OFFICE.spots.find((s) => s.id === out.get(id))!.kind, 'gym');
+  assert.notEqual(OFFICE.spots.find((s) => s.id === out.get('d'))!.kind, 'gym'); // three stations: the fourth falls back
 });
 
 test('games: players swing when the ball reaches them, then one celebrates and one groans', () => {

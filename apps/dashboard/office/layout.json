@@ -1,9 +1,9 @@
 {
  "version": 3,
- "notes": "RizeHub HQ office layout, in pixels of assets/office/reference-office.png (1337x749). The background (public/office/office-bg.webp) is the same picture at 2x with people and baked-in text removed. Seats are where a character's feet touch the floor; face is the iso direction they look: up = up-right, right = down-right, down = down-left, left = up-left. A new agent gets a desk by adding `desk: { id: <seat id> }` to its agents row (or an entry under `assignments`). Walking uses the `graph` (nodes + edges); every seat and spot joins the graph at its `via` node. v3: desks, chairs and gym equipment are sprites (public/office/furniture) placed by \"furniture\"; seats with chair=true get an animated chair; \"doors\" swing open (glass/wood); \"occluders\" are slices of the picture drawn over people who walk behind them.",
+ "notes": "RizeHub HQ office layout, in pixels of assets/office/reference-office.png (1337x749). The background (public/office/office-bg.webp) is the same picture at 2x with people and baked-in text removed. Seats are where a character's feet touch the floor; face is the iso direction they look: up = up-right, right = down-right, down = down-left, left = up-left. A new agent gets a desk by adding `desk: { id: <seat id> }` to its agents row (or an entry under `assignments`). Walking uses the `graph` (nodes + edges); every seat and spot joins the graph at its `via` node. v3: desks, chairs and gym equipment are sprites (public/office/furniture) placed by \"furniture\"; seats with chair=true get an animated chair; \"doors\" swing open (glass/wood); \"occluders\" are slices of the picture drawn over people who walk behind them. Picture widened by 450px on the left for the full gym (extend_gym.py); all x shifted by +450.",
  "image": {
   "src": "/office/office-bg.webp",
-  "width": 1560,
+  "width": 2180,
   "height": 749,
   "scale": 2
  },
@@ -17,7 +17,7 @@
    28.0
   ],
   "origin": [
-   668,
+   1118,
    0
   ]
  },
@@ -34,7 +34,7 @@
    "id": "dev",
    "name": "Dev Team",
    "label": [
-    303,
+    753,
     150
    ]
   },
@@ -42,7 +42,7 @@
    "id": "design",
    "name": "Design Studio",
    "label": [
-    502,
+    952,
     82
    ]
   },
@@ -50,7 +50,7 @@
    "id": "growth",
    "name": "Growth & Sales",
    "label": [
-    800,
+    1250,
     40
    ]
   },
@@ -58,7 +58,7 @@
    "id": "qa_lab",
    "name": "QA Lab",
    "label": [
-    733,
+    1183,
     270
    ]
   },
@@ -66,7 +66,7 @@
    "id": "boardroom",
    "name": "Boardroom",
    "label": [
-    1105,
+    1555,
     238
    ]
   },
@@ -74,7 +74,7 @@
    "id": "coffee",
    "name": "Coffee Corner",
    "label": [
-    674,
+    1124,
     410
    ]
   },
@@ -82,7 +82,7 @@
    "id": "lounge",
    "name": "Lounge",
    "label": [
-    385,
+    835,
     402
    ]
   },
@@ -90,7 +90,7 @@
    "id": "game",
    "name": "Game Hall",
    "label": [
-    958,
+    1408,
     604
    ]
   },
@@ -98,7 +98,7 @@
    "id": "lobby",
    "name": "Reception",
    "label": [
-    56,
+    506,
     612
    ]
   },
@@ -106,7 +106,7 @@
    "id": "ceo",
    "name": "CEO Office",
    "label": [
-    1300.3,
+    1750.3,
     685.1
    ]
   },
@@ -114,7 +114,7 @@
    "id": "gym",
    "name": "Gym",
    "label": [
-    70,
+    520,
     470
    ]
   }
@@ -122,7 +122,7 @@
  "doormat": {
   "text": "RizeHub HQ",
   "center": [
-   231,
+   681,
    695
   ],
   "angle": 30.5,
@@ -133,7 +133,7 @@
    "id": "dev-1",
    "room": "dev",
    "at": [
-    287.8,
+    737.8,
     313.9
    ],
    "face": "up",
@@ -147,7 +147,7 @@
    "id": "dev-2",
    "room": "dev",
    "at": [
-    198.7,
+    648.7,
     261.4
    ],
    "face": "up",
@@ -161,7 +161,7 @@
    "id": "dev-3",
    "room": "dev",
    "at": [
-    98.6,
+    548.6,
     335.6
    ],
    "face": "up",
@@ -175,7 +175,7 @@
    "id": "dev-4",
    "room": "dev",
    "at": [
-    187.7,
+    637.7,
     388.1
    ],
    "face": "up",
@@ -189,7 +189,7 @@
    "id": "sales-1",
    "room": "growth",
    "at": [
-    833.8,
+    1283.8,
     168.3
    ],
    "face": "up",
@@ -203,7 +203,7 @@
    "id": "sales-2",
    "room": "growth",
    "at": [
-    918.8,
+    1368.8,
     218.4
    ],
    "face": "up",
@@ -217,7 +217,7 @@
    "id": "design-1",
    "room": "design",
    "at": [
-    399,
+    849,
     160
    ],
    "face": "left",
@@ -226,19 +226,19 @@
    "screens": [
     [
      [
-      331,
+      781,
       98
      ],
      [
-      365,
+      815,
       84
      ],
      [
-      384,
+      834,
       103
      ],
      [
-      350,
+      800,
       118
      ]
     ]
@@ -249,7 +249,7 @@
    "id": "design-2",
    "room": "design",
    "at": [
-    502,
+    952,
     203
    ],
    "face": "left",
@@ -258,19 +258,19 @@
    "screens": [
     [
      [
-      448,
+      898,
       145
      ],
      [
-      482,
+      932,
       130
      ],
      [
-      498,
+      948,
       150
      ],
      [
-      465,
+      915,
       165
      ]
     ]
@@ -281,7 +281,7 @@
    "id": "qa-1",
    "room": "qa_lab",
    "at": [
-    684,
+    1134,
     370
    ],
    "face": "up",
@@ -290,55 +290,55 @@
    "screens": [
     [
      [
-      700,
+      1150,
       273
      ],
      [
-      731,
+      1181,
       285
      ],
      [
-      731,
+      1181,
       315
      ],
      [
-      700,
+      1150,
       303
      ]
     ],
     [
      [
-      733,
+      1183,
       286
      ],
      [
-      761,
+      1211,
       297
      ],
      [
-      761,
+      1211,
       330
      ],
      [
-      733,
+      1183,
       318
      ]
     ],
     [
      [
-      764,
+      1214,
       298
      ],
      [
-      812,
+      1262,
       316
      ],
      [
-      812,
+      1262,
       354
      ],
      [
-      764,
+      1214,
       336
      ]
     ]
@@ -349,7 +349,7 @@
    "id": "qa-2",
    "room": "qa_lab",
    "at": [
-    746,
+    1196,
     393
    ],
    "face": "up",
@@ -362,7 +362,7 @@
    "id": "board-head",
    "room": "boardroom",
    "at": [
-    1042,
+    1492,
     368
    ],
    "face": "up",
@@ -375,7 +375,7 @@
    "id": "ceo",
    "room": "ceo",
    "at": [
-    1298.9,
+    1748.9,
     581.1
    ],
    "face": "right",
@@ -391,7 +391,7 @@
    "id": "coffee-1",
    "kind": "coffee",
    "at": [
-    585,
+    1035,
     524
    ],
    "face": "left",
@@ -403,7 +403,7 @@
    "id": "coffee-2",
    "kind": "coffee",
    "at": [
-    626,
+    1076,
     502
    ],
    "face": "left",
@@ -415,7 +415,7 @@
    "id": "coffee-3",
    "kind": "coffee",
    "at": [
-    542,
+    992,
     548
    ],
    "face": "up",
@@ -427,7 +427,7 @@
    "id": "coffee-4",
    "kind": "coffee",
    "at": [
-    470,
+    920,
     562
    ],
    "face": "up",
@@ -439,7 +439,7 @@
    "id": "chat-l-a",
    "kind": "chat",
    "at": [
-    608,
+    1058,
     585
    ],
    "face": "up",
@@ -452,7 +452,7 @@
    "id": "chat-l-b",
    "kind": "chat",
    "at": [
-    664,
+    1114,
     578
    ],
    "face": "down",
@@ -465,7 +465,7 @@
    "id": "chat-f-a",
    "kind": "chat",
    "at": [
-    742,
+    1192,
     598
    ],
    "face": "up",
@@ -478,7 +478,7 @@
    "id": "chat-f-b",
    "kind": "chat",
    "at": [
-    790,
+    1240,
     590
    ],
    "face": "down",
@@ -491,7 +491,7 @@
    "id": "sofa-1",
    "kind": "lounge_sofa",
    "at": [
-    702,
+    1152,
     680
    ],
    "face": "up",
@@ -503,7 +503,7 @@
    "id": "sofa-2",
    "kind": "lounge_sofa",
    "at": [
-    640,
+    1090,
     660
    ],
    "face": "up",
@@ -515,7 +515,7 @@
    "id": "sofa-3",
    "kind": "lounge_sofa",
    "at": [
-    352,
+    802,
     505
    ],
    "face": "down",
@@ -527,7 +527,7 @@
    "id": "sofa-4",
    "kind": "lounge_sofa",
    "at": [
-    405,
+    855,
     526
    ],
    "face": "down",
@@ -539,7 +539,7 @@
    "id": "pp-a",
    "kind": "ping_pong",
    "at": [
-    1000,
+    1450,
     605
    ],
    "face": "down",
@@ -552,7 +552,7 @@
    "id": "pp-b",
    "kind": "ping_pong",
    "at": [
-    848,
+    1298,
     722
    ],
    "face": "up",
@@ -565,8 +565,8 @@
    "id": "fb-a",
    "kind": "foosball",
    "at": [
-    1012,
-    545
+    1462,
+    592
    ],
    "face": "up",
    "pose": "stand",
@@ -578,20 +578,20 @@
    "id": "fb-b",
    "kind": "foosball",
    "at": [
-    1070,
-    527
+    1512,
+    540
    ],
-   "face": "left",
+   "face": "down",
    "pose": "stand",
    "room": "game",
    "pair": "fb",
-   "via": "gm-b"
+   "via": "gm-fb"
   },
   {
    "id": "arcade-1",
    "kind": "lobby",
    "at": [
-    1115,
+    1565,
     612
    ],
    "face": "up",
@@ -603,7 +603,7 @@
    "id": "lobby-1",
    "kind": "lobby",
    "at": [
-    318,
+    768,
     612
    ],
    "face": "down",
@@ -615,7 +615,7 @@
    "id": "lobby-2",
    "kind": "lobby",
    "at": [
-    520,
+    970,
     640
    ],
    "face": "left",
@@ -627,7 +627,7 @@
    "id": "lobby-3",
    "kind": "lobby",
    "at": [
-    445,
+    895,
     565
    ],
    "face": "up",
@@ -639,7 +639,7 @@
    "id": "board-1",
    "kind": "boardroom",
    "at": [
-    1088,
+    1538,
     316
    ],
    "face": "right",
@@ -651,7 +651,7 @@
    "id": "board-2",
    "kind": "boardroom",
    "at": [
-    1132,
+    1582,
     290
    ],
    "face": "right",
@@ -663,7 +663,7 @@
    "id": "board-3",
    "kind": "boardroom",
    "at": [
-    1166,
+    1616,
     426
    ],
    "face": "left",
@@ -675,7 +675,7 @@
    "id": "board-4",
    "kind": "boardroom",
    "at": [
-    1214,
+    1664,
     394
    ],
    "face": "left",
@@ -687,7 +687,7 @@
    "id": "board-head",
    "kind": "boardroom_head",
    "at": [
-    1042,
+    1492,
     368
    ],
    "face": "up",
@@ -699,7 +699,7 @@
    "id": "ceo-chair",
    "kind": "ceo",
    "at": [
-    1298.9,
+    1748.9,
     581.1
    ],
    "face": "right",
@@ -711,300 +711,386 @@
    "id": "gym-tread",
    "kind": "gym",
    "at": [
-    47.5,
-    509.2
+    285.7,
+    452.1
    ],
    "face": "up",
    "pose": "stand",
    "room": "gym",
-   "via": "gym-mid",
+   "via": "gym-w",
+   "loop": "treadmill"
+  },
+  {
+   "id": "gym-tread-2",
+   "kind": "gym",
+   "at": [
+    346.5,
+    488.0
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "gym",
+   "via": "gym-w",
    "loop": "treadmill"
   },
   {
    "id": "gym-curl",
    "kind": "gym",
    "at": [
-    67.3,
-    563.6
+    508.1,
+    575.8
    ],
    "face": "down",
    "pose": "stand",
    "room": "gym",
    "via": "gym-mid",
    "loop": "curl"
+  },
+  {
+   "id": "ceo-bed",
+   "kind": "bed",
+   "at": [
+    1995.6,
+    495.3
+   ],
+   "face": "right",
+   "pose": "stand",
+   "room": "ceo",
+   "via": "bed-s",
+   "loop": "sleep"
+  },
+  {
+   "id": "ceo-sofa-1",
+   "kind": "ceo_sofa",
+   "at": [
+    1896.5,
+    628.0
+   ],
+   "face": "down",
+   "pose": "sit",
+   "room": "ceo",
+   "via": "ceo-lng"
+  },
+  {
+   "id": "ceo-sofa-2",
+   "kind": "ceo_sofa",
+   "at": [
+    1933.0,
+    649.5
+   ],
+   "face": "down",
+   "pose": "sit",
+   "room": "ceo",
+   "via": "ceo-lng"
   }
  ],
  "visits": {
   "design-1": [
-   440,
+   890,
    176
   ],
   "design-2": [
-   540,
+   990,
    222
   ],
   "qa-1": [
-   718,
+   1168,
    392
   ],
   "qa-2": [
-   780,
+   1230,
    410
   ],
   "dev-1": [
-   305.4,
+   755.4,
    349.4
   ],
   "dev-2": [
-   216.3,
+   666.3,
    296.9
   ],
   "dev-3": [
-   116.1,
+   566.1,
    371.1
   ],
   "dev-4": [
-   210.6,
+   660.6,
    414.3
   ],
   "sales-1": [
-   849.4,
+   1299.4,
    205.2
   ],
   "sales-2": [
-   924.2,
+   1374.2,
    246.8
   ]
  },
  "entrance": [
-  230,
+  680,
   668
  ],
  "graph": {
   "nodes": {
    "dev-door": [
-    425.5,
+    875.5,
     357.5
    ],
    "hall-dev": [
-    470,
+    920,
     372
    ],
    "des-door": [
-    506,
+    956,
     336
    ],
    "des-c": [
-    540,
+    990,
     280
    ],
    "des-b": [
-    540,
+    990,
     222
    ],
    "des-a": [
-    440,
+    890,
     180
    ],
    "hall-1": [
-    490,
+    940,
     420
    ],
    "qa-door": [
-    838,
+    1288,
     418
    ],
    "qa-a": [
-    718,
+    1168,
     392
    ],
    "qa-b": [
-    785,
+    1235,
     408
    ],
    "br-door": [
-    910,
+    1360,
     396
    ],
    "br-a": [
-    985,
+    1435,
     366
    ],
    "br-b": [
-    1050,
+    1500,
     305
    ],
    "br-c": [
-    1100,
+    1550,
     420
    ],
    "gs-door": [
-    975,
+    1425,
     280
    ],
    "gm-door": [
-    915,
+    1365,
     512
    ],
    "gm-a": [
-    1015,
+    1465,
     600
    ],
    "gm-b": [
-    1030,
-    560
+    1430,
+    600
    ],
    "gm-c": [
-    830,
+    1280,
     715
    ],
    "gm-d": [
-    1125,
+    1575,
     628
    ],
    "gm-e": [
-    950,
+    1400,
     560
    ],
    "ceo-door": [
-    1178.3,
+    1628.3,
     640.7
    ],
    "ceo-a": [
-    1210.7,
+    1660.7,
     659.8
    ],
    "cof-a": [
-    600,
+    1050,
     545
    ],
    "cof-b": [
-    540,
+    990,
     578
    ],
    "cof-c": [
-    680,
+    1130,
     562
    ],
    "fire-a": [
-    760,
+    1210,
     612
    ],
    "lng-a": [
-    690,
+    1140,
     630
    ],
    "lng-b": [
-    380,
+    830,
     555
    ],
    "lng-c": [
-    460,
+    910,
     585
    ],
    "lob-a": [
-    330,
+    780,
     630
    ],
    "lob-b": [
-    500,
+    950,
     620
    ],
    "lob-door": [
-    260,
+    710,
     660
    ],
    "fire-b": [
-    835,
+    1285,
     602
    ],
-   "pass": [
-    862,
-    560
-   ],
    "corr-a": [
-    872,
+    1322,
     478
    ],
    "corr-b": [
-    905,
+    1355,
     432
    ],
    "gm-f": [
-    880,
+    1330,
     610
    ],
    "gm-g": [
-    825,
+    1275,
     665
    ],
    "dev-in": [
-    387.3,
+    837.3,
     340.0
    ],
    "dev-aisle": [
-    335.9,
+    785.9,
     370.0
    ],
    "dev-a1": [
-    267.1,
+    717.1,
     329.3
    ],
    "dev-a2": [
-    178.0,
+    628.0,
     276.8
    ],
    "dev-back": [
-    240.6,
+    690.6,
     424.4
    ],
    "dev-b4": [
-    166.9,
+    616.9,
     403.5
    ],
    "dev-b3": [
-    77.8,
+    527.8,
     351.0
    ],
    "gs-in": [
-    920.5,
+    1370.5,
     249.6
    ],
    "gs-1": [
-    894.3,
+    1344.3,
     236.7
    ],
    "gs-2": [
-    809.2,
+    1259.2,
     186.5
    ],
    "lob-g": [
-    200,
+    650,
     690
    ],
    "gym-out": [
-    91.8,
+    541.8,
     696.3
    ],
    "gym-door": [
-    59,
+    509,
     677
    ],
    "gym-in": [
-    53.5,
+    503.5,
     638.5
    ],
    "gym-mid": [
-    66.4,
+    516.4,
     585.7
    ],
    "ceo-out": [
-    1150.0,
+    1600.0,
     624.0
    ],
    "ceo-b": [
-    1244.0,
+    1694.0,
     621.7
+   ],
+   "gym-w": [
+    272.6,
+    502.2
+   ],
+   "gym-far": [
+    194.6,
+    511.5
+   ],
+   "qa2-out": [
+    1150,
+    534
+   ],
+   "qa2-in": [
+    1184,
+    470
+   ],
+   "gm-fb": [
+    1548,
+    560
+   ],
+   "bed-o": [
+    1847.2,
+    562.1
+   ],
+   "bed-i": [
+    1889.5,
+    530.8
+   ],
+   "bed-s": [
+    1965.0,
+    509.9
+   ],
+   "ceo-back": [
+    1805.7,
+    541.6
+   ],
+   "ceo-lng": [
+    1853.8,
+    635.4
    ]
   },
   "edges": [
@@ -1071,14 +1157,6 @@
    [
     "fire-a",
     "fire-b"
-   ],
-   [
-    "fire-b",
-    "pass"
-   ],
-   [
-    "pass",
-    "corr-a"
    ],
    [
     "corr-a",
@@ -1259,6 +1337,62 @@
    [
     "ceo-a",
     "ceo-b"
+   ],
+   [
+    "gym-in",
+    "gym-w"
+   ],
+   [
+    "gym-mid",
+    "gym-w"
+   ],
+   [
+    "gym-w",
+    "gym-far"
+   ],
+   [
+    "cof-c",
+    "qa2-out"
+   ],
+   [
+    "fire-a",
+    "qa2-out"
+   ],
+   [
+    "qa2-out",
+    "qa2-in"
+   ],
+   [
+    "qa2-in",
+    "qa-a"
+   ],
+   [
+    "qa2-in",
+    "qa-b"
+   ],
+   [
+    "gm-d",
+    "gm-fb"
+   ],
+   [
+    "bed-o",
+    "bed-i"
+   ],
+   [
+    "bed-i",
+    "bed-s"
+   ],
+   [
+    "ceo-b",
+    "ceo-back"
+   ],
+   [
+    "ceo-back",
+    "bed-o"
+   ],
+   [
+    "ceo-a",
+    "ceo-lng"
    ]
   ]
  },
@@ -1268,29 +1402,29 @@
    "kind": "glass",
    "poly": [
     [
-     400,
+     850,
      289
     ],
     [
-     232,
+     682,
      437
     ],
     [
-     232,
+     682,
      551
     ],
     [
-     400,
+     850,
      401
     ]
    ],
    "base": [
     [
-     232,
+     682,
      548
     ],
     [
-     400,
+     850,
      398
     ]
    ]
@@ -1300,65 +1434,65 @@
    "kind": "solid",
    "poly": [
     [
-     583,
+     1033,
      604
     ],
     [
-     603,
+     1053,
      630
     ],
     [
-     640,
+     1090,
      664
     ],
     [
-     690,
+     1140,
      687
     ],
     [
-     730,
+     1180,
      690
     ],
     [
-     745,
+     1195,
      677
     ],
     [
-     749,
+     1199,
      716
     ],
     [
-     722,
+     1172,
      737
     ],
     [
-     660,
+     1110,
      726
     ],
     [
-     606,
+     1056,
      702
     ],
     [
-     581,
+     1031,
      682
     ]
    ],
    "base": [
     [
-     581,
+     1031,
      684
     ],
     [
-     660,
+     1110,
      727
     ],
     [
-     722,
+     1172,
      739
     ],
     [
-     749,
+     1199,
      718
     ]
    ]
@@ -1368,54 +1502,306 @@
    "kind": "solid",
    "poly": [
     [
-     1048,
+     1498,
      356
     ],
     [
-     1175,
+     1625,
      262
     ],
     [
-     1246,
+     1696,
      302
     ],
     [
-     1244,
+     1694,
      312
     ],
     [
-     1128,
+     1578,
      402
     ],
     [
-     1125,
+     1575,
      427
     ],
     [
-     1116,
+     1566,
      427
     ],
     [
-     1114,
+     1564,
      402
     ],
     [
-     1050,
+     1500,
      366
     ]
    ],
    "base": [
     [
-     1048,
+     1498,
      360
     ],
     [
-     1120,
+     1570,
      427
     ],
     [
-     1244,
+     1694,
      330
+    ]
+   ]
+  },
+  {
+   "id": "qa-wall-l",
+   "kind": "solid",
+   "poly": [
+    [
+     1060,
+     360.0
+    ],
+    [
+     1122,
+     397.2
+    ],
+    [
+     1122,
+     484.08
+    ],
+    [
+     1060,
+     444.4
+    ]
+   ],
+   "base": [
+    [
+     1060,
+     444.4
+    ],
+    [
+     1122,
+     484.08
+    ]
+   ]
+  },
+  {
+   "id": "qa-wall-r",
+   "kind": "solid",
+   "poly": [
+    [
+     1172,
+     427.2
+    ],
+    [
+     1195,
+     441.0
+    ],
+    [
+     1195,
+     530.8
+    ],
+    [
+     1172,
+     516.08
+    ]
+   ],
+   "base": [
+    [
+     1172,
+     516.08
+    ],
+    [
+     1195,
+     530.8
+    ]
+   ]
+  },
+  {
+   "id": "qa-wall-head",
+   "kind": "solid",
+   "poly": [
+    [
+     1122,
+     397.2
+    ],
+    [
+     1172,
+     427.2
+    ],
+    [
+     1172,
+     438.08000000000004
+    ],
+    [
+     1122,
+     406.08
+    ]
+   ],
+   "base": [
+    [
+     1122,
+     484.08
+    ],
+    [
+     1172,
+     516.08
+    ]
+   ]
+  },
+  {
+   "id": "foosball",
+   "kind": "solid",
+   "poly": [
+    [
+     1444,
+     503
+    ],
+    [
+     1460,
+     503
+    ],
+    [
+     1473,
+     510
+    ],
+    [
+     1482,
+     512
+    ],
+    [
+     1506,
+     518
+    ],
+    [
+     1512,
+     552
+    ],
+    [
+     1522,
+     560
+    ],
+    [
+     1520,
+     570
+    ],
+    [
+     1509,
+     566
+    ],
+    [
+     1508,
+     600
+    ],
+    [
+     1500,
+     600
+    ],
+    [
+     1497,
+     582
+    ],
+    [
+     1470,
+     582
+    ],
+    [
+     1456,
+     574
+    ],
+    [
+     1440,
+     574
+    ],
+    [
+     1436,
+     562
+    ],
+    [
+     1428,
+     542
+    ],
+    [
+     1434,
+     524
+    ],
+    [
+     1444,
+     513
+    ]
+   ],
+   "base": [
+    [
+     1440,
+     566
+    ],
+    [
+     1504,
+     598
+    ]
+   ]
+  },
+  {
+   "id": "bed-glass-l",
+   "kind": "glass",
+   "poly": [
+    [
+     1840.79,
+     425.2099999999999
+    ],
+    [
+     1846.865,
+     428.79499999999996
+    ],
+    [
+     1846.865,
+     540.795
+    ],
+    [
+     1840.79,
+     537.2099999999999
+    ]
+   ],
+   "base": [
+    [
+     1840.79,
+     537.2099999999999
+    ],
+    [
+     1846.865,
+     540.795
+    ]
+   ]
+  },
+  {
+   "id": "bed-glass-r",
+   "kind": "glass",
+   "poly": [
+    [
+     1879.265,
+     447.91499999999996
+    ],
+    [
+     1998.74,
+     518.42
+    ],
+    [
+     1998.74,
+     630.42
+    ],
+    [
+     1879.265,
+     559.915
+    ]
+   ],
+   "base": [
+    [
+     1879.265,
+     559.915
+    ],
+    [
+     1998.74,
+     630.42
     ]
    ]
   }
@@ -1426,20 +1812,20 @@
    "room": "growth",
    "quad": [
     [
-     966,
-     69
+     1417,
+     71
     ],
     [
-     1036,
+     1484,
+     103
+    ],
+    [
+     1482,
+     129
+    ],
+    [
+     1417,
      98
-    ],
-    [
-     1033,
-     125
-    ],
-    [
-     965,
-     100
     ]
    ]
   },
@@ -1448,19 +1834,19 @@
    "room": "boardroom",
    "quad": [
     [
-     1186,
+     1636,
      141
     ],
     [
-     1304,
+     1754,
      198
     ],
     [
-     1302,
+     1752,
      273
     ],
     [
-     1185,
+     1635,
      214
     ]
    ]
@@ -1471,7 +1857,7 @@
    "id": "f-dev-1",
    "sprite": "desk_dual",
    "at": [
-    355.1,
+    805.1,
     323.4
    ]
   },
@@ -1479,7 +1865,7 @@
    "id": "f-dev-2",
    "sprite": "desk_dual",
    "at": [
-    266.0,
+    716.0,
     270.8
    ]
   },
@@ -1487,7 +1873,7 @@
    "id": "f-dev-3",
    "sprite": "desk_dual",
    "at": [
-    165.8,
+    615.8,
     345.1
    ]
   },
@@ -1495,7 +1881,7 @@
    "id": "f-dev-4",
    "sprite": "desk_dual",
    "at": [
-    254.9,
+    704.9,
     397.6
    ]
   },
@@ -1503,7 +1889,7 @@
    "id": "f-gs-1",
    "sprite": "desk_single",
    "at": [
-    901.0,
+    1351.0,
     177.8
    ]
   },
@@ -1511,63 +1897,15 @@
    "id": "f-gs-2",
    "sprite": "desk_single",
    "at": [
-    986.1,
+    1436.1,
     227.9
-   ]
-  },
-  {
-   "id": "gym-treadmill",
-   "sprite": "treadmill",
-   "at": [
-    40.2,
-    535.1
-   ]
-  },
-  {
-   "id": "gym-rack",
-   "sprite": "dumbbell_rack",
-   "at": [
-    104.0,
-    552.6
-   ]
-  },
-  {
-   "id": "gym-bench",
-   "sprite": "bench",
-   "at": [
-    75.9,
-    616.5
-   ]
-  },
-  {
-   "id": "gym-bike",
-   "sprite": "bike",
-   "at": [
-    1.1,
-    612.6
-   ]
-  },
-  {
-   "id": "gym-mat",
-   "sprite": "yoga_mat",
-   "at": [
-    24.9,
-    692.0
-   ]
-  },
-  {
-   "id": "ceo-shelf",
-   "sprite": "bookshelf",
-   "at": [
-    1430.9,
-    583.0
    ]
   },
   {
    "id": "ceo-sofa",
    "sprite": "sofa",
    "at": [
-    1507.0,
+    1957.0,
     658.6
    ]
   },
@@ -1575,7 +1913,7 @@
    "id": "ceo-table",
    "sprite": "coffee_table",
    "at": [
-    1412.4,
+    1862.4,
     688.3
    ]
   },
@@ -1583,7 +1921,7 @@
    "id": "ceo-plant",
    "sprite": "ceo_plant",
    "at": [
-    1385.9,
+    1835.9,
     745.6
    ]
   },
@@ -1591,7 +1929,7 @@
    "id": "ceo-lamp",
    "sprite": "floor_lamp",
    "at": [
-    1527.8,
+    1977.8,
     643.2
    ]
   },
@@ -1599,9 +1937,107 @@
    "id": "f-ceo-desk",
    "sprite": "ceo_desk",
    "at": [
-    1323.0,
+    1773.0,
     659.7
    ]
+  },
+  {
+   "id": "gym-treadmill",
+   "sprite": "treadmill",
+   "at": [
+    279.1,
+    475.9
+   ]
+  },
+  {
+   "id": "gym-treadmill-2",
+   "sprite": "treadmill",
+   "at": [
+    339.9,
+    511.7
+   ]
+  },
+  {
+   "id": "gym-bike",
+   "sprite": "bike",
+   "at": [
+    416.0,
+    541.6
+   ]
+  },
+  {
+   "id": "gym-rack",
+   "sprite": "dumbbell_rack",
+   "at": [
+    554.0,
+    552.6
+   ]
+  },
+  {
+   "id": "gym-bench",
+   "sprite": "bench",
+   "at": [
+    365.2,
+    622.3
+   ]
+  },
+  {
+   "id": "gym-mat",
+   "sprite": "yoga_mat",
+   "at": [
+    145.2,
+    542.7
+   ]
+  },
+  {
+   "id": "gym-plant",
+   "sprite": "plant",
+   "at": [
+    267.2,
+    398.4
+   ]
+  },
+  {
+   "id": "gym-plant-2",
+   "sprite": "plant",
+   "at": [
+    409.5,
+    718.8
+   ]
+  },
+  {
+   "id": "bed",
+   "sprite": "bed",
+   "at": [
+    2047.8,
+    577.9
+   ]
+  },
+  {
+   "id": "bed-asleep",
+   "sprite": "bed_sleep",
+   "at": [
+    2047.8,
+    577.9
+   ],
+   "hidden": true
+  },
+  {
+   "id": "bed-shelf",
+   "sprite": "bookshelf_m",
+   "at": [
+    1949.2,
+    478.4
+   ]
+  },
+  {
+   "id": "coo-laptop",
+   "sprite": "laptop_back_m",
+   "at": [
+    1540,
+    398
+   ],
+   "z": 30
   }
  ],
  "doors": [
@@ -1609,11 +2045,11 @@
    "id": "dev",
    "kind": "glass",
    "hinge": [
-    455,
+    905,
     327
    ],
    "free": [
-    403,
+    853,
     372
    ],
    "h": 72,
@@ -1623,11 +2059,11 @@
    "id": "boardroom",
    "kind": "glass",
    "hinge": [
-    932,
+    1382,
     408
    ],
    "free": [
-    882,
+    1332,
     383
    ],
    "h": 80,
@@ -1637,26 +2073,12 @@
    "id": "game",
    "kind": "glass",
    "hinge": [
-    935,
+    1385,
     543
    ],
    "free": [
-    900,
+    1350,
     567
-   ],
-   "h": 80,
-   "swing": 1
-  },
-  {
-   "id": "fireplace",
-   "kind": "glass",
-   "hinge": [
-    884,
-    553
-   ],
-   "free": [
-    838,
-    578
    ],
    "h": 80,
    "swing": 1
@@ -1665,11 +2087,11 @@
    "id": "growth",
    "kind": "glass",
    "hinge": [
-    1022,
+    1472,
     262
    ],
    "free": [
-    985,
+    1435,
     290
    ],
    "h": 85,
@@ -1679,11 +2101,11 @@
    "id": "gym",
    "kind": "glass",
    "hinge": [
-    78,
+    528,
     666
    ],
    "free": [
-    40,
+    490,
     688
    ],
    "h": 92,
@@ -1693,30 +2115,30 @@
    "id": "lobby-l",
    "kind": "wood",
    "hinge": [
-    197,
+    647,
     665
    ],
    "free": [
-    245,
+    695,
     690
    ],
    "h": 96,
    "swing": 1,
    "opening": [
     [
-     197,
+     647,
      665
     ],
     [
-     292,
+     742,
      712
     ],
     [
-     292,
+     742,
      617
     ],
     [
-     197,
+     647,
      570
     ]
    ]
@@ -1725,11 +2147,11 @@
    "id": "lobby-r",
    "kind": "wood",
    "hinge": [
-    292,
+    742,
     712
    ],
    "free": [
-    245,
+    695,
     690
    ],
    "h": 96,
@@ -1740,16 +2162,46 @@
    "kind": "glass",
    "mode": "slide2",
    "hinge": [
-    1216.1,
+    1666.1,
     612.7
    ],
    "free": [
-    1140.5,
+    1590.5,
     668.7
    ],
    "h": 108,
    "swing": 1,
    "frosted": true
+  },
+  {
+   "id": "qa-front",
+   "kind": "glass",
+   "mode": "slide",
+   "hinge": [
+    1122,
+    484.1
+   ],
+   "free": [
+    1172,
+    516.1
+   ],
+   "h": 76,
+   "swing": 1
+  },
+  {
+   "id": "ceo-bed",
+   "kind": "glass",
+   "mode": "slide",
+   "hinge": [
+    1846.865,
+    540.795
+   ],
+   "free": [
+    1879.265,
+    559.915
+   ],
+   "h": 106,
+   "swing": 1
   }
  ],
  "glassWalls": [
@@ -1757,11 +2209,11 @@
    "id": "gym-front",
    "base": [
     [
-     0,
-     712
+     410,
+     736
     ],
     [
-     40,
+     490,
      688
     ]
    ],
@@ -1771,11 +2223,11 @@
    "id": "gym-front-2",
    "base": [
     [
-     78,
+     528,
      666
     ],
     [
-     143,
+     593,
      628
     ]
    ],
@@ -1787,104 +2239,83 @@
    "id": "ceo-win-0",
    "quad": [
     [
-     1357.6,
+     1807.6,
      417.6
     ],
     [
-     1392.4,
+     1842.4,
      438.2
     ],
     [
-     1392.4,
+     1842.4,
      526.2
     ],
     [
-     1357.6,
+     1807.6,
      505.6
     ]
    ]
   },
   {
-   "id": "ceo-win-1",
+   "id": "bed-win-0",
    "quad": [
     [
-     1397.3,
-     441.0
+     1998.1,
+     328.8
     ],
     [
-     1432.1,
-     461.6
+     2042.6,
+     355.1
     ],
     [
-     1432.1,
-     549.6
+     2042.6,
+     443.1
     ],
     [
-     1397.3,
-     529.0
+     1998.1,
+     416.8
     ]
    ]
   },
   {
-   "id": "ceo-win-2",
+   "id": "bed-win-1",
    "quad": [
     [
-     1437.0,
-     464.5
+     2048.7,
+     358.7
     ],
     [
-     1471.8,
-     485.0
+     2093.2,
+     385.0
     ],
     [
-     1471.8,
-     573.0
+     2093.2,
+     473.0
     ],
     [
-     1437.0,
-     552.5
+     2048.7,
+     446.7
     ]
    ]
   },
   {
-   "id": "ceo-win-3",
+   "id": "bed-win-2",
    "quad": [
     [
-     1476.7,
-     487.9
+     2099.3,
+     388.5
     ],
     [
-     1511.5,
-     508.4
+     2143.9,
+     414.8
     ],
     [
-     1511.5,
-     596.4
+     2143.9,
+     502.8
     ],
     [
-     1476.7,
-     575.9
-    ]
-   ]
-  },
-  {
-   "id": "ceo-win-4",
-   "quad": [
-    [
-     1516.3,
-     511.3
-    ],
-    [
-     1551.2,
-     531.9
-    ],
-    [
-     1551.2,
-     619.9
-    ],
-    [
-     1516.3,
-     599.3
+     2099.3,
+     476.5
     ]
    ]
   }
@@ -1893,25 +2324,25 @@
   "id": "rizehub",
   "quad": [
    [
-    1242.6,
+    1692.6,
     495.1
    ],
    [
-    1337.1,
+    1787.1,
     425.1
    ],
    [
-    1337.1,
+    1787.1,
     471.1
    ],
    [
-    1242.6,
+    1692.6,
     541.1
    ]
   ]
  },
  "ceoBubble": [
-  1423.7,
+  1873.7,
   524.2
  ]
 }
