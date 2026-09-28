@@ -56,6 +56,7 @@ export function workLoop(agentId: string, department: string): LoopName {
 /** What the CEO does at a spot (anything he can walk up to: chairs, sofas, the gym, the coffee bar, his bed). */
 export function ceoGoalAt(s: Spot): Goal {
   const loop: LoopName = s.kind === 'bed' ? 'sleep'
+    : s.kind === 'bath_shower' ? 'shower' : s.kind === 'bath_toilet' ? 'toilet' : s.kind === 'bath_vanity' ? 'wash'
     : s.kind === 'ceo' ? 'ceo_desk'
     : s.kind === 'ceo_sofa' ? 'sofa'
     : s.kind === 'boardroom' ? 'meeting'

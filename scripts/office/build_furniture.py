@@ -16,7 +16,7 @@ C, D = -0.148, 0.931
 # The luxury / bedroom renders are true 2:1 iso; this shear maps their axes exactly onto the painting's grid
 # (down-right slope 23.9/40.5, up-right slope -28/37.8) so they sit parallel to the walls and rugs.
 TRUE_ISO = {'sofa', 'coffee_table', 'ceo_desk', 'bookshelf', 'bookshelf_m', 'floor_lamp', 'ceo_plant', 'bed', 'bed_sleep',
-            'laptop_back', 'laptop_front', 'laptop_back_m', 'laptop_front_m'}
+            'laptop_back', 'laptop_front', 'laptop_back_m', 'laptop_front_m', 'bath_toilet_m', 'bath_vanity', 'bath_shower'}
 C_ISO, D_ISO = -0.07, 1.2
 WORLD = 2  # background is 2x the 1x layout pixels
 SCALE = {  # 1x picture px per source px
@@ -24,6 +24,7 @@ SCALE = {  # 1x picture px per source px
     'chair_ur': 0.2, 'chair_dl': 0.2, 'chair_dr': 0.2,
     'ceo_desk': 0.39, 'ceo_chair': 0.16, 'sofa': 0.36, 'coffee_table': 0.2, 'bookshelf': 0.34, 'ceo_plant': 0.25, 'floor_lamp': 0.3,
     'bed': 0.75, 'bed_sleep': 0.83, 'laptop_back': 0.58, 'laptop_front': 0.52, 'laptop_back_m': 0.58, 'laptop_front_m': 0.52, 'bookshelf_m': 0.34,
+    'bath_toilet_m': 0.36, 'bath_vanity': 0.36, 'bath_shower': 0.42,
     'treadmill': 0.3, 'dumbbell_rack': 0.22, 'bench': 0.24, 'bike': 0.24, 'yoga_mat': 0.24, 'plant': 0.2,
 }
 SCREENS = {  # monitor faces in source px (TL, TR, BR, BL)

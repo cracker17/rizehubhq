@@ -482,7 +482,16 @@ export class OfficeScene extends Phaser.Scene {
       if (key !== 'spot:ceo-bed') { const bed = this.map.spots.find((s) => s.kind === 'bed'); if (bed) this.ceoGo(ceoGoalAt(bed)); }
       return;
     }
-    if (key === 'spot:ceo-bed') this.ceoLife.next = 0; // morning: get up
+    if (key === 'spot:ceo-bed') {
+      // morning: get up and shower first
+      const sh = this.map.spots.find((x) => x.kind === 'bath_shower');
+      if (sh) { this.ceoGo(ceoGoalAt(sh)); this.ceoLife.next = now + 45_000; return; }
+      this.ceoLife.next = 0;
+    }
+    if (key.startsWith('spot:ceo-bath-toilet') && now >= this.ceoLife.next) {
+      const v = this.map.spots.find((x) => x.kind === 'bath_vanity'); // wash hands after
+      if (v) { this.ceoGo(ceoGoalAt(v)); this.ceoLife.next = now + 8_000; return; }
+    }
     if (!arrived && key !== 'spot:ceo-bed' && m.phase === 'walking') return;
     if (now < this.ceoLife.next && key !== 'spot:ceo-bed') return;
     const free = (kind: string) => { const taken = this.takenKeys(); return this.map.spots.filter((s) => s.kind === kind && !taken.has(`spot:${s.id}`)); };
@@ -498,6 +507,7 @@ export class OfficeScene extends Phaser.Scene {
       const seat = this.map.ceoSeat;
       if (r < 0.5 || key !== 'spot:ceo-chair' && r < 0.62) { g = { key: 'spot:ceo-chair', x: seat.x, y: seat.y, face: seat.face, seated: true, loop: 'ceo_desk' }; stay = 120_000 + Math.random() * 120_000; }
       else if (r < 0.74) { const c = free('coffee'); if (c.length) { g = ceoGoalAt(pick(c)); stay = 9_000; } }
+      else if (r < 0.8) { const c = free('bath_toilet'); if (c.length) { g = ceoGoalAt(c[0]); stay = 25_000; } }
       else if (r < 0.86) { const c = free('gym').filter((s) => s.loop === 'treadmill'); if (c.length) { g = ceoGoalAt(pick(c)); stay = 50_000; } }
       else { const c = free('ceo_sofa'); if (c.length) { g = ceoGoalAt(pick(c)); stay = 50_000; } }
     }
@@ -611,6 +621,9 @@ export class OfficeScene extends Phaser.Scene {
       // someone sitting on a sprite sofa sits in front of its back and arms (the sofa's slices sort by its front edge)
       const onSofaSprite = m.at?.startsWith('spot:ceo-sofa') && (m.phase === 'seated' || m.phase === 'sitting_down' || m.phase === 'standing_up');
       c.view.place(wp.x, wp.y, wp.y + (m.phase === 'seated' ? 2 : 0) + (m.loop === 'treadmill' && m.at ? 90 : 0) + (onSofaSprite ? 34 * S : 0));
+      // In the shower the CEO is a soft silhouette behind the fogged glass.
+      const showering = m.loop === 'shower' && !!m.at && m.phase !== 'walking';
+      (c.view.object as unknown as { setAlpha(a: number): void }).setAlpha(showering ? 0.42 : 1);
       const onScreen = wp.x > vx0 && wp.x < vx1 && wp.y > vy0 && wp.y < vy1;
       c.view.object.setVisible(onScreen);
       if (!onScreen) continue;
@@ -652,6 +665,24 @@ export class OfficeScene extends Phaser.Scene {
   private drawFx(t: number, rally: number) {
     const g = this.fx;
     g.clear();
+    // the CEO's shower: rain from the shower head, drops bouncing on the tray, steam fogging up the glass
+    const bossS = this.chars.get(CEO_ID);
+    if (bossS && bossS.motion.loop === 'shower' && bossS.motion.at && bossS.motion.phase !== 'walking') {
+      const p = world(bossS.motion.pos.x, bossS.motion.pos.y);
+      const top = p.y - 84 * S; const bot = p.y - 2 * S;
+      g.lineStyle(1 * S, 0xcfe8ff, 0.55);
+      for (let i = 0; i < 26; i++) {
+        const k = ((t * 1.9 + i * 0.137) % 1);
+        const x = p.x - 14 * S + ((i * 37) % 28) * S + Math.sin(i) * 2 * S;
+        const y = top + (bot - top) * k;
+        g.lineBetween(x, y, x - 0.6 * S, y + 6 * S);
+      }
+      for (let i = 0; i < 7; i++) {
+        const k = ((t * 0.25 + i / 7) % 1);
+        g.fillStyle(0xffffff, 0.16 * (1 - k)); g.fillCircle(p.x - 16 * S + ((i * 23) % 32) * S + Math.sin(t + i) * 3 * S, bot - 20 * S - k * 70 * S, (5 + k * 9) * S);
+      }
+      g.fillStyle(0xe6f2ff, 0.18); g.fillRect(p.x - 18 * S, top, 36 * S, bot - top);
+    }
     // the CEO's coffee: a mug in his hand while he carries it and drinks it on the sofa, with a curl of steam
     const boss = this.chars.get(CEO_ID);
     if (boss && this.ceoLife.mug && boss.view.object.visible && !(boss.motion.phase === 'standing' && boss.motion.loop === 'coffee')) {

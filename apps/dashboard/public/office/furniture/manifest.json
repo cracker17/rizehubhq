@@ -258,6 +258,33 @@
    "W": 0.367,
    "D": 1.459
   },
+  "bath_toilet_m": {
+   "src": "/office/furniture/bath_toilet_m.webp",
+   "w": 71,
+   "h": 145,
+   "ax": 7.63,
+   "ay": 141.73,
+   "W": 0.076,
+   "D": 0.804
+  },
+  "bath_vanity": {
+   "src": "/office/furniture/bath_vanity.webp",
+   "w": 93,
+   "h": 203,
+   "ax": 56.92,
+   "ay": 195.95,
+   "W": 0.694,
+   "D": 0.428
+  },
+  "bath_shower": {
+   "src": "/office/furniture/bath_shower.webp",
+   "w": 142,
+   "h": 298,
+   "ax": 61.27,
+   "ay": 289.79,
+   "W": 0.746,
+   "D": 1.012
+  },
   "treadmill": {
    "src": "/office/furniture/treadmill.webp",
    "w": 192,
