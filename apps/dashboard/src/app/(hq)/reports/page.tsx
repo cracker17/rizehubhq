@@ -1,7 +1,13 @@
-import { ComingSoon } from '@/components/ComingSoon';
+import { ReportsView, type ReportsTab } from '@/components/reports/ReportsView';
+import { isIsoDate, loadReports, manilaToday } from '@/lib/data/reports';
 
 export const metadata = { title: 'Daily Reports · RizeHub HQ' };
 
-export default function Page() {
-  return <ComingSoon title="Daily Reports" milestone="M7">Morning brief, 18:00 CEO digest and each agent&apos;s standup.</ComingSoon>;
+export default async function Page({ searchParams }: { searchParams: Promise<{ date?: string; tab?: string }> }) {
+  const sp = await searchParams;
+  const today = manilaToday();
+  const date = isIsoDate(sp.date) && sp.date <= today ? sp.date : today;
+  const tab: ReportsTab = sp.tab === 'weekly' ? 'weekly' : 'daily';
+  const reports = await loadReports(date);
+  return <ReportsView reports={reports} tab={tab} />;
 }

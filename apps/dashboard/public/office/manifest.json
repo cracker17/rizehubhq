@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "notes": "Sprite sheets from the 3D pipeline (docs/07 §10). Add an entry per agent id (or \"default\") to replace the procedural figure. See src/components/office/engine/characters.ts for the format and clip names.",
+  "characters": {}
+}

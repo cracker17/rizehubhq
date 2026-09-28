@@ -3,8 +3,9 @@
 import { randomUUID } from 'node:crypto';
 import { isQaPass, type AgentStatus, type Plan, type QaVerdict } from '@rizehubhq/shared';
 import type {
-  ActivityRow, AgentRow, ClientRow, HqDb, RequestRow, ScreenRow, ScreenUpdate, TaskOutput, TaskRow, UsageRecord,
+  ActivityRow, AgentRow, ClientRow, HqDb, ReportInput, ReportKeyRow, RequestRow, ScreenRow, ScreenUpdate, TaskOutput, TaskRow, UsageRecord,
 } from './hqdb';
+import { emptyFacts, type DayFacts } from './reports';
 
 export interface FakeApproval { id: string; kind: string; request_id: string | null; task_id: string | null; agent_id: string | null; title: string; payload: Record<string, unknown> }
 export interface FakeCall { fn: string; args: unknown[] }
@@ -21,6 +22,10 @@ export class FakeHqDb implements HqDb {
   usage: UsageRecord[] = [];
   calls: FakeCall[] = [];
   heartbeats = 0;
+  reports: (ReportInput & { id: string })[] = [];
+  settings: Record<string, unknown> = {};
+  /** Facts returned by reportFacts(); tests set this per window start date. */
+  facts = new Map<string, DayFacts>();
 
   constructor(agentIds: string[] = ['coo', 'seo-1', 'seo-2', 'qa-lead', 'uiux-1', 'graphic-1']) {
     for (const id of agentIds) this.addAgent(id);
@@ -188,4 +193,25 @@ export class FakeHqDb implements HqDb {
     return this.activity.filter((a) => a.actor === agentId).slice(-limit).reverse();
   }
   async monthSpendUsd() { return this.usage.reduce((s, u) => s + u.costUsd, 0); }
+
+  async reportFacts(from: string, days: number) {
+    this.log('reportFacts', from, days);
+    return this.facts.get(`${from}:${days}`) ?? this.facts.get(from) ?? emptyFacts(from);
+  }
+  async saveReport(r: ReportInput, overwrite = false) {
+    this.log('saveReport', r, overwrite);
+    const i = this.reports.findIndex((x) => (x.agentId ?? '') === (r.agentId ?? '') && x.date === r.date && x.kind === r.kind);
+    if (i >= 0) {
+      if (!overwrite) return null;
+      this.reports[i] = { ...r, id: this.reports[i]!.id };
+      return this.reports[i]!.id;
+    }
+    const id = randomUUID();
+    this.reports.push({ ...r, id });
+    return id;
+  }
+  async existingReports(sinceDate: string): Promise<ReportKeyRow[]> {
+    return this.reports.filter((r) => r.date >= sinceDate).map((r) => ({ kind: r.kind, report_date: r.date, agent_id: r.agentId }));
+  }
+  async getSettings() { this.log('getSettings'); return { ...this.settings }; }
 }

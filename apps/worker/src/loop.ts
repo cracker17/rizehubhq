@@ -5,7 +5,13 @@ import { errMsg, log, type WorkerDeps } from './deps';
 import { runIdleShuffle } from './idle';
 import { planNext } from './planner';
 import { reviewNext } from './qa';
+import { runDueReports } from './reportsJob';
 import { runTask } from './runner';
+
+/** settings.paused may be stored as true or "true". */
+export function isPausedSetting(v: unknown): boolean {
+  return v === true || v === 'true';
+}
 
 export interface LoopOptions {
   pollIntervalMs: number;
@@ -13,6 +19,10 @@ export interface LoopOptions {
   staleEveryMs?: number;
   idleEveryMs?: number;
   quotaBackoffMs?: number;
+  /** How often scheduled reports are checked (docs/05 "Scheduled work"). 0 disables. */
+  reportsEveryMs?: number;
+  /** How long a settings.paused read is trusted before re-reading. */
+  pausedCheckMs?: number;
 }
 
 export class WorkerLoop {
@@ -24,6 +34,8 @@ export class WorkerLoop {
   private stopping = false;
   private loopDone: Promise<void> | null = null;
   private pausedUntil = { tasks: 0, planning: 0, qa: 0 };
+  private reporting: Promise<unknown> | null = null;
+  private paused = { value: false, checkedAt: -Infinity };
 
   constructor(private deps: WorkerDeps, private opts: LoopOptions) {}
 
@@ -32,7 +44,33 @@ export class WorkerLoop {
     log(this.deps, `[worker] ${kind} paused after a quota error`);
   }
 
+  /** CEO pause (/pause, settings.paused): no new planning, tasks or QA; running work finishes. */
+  async isPaused(): Promise<boolean> {
+    const now = Date.now();
+    if (now - this.paused.checkedAt < (this.opts.pausedCheckMs ?? 5_000)) return this.paused.value;
+    try {
+      const v = isPausedSetting((await this.deps.db.getSettings()).paused);
+      if (v !== this.paused.value) log(this.deps, v ? '[worker] paused by the CEO: not claiming new work' : '[worker] resumed');
+      this.paused = { value: v, checkedAt: now };
+    } catch (e) {
+      log(this.deps, '[worker] could not read settings.paused', errMsg(e));
+      this.paused.checkedAt = now;
+    }
+    return this.paused.value;
+  }
+
+  /** Scheduled reports, single-flight. */
+  runReports(): Promise<unknown> {
+    if (!this.reporting) {
+      this.reporting = runDueReports(this.deps)
+        .catch((e) => log(this.deps, '[worker] reports failed', errMsg(e)))
+        .finally(() => { this.reporting = null; });
+    }
+    return this.reporting;
+  }
+
   async tick(): Promise<void> {
+    if (await this.isPaused()) return;
     const now = Date.now();
     if (!this.planning && now >= this.pausedUntil.planning) {
       this.planning = planNext(this.deps)
@@ -72,6 +110,11 @@ export class WorkerLoop {
       if (n) log(this.deps, `[worker] re-queued ${n} stale task(s)`);
     }, 'requeue_stale_tasks');
     every(this.opts.idleEveryMs ?? 90_000, () => runIdleShuffle(this.deps.db), 'idle shuffler');
+    const reportsEvery = this.opts.reportsEveryMs ?? 60_000;
+    if (reportsEvery > 0) {
+      every(reportsEvery, () => this.runReports(), 'reports');
+      void this.runReports(); // catch up right away after a restart
+    }
 
     this.loopDone = (async () => {
       while (!this.stopping) {
@@ -87,7 +130,7 @@ export class WorkerLoop {
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     for (const c of this.controllers.values()) c.abort();
-    const all = Promise.allSettled([...this.running.values(), this.planning, this.reviewing, this.loopDone].filter(Boolean));
+    const all = Promise.allSettled([...this.running.values(), this.planning, this.reviewing, this.reporting, this.loopDone].filter(Boolean));
     await Promise.race([all, new Promise((r) => setTimeout(r, timeoutMs).unref())]);
   }
 }

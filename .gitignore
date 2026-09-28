@@ -10,3 +10,4 @@ workspaces/*
 .DS_Store
 supabase/.temp/
 supabase/.branches/
+dist-preview/

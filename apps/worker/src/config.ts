@@ -16,6 +16,7 @@ export const config = {
   supabaseUrl: process.env.SUPABASE_URL ?? '',
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
   pollIntervalMs: num('POLL_INTERVAL_MS', 3000),
+  reportsEveryMs: num('REPORTS_CHECK_MS', 60_000),
   maxParallelTasks: num('MAX_PARALLEL_TASKS', 2),
   monthlyBudgetUsd: num('MONTHLY_BUDGET_USD', 0),
   modelProfile: process.env.MODEL_PROFILE,

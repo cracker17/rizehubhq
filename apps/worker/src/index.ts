@@ -1,5 +1,5 @@
 // RizeHub HQ worker (docs/05-ORCHESTRATION.md): COO planner, specialist runner, QA reviewer,
-// stale-task requeue, idle shuffler and the internal chat/health endpoint.
+// stale-task requeue, idle shuffler, scheduled reports (M7) and the internal chat/health endpoint.
 import { config } from './config';
 import { createBrain } from './brain';
 import { createServiceClient } from './db';
@@ -34,7 +34,9 @@ async function main() {
   console.log(`[worker] ${roles.length} agents · profile "${profile}" · budget $${config.monthlyBudgetUsd}/month`
     + ` · spent $${picker.spentThisMonthUsd.toFixed(2)} · parallel ${config.maxParallelTasks} · QA ≥ ${config.qaThreshold}`);
 
-  const loop = new WorkerLoop(deps, { pollIntervalMs: config.pollIntervalMs, maxParallelTasks: config.maxParallelTasks });
+  const loop = new WorkerLoop(deps, {
+    pollIntervalMs: config.pollIntervalMs, maxParallelTasks: config.maxParallelTasks, reportsEveryMs: config.reportsEveryMs,
+  });
   loop.start();
 
   const server = createHttpServer({

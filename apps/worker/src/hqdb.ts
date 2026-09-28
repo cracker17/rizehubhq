@@ -2,6 +2,7 @@
 // (supabase/migrations/*workflow_engine.sql + *worker_helpers.sql); reads are small selects.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStatus, Plan, QaVerdict, RequestStatus, TaskStatus } from '@rizehubhq/shared';
+import type { DayFacts } from './reports';
 
 export interface RequestRow {
   id: string;
@@ -92,7 +93,7 @@ export interface TaskOutput {
 
 export interface UsageRecord {
   actor: string;
-  kind: 'task' | 'plan' | 'qa' | 'chat';
+  kind: 'task' | 'plan' | 'qa' | 'chat' | 'report';
   taskId?: string | null;
   requestId?: string | null;
   tokensIn: number;
@@ -100,6 +101,20 @@ export interface UsageRecord {
   costUsd: number;
   detail: Record<string, unknown>;
 }
+
+/** One row for save_report() (supabase/migrations/20260928030000_reports_telegram.sql). */
+export interface ReportInput {
+  agentId: string | null;
+  date: string;
+  kind: 'standup' | 'daily_digest' | 'morning_brief' | 'weekly';
+  done?: string[];
+  next?: string[];
+  blockers?: string[];
+  bodyMd: string;
+  costUsd: number;
+  data?: Record<string, unknown>;
+}
+export interface ReportKeyRow { kind: string; report_date: string; agent_id: string | null }
 
 export interface HqDb {
   // planning
@@ -136,6 +151,12 @@ export interface HqDb {
   getAgentScreen(agentId: string): Promise<ScreenRow | null>;
   recentActivity(agentId: string, limit: number): Promise<ActivityRow[]>;
   monthSpendUsd(): Promise<number>;
+  // reports + settings (M7)
+  reportFacts(from: string, days: number): Promise<DayFacts>;
+  /** Returns the new id, or null when that (author, date, kind) already exists and overwrite is false. */
+  saveReport(r: ReportInput, overwrite?: boolean): Promise<string | null>;
+  existingReports(sinceDate: string): Promise<ReportKeyRow[]>;
+  getSettings(): Promise<Record<string, unknown>>;
 }
 
 /** A composite-returning RPC gives back a row of nulls (or null) when nothing was claimed. */
@@ -222,6 +243,22 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
       const { data, error } = await sb.from('activity_log').select('cost_usd').like('action', 'usage.%').gte('created_at', start.toISOString());
       if (error) throw new Error(`activity_log: ${error.message}`);
       return (data ?? []).reduce((s, r: { cost_usd: number | string }) => s + Number(r.cost_usd ?? 0), 0);
+    },
+
+    reportFacts: (from, days) => rpc<DayFacts>('report_facts', { p_from: from, p_days: days }),
+    saveReport: async (r, overwrite = false) => (await rpc<string | null>('save_report', {
+      p_agent: r.agentId, p_date: r.date, p_kind: r.kind, p_done: r.done ?? [], p_next: r.next ?? [], p_blockers: r.blockers ?? [],
+      p_body: r.bodyMd, p_cost: r.costUsd, p_data: r.data ?? {}, p_overwrite: overwrite,
+    })) ?? null,
+    existingReports: async (sinceDate) => {
+      const { data, error } = await sb.from('reports').select('kind,report_date,agent_id').gte('report_date', sinceDate);
+      if (error) throw new Error(`reports: ${error.message}`);
+      return (data ?? []) as ReportKeyRow[];
+    },
+    getSettings: async () => {
+      const { data, error } = await sb.from('settings').select('key,value');
+      if (error) throw new Error(`settings: ${error.message}`);
+      return Object.fromEntries((data ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
     },
   };
 }
