@@ -21,3 +21,19 @@ test('symlinked client folders are refused', () => {
   fs.symlinkSync(os.tmpdir(), path.join(root, 'clients', 'evil'));
   assert.throws(() => brainWriteTarget(root, 'brain/clients/evil/profile.md'), /symlink/);
 });
+
+test('brain_write: files the (root) worker creates take the owner of brain/ (host deploy user), only when root', async () => {
+  const { inheritOwner } = await import('../dev/agentUser');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rzh-brain-'));
+  const file = path.join(dir, 'x.md');
+  fs.writeFileSync(file, 'x');
+  const calls: string[] = [];
+  const real = fs.lchownSync;
+  (fs as { lchownSync: typeof fs.lchownSync }).lchownSync = ((p: string, uid: number) => { calls.push(`${p}:${uid}`); }) as typeof fs.lchownSync;
+  try {
+    inheritOwner([file], dir, () => 1000);
+    assert.deepEqual(calls, [], 'non-root: nothing to fix');
+    inheritOwner([file], dir, () => 0);
+    assert.deepEqual(calls, [`${file}:${fs.statSync(dir).uid}`]);
+  } finally { (fs as { lchownSync: typeof fs.lchownSync }).lchownSync = real; }
+});

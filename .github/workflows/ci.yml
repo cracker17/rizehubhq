@@ -49,12 +49,15 @@ jobs:
         run: node scripts/check-env.mjs --example
       - name: shellcheck deploy scripts
         run: shellcheck -S style deploy/*.sh
+      - name: per-service env split (dashboard never gets server secrets)
+        run: node --test scripts/env.test.mjs
       - name: docker compose config
         run: |
           cp .env.example .env
+          node scripts/split-env.mjs
           docker network create rizehub-internal >/dev/null 2>&1 || true
           docker compose config --quiet
-          rm .env
+          rm .env .env.dashboard .env.bot .env.worker
 
   # Builds the three production images exactly as the VPS does (no push). Catches Dockerfile / lockfile drift.
   images:

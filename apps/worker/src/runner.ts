@@ -8,6 +8,7 @@ import type { ClientRow, TaskOutput, TaskRow } from './hqdb';
 import type { Role } from './roles';
 import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
 import { addUsage, isQuotaError, type PickedModel } from './models/usage';
+import { WORKER_EXECUTED_ACTIONS } from './rizehub/background';
 
 /** Where not-yet-built tools arrive (docs/11-ROADMAP.md). */
 export const TOOL_MILESTONES: Record<string, string> = {
@@ -19,6 +20,14 @@ export const TOOL_MILESTONES: Record<string, string> = {
 export const BUILTIN_TOOLS = ['report_progress', 'submit_output', 'ask_ceo', 'brain_read', 'brain_search', 'request_external_action'] as const;
 
 export class BudgetExceededError extends Error {}
+
+/**
+ * Payload spec for an agent-proposed external action. Types without a worker executor are marked
+ * executor: 'manual' so the dashboard/bot show "you do this after approving" instead of implying automation.
+ */
+export function externalActionSpec(type: string, spec: string): Record<string, unknown> {
+  return WORKER_EXECUTED_ACTIONS.has(type) ? { description: spec, executor: 'worker' } : { description: spec, executor: 'manual' };
+}
 
 export type RunResult =
   | { status: 'submitted'; costUsd: number; fallback: boolean }
@@ -148,14 +157,22 @@ export function buildTools(ctx: ToolContext): ToolSet {
     }),
     request_external_action: tool({
       description: 'Propose an action that changes the outside world (publish, send, merge, deploy, spend). '
-        + 'Nothing happens until the CEO approves; the worker then executes exactly this spec.',
+        + 'Nothing happens until the CEO approves. The worker has no automatic executor for these: after approving, '
+        + 'the CEO carries the action out by hand, exactly as your spec says (RizeHub actions go through the rizehub_* tools instead).',
       inputSchema: z.object({
         type: z.string().describe('e.g. publish_article, send_email, merge_pr, publish_theme'),
-        spec: z.string().describe('Exactly what should happen, with targets (URLs, ids, recipients)'),
+        spec: z.string().describe('Exactly what should happen, with targets (URLs, ids, recipients), written so the CEO can do it step by step'),
       }),
       execute: async ({ type, spec }) => {
-        const id = await db.requestExternalAction(task.id, type, { description: spec });
-        return `Queued for CEO approval (approval ${id}). Do not perform it yourself; continue your task.`;
+        const t = type.trim();
+        if (WORKER_EXECUTED_ACTIONS.has(t) || /^rizehub\./i.test(t)) {
+          return `Not queued: "${t}" is executed by the worker and needs the exact payload its tool builds. Use the rizehub_* tool `
+            + '(e.g. rizehub_reports publish / rizehub_onboarding request_approval / request_invite_send) instead.';
+        }
+        const id = await db.requestExternalAction(task.id, t, externalActionSpec(t, spec));
+        return `Queued for CEO approval (approval ${id}). This is a MANUAL action: nothing runs automatically after approval; `
+          + 'the CEO will do it by hand using your spec. Do not perform it yourself, do not report it as done; continue your task '
+          + 'and mention in your output that it is waiting for the CEO.';
       },
     }),
   };

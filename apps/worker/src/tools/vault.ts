@@ -8,8 +8,10 @@ import type { ToolContext } from '../runner';
 import { createServiceClient } from '../db';
 import { errMsg, log } from '../deps';
 import { loadKeyring, open, type Keyring } from '../vault/crypto';
+import { workerEnv } from '../config';
 import {
-  authHeaderFromScope, loginEntry, maskUsername, redact, safeUrl, secretVariants, urlAllowed,
+  authHeaderFromScope, hasMethodOverride, loginEntry, maskUsername, METHOD_OVERRIDE_HEADERS, publishBlocked, redact, safeUrl,
+  secretVariants, urlAllowed, writeAllowed,
 } from '../vault/guards';
 import { createSupabaseVaultStore, isUuid, VaultDenied, type CredentialForUse, type VaultStore } from '../vault/store';
 import {
@@ -29,7 +31,8 @@ export interface VaultToolEnv {
 }
 
 const MAX_BODY_OUT = 6000;
-const BLOCKED_HEADERS = new Set(['authorization', 'proxy-authorization', 'cookie', 'host', 'content-length', 'connection', 'transfer-encoding']);
+const BLOCKED_HEADERS = new Set(['authorization', 'proxy-authorization', 'cookie', 'host', 'content-length', 'connection', 'transfer-encoding',
+  ...METHOD_OVERRIDE_HEADERS]);
 const DENY_TEXT: Record<string, string> = {
   'not granted': 'You are not granted this credential. Ask the CEO (ask_ceo) if you need it.',
   'credential not found': 'Unknown credential id. Call vault_list to see what you may use.',
@@ -43,7 +46,7 @@ let lazyStore: VaultStore | null = null;
 export function defaultVaultToolEnv(): VaultToolEnv {
   return {
     store: () => (lazyStore ??= createSupabaseVaultStore(createServiceClient())),
-    keyring: () => loadKeyring(),
+    keyring: () => loadKeyring(workerEnv()),
     fetch: (...a) => fetch(...a),
     launchBrowser: launchPlaywright,
     twofaTimeoutMs: 10 * 60_000,
@@ -84,6 +87,11 @@ export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
     return open(c.sealed, kr, c.id);
   }
 
+  /** Close the 2FA question so a late answer is refused and no code lingers (best effort). */
+  async function expire(approvalId: string) {
+    try { await env.store().expire2fa(approvalId); } catch (e) { log(deps, `[${agent}] vault 2FA expire failed`, errMsg(e)); }
+  }
+
   const isOver = async () => state.ended !== null || (await deps.db.getTask(task.id))?.status !== 'working';
 
   return {
@@ -104,6 +112,7 @@ export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
           `  type ${c.secret_type} · user ${maskUsername(c.username)} · 2FA ${c.twofa_method} · status ${c.status}`
             + (c.login_url ? ` · login ${c.login_url}` : ''),
           `  allowed URLs: ${c.url_allowlist.length ? c.url_allowlist.join(', ') : '(none: vault_api disabled; vault_login only on the login site)'}`,
+          `  API writes: ${c.write_allowlist?.length ? c.write_allowlist.join(', ') : 'none (read-only: GET/HEAD)'}`,
           c.scope_notes ? `  scope (follow strictly): ${c.scope_notes}` : '',
         ].filter(Boolean).join('\n'));
         const head = `${list.client.name}: ${list.granted.length} credential(s) granted to you.`;
@@ -115,7 +124,8 @@ export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
     vault_api: tool({
       description: 'Call a client API with a stored token. The worker adds the credential itself (Authorization: Bearer, '
         + 'or the header named in the scope notes); you only get the response. The URL must be on the credential\'s allowlist. '
-        + 'DELETE is not allowed: use request_external_action.',
+        + 'Read-only (GET/HEAD) unless the CEO listed that exact write ("PUT /path") for the credential (see vault_list). '
+        + 'Publishing (theme role, site publish, status=publish) and DELETE are never allowed here: use request_external_action.',
       inputSchema: z.object({
         credential_id: z.string(),
         request: z.object({
@@ -137,6 +147,24 @@ export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
         if (request.method === 'DELETE') {
           await audit(c.id, 'denied', false, { tool: 'vault_api', reason: 'delete_needs_approval', host: u.host, path: u.pathname });
           return 'Refused: deletes change the outside world. Propose it with request_external_action; the CEO decides.';
+        }
+        if (hasMethodOverride(u)) {
+          await audit(c.id, 'denied', false, { tool: 'vault_api', reason: 'method_override', host: u.host, path: u.pathname });
+          return 'Refused: method overrides (_method=…) are not allowed. Use the real method.';
+        }
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          const publish = publishBlocked(request.method, u, request.body);
+          if (publish) {
+            await audit(c.id, 'denied', false, { tool: 'vault_api', reason: 'publish_needs_approval', method: request.method, host: u.host, path: u.pathname });
+            return `Refused: ${publish} makes changes live for the public. Propose it with request_external_action `
+              + '(describe exactly what to publish); the CEO approves and the worker runs it.';
+          }
+          if (!writeAllowed(request.method, u, c.write_allowlist ?? [])) {
+            await audit(c.id, 'denied', false, { tool: 'vault_api', reason: 'write_not_allowlisted', method: request.method, host: u.host, path: u.pathname });
+            return `Refused: this credential is read-only for ${request.method} ${u.pathname}. `
+              + `Allowed writes: ${c.write_allowlist?.length ? c.write_allowlist.join(', ') : 'none'}. `
+              + 'Ask the CEO to allow it (ask_ceo) or propose the change with request_external_action.';
+          }
         }
         if (c.secret_type === 'ssh_key') return 'This credential is an SSH key; it cannot be used for HTTP APIs.';
 
@@ -274,7 +302,7 @@ export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
           const until = Date.now() + env.twofaTimeoutMs;
           for (;;) {
             const ans = await env.store().take2faCode(approvalId);
-            if (ans.status === 'approved') {
+            if (ans.status === 'approved' && typeof ans.code === 'string' && ans.code) {
               let code = ans.code.replace(/\s+/g, '');
               if (!/^[A-Za-z0-9-]{4,12}$/.test(code)) {
                 code = '';
@@ -293,10 +321,12 @@ export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
               return 'The code was not accepted (expired or mistyped). Call vault_login again once; if it keeps failing, vault_report_problem.';
             }
             if (ans.status !== 'pending') {
+              await expire(approvalId);
               await closeCredentialSession(state, c.id);
               return 'The CEO did not provide a code. Continue without this login or ask_ceo.';
             }
             if (Date.now() >= until) {
+              await expire(approvalId);
               await closeCredentialSession(state, c.id);
               return `No code within ${Math.round(env.twofaTimeoutMs / 60_000)} minutes; the login was closed. Continue without it or try later.`;
             }

@@ -120,6 +120,7 @@ test('vault_api adds the token itself (scope header), redacts every echo, logs s
 test('vault_api: default Bearer, Basic for app passwords, redacted errors and 401 hints', async () => {
   const s = setup({ fetchImpl: (url) => { if (url.includes('boom')) throw new Error(`socket closed while sending ${TOKEN}`); return new Response('denied', { status: 401 }); } });
   s.store.creds.get(s.api)!.scope_notes = null;
+  s.store.creds.get(s.api)!.write_allowlist = ['POST /admin/api/x'];
   const out = await run(s.tools, 'vault_api', { credential_id: s.api, request: { method: 'POST', url: 'https://madammuse.myshopify.com/admin/api/x', body: '{"a":1}' } });
   const h = new Headers(s.fetchCalls[0]!.init.headers);
   assert.equal(h.get('authorization'), `Bearer ${TOKEN}`);
@@ -149,6 +150,55 @@ test('vault_api enforces the allowlist, https and approval for deletes', async (
   // no allowlist = no API use at all
   s.store.creds.get(s.api)!.url_allowlist = [];
   assert.match(await call('GET', 'https://madammuse.myshopify.com/admin/api/x'), /empty/);
+});
+
+test('vault_api is read-only by default; writes only when METHOD + path are on the write allowlist', async () => {
+  const s = setup();
+  const call = (method: string, url: string, body?: string, headers?: Record<string, string>) =>
+    run(s.tools, 'vault_api', { credential_id: s.api, request: { method, url, body, headers } });
+  const assets = 'https://madammuse.myshopify.com/admin/api/2025-07/themes/123/assets.json';
+  // no write allowlist: every write is refused before any request is made
+  for (const m of ['POST', 'PUT', 'PATCH']) assert.match(await call(m, assets, '{"asset":{}}'), /read-only for .* Allowed writes: none/);
+  assert.equal(s.fetchCalls.length, 0);
+  assert.deepEqual(s.store.log.filter((l) => l.action === 'denied').map((l) => l.detail?.reason), ['write_not_allowlisted', 'write_not_allowlisted', 'write_not_allowlisted']);
+  // GET still works
+  assert.match(await call('GET', assets), /^HTTP 200/);
+  // the CEO allows exactly one write
+  s.store.creds.get(s.api)!.write_allowlist = ['PUT /admin/api/2025-07/themes/123/assets.json'];
+  assert.match(await call('PUT', assets, '{"asset":{"key":"sections/hero.liquid","value":"x"}}'), /^HTTP 200/);
+  assert.equal(s.fetchCalls.at(-1)!.init.method, 'PUT');
+  assert.match(await call('POST', assets, '{}'), /read-only/, 'method must match');
+  assert.match(await call('PUT', 'https://madammuse.myshopify.com/admin/api/2025-07/themes/999/assets.json', '{}'), /read-only/, 'path must match');
+  assert.match(await call('PUT', 'https://madammuse.myshopify.com/admin/api/2025-07/themes/123/assets.json.bak', '{}'), /read-only/, 'whole segments only');
+  // method overrides cannot sneak a write through a GET
+  assert.match(await call('GET', `${assets}?_method=PUT`), /method overrides/);
+  const n = s.fetchCalls.length;
+  await call('GET', assets, undefined, { 'X-HTTP-Method-Override': 'DELETE' });
+  assert.equal(new Headers(s.fetchCalls[n]!.init.headers).get('x-http-method-override'), null);
+});
+
+test('vault_api never publishes, even when the write allowlist covers the endpoint', async () => {
+  const s = setup();
+  const c = s.store.creds.get(s.api)!;
+  c.url_allowlist = ['https://madammuse.myshopify.com/admin/api', 'https://api.webflow.com/v2', 'https://blog.example.com/wp-json'];
+  c.write_allowlist = ['PUT /admin/api', 'POST /admin/api', 'POST /v2', 'PATCH /v2', 'POST /wp-json', 'PUT /wp-json'];
+  const call = (method: string, url: string, body?: string) => run(s.tools, 'vault_api', { credential_id: s.api, request: { method, url, body } });
+  assert.match(await call('PUT', 'https://madammuse.myshopify.com/admin/api/2025-07/themes/123.json', '{"theme":{"role":"main"}}'), /Shopify theme role change.*request_external_action/s);
+  assert.match(await call('POST', 'https://madammuse.myshopify.com/admin/api/2025-07/themes.json', '{"theme":{"name":"x","role":"main"}}'), /Shopify theme/);
+  assert.match(await call('POST', 'https://madammuse.myshopify.com/admin/api/2025-07/graphql.json', '{"query":"mutation { themePublish(id: 1) { theme { id } } }"}'), /Shopify publish/);
+  assert.match(await call('POST', 'https://api.webflow.com/v2/sites/abc/publish', '{"publishToWebflowSubdomain":true}'), /Webflow publish/);
+  assert.match(await call('POST', 'https://api.webflow.com/v2/collections/c1/items/publish', '{"itemIds":["i"]}'), /Webflow publish/);
+  assert.match(await call('PATCH', 'https://api.webflow.com/v2/collections/c1/items/i1/live', '{}'), /Webflow publish/);
+  assert.match(await call('POST', 'https://blog.example.com/wp-json/wp/v2/posts/7', '{"title":"x","status":"publish"}'), /WordPress publish/);
+  assert.match(await call('POST', 'https://blog.example.com/wp-json/wp/v2/posts?status=publish', '{"title":"x"}'), /WordPress publish/);
+  assert.match(await call('POST', 'https://blog.example.com/wp-json/wp/v2/posts', '{"title":"x","st\\u0061tus":"future"}'), /WordPress publish/);
+  assert.equal(s.fetchCalls.length, 0);
+  assert.ok(s.store.log.filter((l) => l.action === 'denied').every((l) => l.detail?.reason === 'publish_needs_approval'));
+  // drafts and unpublished theme edits are fine
+  assert.match(await call('POST', 'https://blog.example.com/wp-json/wp/v2/posts', '{"title":"x","status":"draft"}'), /^HTTP 200/);
+  assert.match(await call('PUT', 'https://madammuse.myshopify.com/admin/api/2025-07/themes/123/assets.json', '{"asset":{"key":"a","value":"b"}}'), /^HTTP 200/);
+  // vault_list tells the agent what it may write
+  assert.match(await run(s.tools, 'vault_list', {}), /API writes: PUT \/admin\/api, POST \/admin\/api/);
 });
 
 test('vault_login fills the form in an isolated context, blurs passwords, guards navigation, keeps the session for the task', async () => {
@@ -222,12 +272,28 @@ test('2FA: the worker asks the CEO, types the code itself and never shows it to 
   await sweepSessions();
 });
 
-test('2FA timeout closes the waiting login', async () => {
+test('2FA timeout closes the waiting login and the question (a late code is never stored)', async () => {
   const s = setup({ site: { password: PASSWORD, otp: '111111' } });
   await run(s.tools, 'vault_login', { credential_id: s.login });
   s.env.twofaTimeoutMs = 0;
   assert.match(await run(s.tools, 'vault_request_2fa', { credential_id: s.login }), /No code within/);
   assert.equal(s.launcher.browsers[0]!.closed, true);
+  const ap = s.store.approvals.at(-1)!;
+  assert.equal(ap.status, 'rejected');
+  assert.equal(ap.ceo_note, '[2FA request expired]');
+});
+
+test('2FA approved without a code does not crash: the login is closed and the agent is told', async () => {
+  const s = setup({ site: { password: PASSWORD, otp: '482913', twoStep: true } });
+  await run(s.tools, 'vault_login', { credential_id: s.login });
+  s.env.sleep = async () => { const ap = s.store.approvals.find((a) => a.status === 'pending'); if (ap) s.store.answer(ap.id, 'approved', null); };
+  assert.match(await run(s.tools, 'vault_request_2fa', { credential_id: s.login }), /did not provide a code/);
+  assert.equal(getVaultBrowserSession(s.ctx.state, s.login), null);
+  // a rejected question scrubs whatever was typed
+  await run(s.tools, 'vault_login', { credential_id: s.login });
+  s.env.sleep = async () => { const ap = s.store.approvals.find((a) => a.status === 'pending'); if (ap) s.store.answer(ap.id, 'rejected', '999000'); };
+  assert.match(await run(s.tools, 'vault_request_2fa', { credential_id: s.login }), /did not provide a code/);
+  assert.ok(!JSON.stringify(s.store.approvals).includes('999000'));
 });
 
 test('missing Playwright gives a clear message; report_problem flags the credential', async () => {

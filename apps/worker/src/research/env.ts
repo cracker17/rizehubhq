@@ -1,6 +1,6 @@
 // Injected dependencies for research/QA tools. Production wiring here; tests pass fakes via deps.research.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { config } from '../config';
+import { config, workerEnv } from '../config';
 import { createServiceClient } from '../db';
 import { getVaultBrowserSession } from '../vault/browser';
 import { launchResearchChromium, type LaunchResearchBrowser, type VaultLikeSession } from './browser';
@@ -37,7 +37,7 @@ export function defaultResearchEnv(): ResearchEnv {
     apiFetch: (...a) => fetch(...a),
     launchBrowser: launchResearchChromium,
     evidence: evidenceStore({ workspacesDir: config.workspacesDir, supabase: storageClient }),
-    env: process.env,
+    env: workerEnv(),
     exec: execFileText,
     workspacesDir: config.workspacesDir,
     vaultSession: (run) => getVaultBrowserSession(run) as unknown as VaultLikeSession | null,

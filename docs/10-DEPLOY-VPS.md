@@ -6,15 +6,17 @@ Everything in this document is scripted in `deploy/`:
 
 | File | What it is |
 |---|---|
-| `deploy/setup-vps.sh` | First-time setup (idempotent): app user, Docker, `rizehub-internal` network, clone, `.env` prompts + generated secrets, validation, `compose up`, checklist. Optional `--with-nginx --email` does the proxy + TLS |
-| `deploy/update.sh` | Pull `main` → validate `.env` → build → `up -d` → health check → prune. **Rolls back** to the previous images and commit if health fails |
+| `deploy/setup-vps.sh` | First-time setup (idempotent): app user, Docker, `rizehub-internal` network, clone, `.env` prompts + generated secrets, validation, per-service env split, ownership fix, `compose up`, checklist. Optional `--with-nginx --email` does the proxy + TLS |
+| `deploy/update.sh` | Pull `main` → validate `.env` → split it into `.env.dashboard` / `.env.bot` / `.env.worker` → check those → fix ownership → build → `up -d` → health check → prune. **Rolls back** to the previous images and commit if health fails |
+| `deploy/fix-perms.sh` | Ownership for the worker's privilege split: `brain/` → the app user, workspaces volume → root at the top, task folders → agent uid 1001 |
 | `deploy/backup.sh` | Nightly `pg_dump` of the Supabase `public` schema, with rotation (cron) |
 | `deploy/supabase-setup.md` | Production Supabase: project, `db push`, seed, CEO user, private `evidence` bucket, auth settings, MFA |
 | `deploy/nginx/hq.rizehub.ph.conf` | nginx site → `127.0.0.1:3100` (certbot adds TLS) |
 | `deploy/nginx/rizehub-block-agent-api.conf` | Snippet for **RizeHub's** public vhost: `/agent-api/*` → 404 |
 | `deploy/Caddyfile` | Alternative proxy if nothing owns 80/443 |
 | `.github/workflows/deploy.yml` | Optional auto-deploy after CI on `main` (off until `DEPLOY_ENABLED=true`) |
-| `scripts/check-env.mjs` | `pnpm check:env [-- --production]`: per-service `.env` validation |
+| `scripts/check-env.mjs` | `pnpm check:env [-- --production]`: per-service `.env` validation; `-- --split` checks the three per-service files and **fails** if a server secret (service-role key, vault key) is in `.env.dashboard` |
+| `scripts/split-env.mjs` | Master `.env` → `.env.dashboard`, `.env.bot`, `.env.worker` (mode 600), each with only that container's variables |
 
 ## Architecture on the VPS
 
@@ -76,21 +78,34 @@ It is safe to re-run at any time. It:
 2. creates the `rizehub-internal` network
 3. clones to `/home/rizehq/rizehub-hq` (or fast-forwards it)
 4. creates `.env` (mode 600), **generates** `HQ_INTERNAL_SECRET`, `RIZEHUB_WEBHOOK_SECRET`, `VAULT_MASTER_KEY` (only if empty; copy the vault key to your password manager), sets `DASHBOARD_URL=https://hq.rizehub.ph`, and prompts for the Supabase keys, Telegram token and id, and free AI keys
-5. runs `check-env.mjs --production` inside a `node:22-alpine` container (no Node needed on the host)
-6. runs `docker compose up -d --build`, waits for health, and prints the go-live checklist
+5. runs `check-env.mjs --production` inside a `node:22-alpine` container (no Node needed on the host), then **splits** `.env` into `.env.dashboard`, `.env.bot` and `.env.worker` (`scripts/split-env.mjs`) and checks them with `--split --production`
+6. runs `deploy/fix-perms.sh`, then `docker compose up -d --build`, waits for health, and prints the go-live checklist
 
-Edit `.env` later with `sudo -iu rizehq nano ~/rizehub-hq/.env`, then `cd ~/rizehub-hq && docker compose up -d` (and optionally `docker run --rm -v $PWD:/app -w /app node:22-alpine node scripts/check-env.mjs --production`).
+Edit `.env` later with `sudo -iu rizehq nano ~/rizehub-hq/.env`, then `cd ~/rizehub-hq && ./deploy/update.sh --force` (validates, re-splits and restarts). Never edit the three per-service files by hand: they are regenerated from `.env`.
+
+### Which container gets which variables
+The master `.env` stays on the host (mode 600; `deploy/backup.sh` reads `SUPABASE_DB_URL` from it). Containers get only their own file:
+
+| File | Variables | Never contains |
+|---|---|---|
+| `.env.dashboard` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `HQ_WORKER_URL`, `HQ_INTERNAL_SECRET`, `DASHBOARD_URL`, `AGENTS_DIR` | service-role key, vault key, AI/platform keys, Telegram token (the dashboard has no code path that needs the service-role key: its server actions forward vault writes to the worker) |
+| `.env.bot` | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_*`, `DASHBOARD_URL`, `MONTHLY_BUDGET_USD`, `BOT_POLL_MS`, `TZ` | vault key, AI/platform keys, `HQ_INTERNAL_SECRET` |
+| `.env.worker` | everything else the worker reads + unknown names (per-client tokens like `SHOPIFY_TOKEN_<SLUG>`) | Telegram token, `SUPABASE_DB_URL`, anon key |
+
+`pnpm check:env -- --split --production` (run by both scripts) fails the deploy if a file holds another service's secret.
 
 ### What `docker-compose.yml` runs
 | Service | Image | Ports | Notes |
 |---|---|---|---|
 | `dashboard` | `rizehubhq-dashboard` (Next.js standalone, `node:22-alpine`, user `node`) | `127.0.0.1:3100→3000` | healthcheck `/api/health`; `./agents` mounted read-only for the Agents page; `HQ_WORKER_URL=http://hq-worker:4000` |
-| `worker` | `rizehubhq-worker` (`mcr.microsoft.com/playwright:v1.56.1-noble`, user `pwuser`) | none (4000 internal) | `container_name: hq-worker`; networks `default` + `rizehub-internal`; mounts `agents` (ro), `brain`, `config` (ro), named volume `workspaces`; `shm_size: 1gb`; healthcheck `/health` with `x-hq-secret` |
+| `worker` | `rizehubhq-worker` (`mcr.microsoft.com/playwright:v1.56.1-noble`, root **inside the container**, agent commands as uid 1001) | none (4000 internal) | `container_name: hq-worker`; networks `default` + `rizehub-internal`; mounts `agents` (ro), `brain`, `config` (ro), named volume `workspaces`; `shm_size: 1gb`; `cap_drop: ALL` + `CHOWN DAC_OVERRIDE FOWNER SETUID SETGID KILL`, `no-new-privileges`; healthcheck `/health` with `x-hq-secret` |
 | `bot` | `rizehubhq-bot` (`node:22-alpine`, user `node`) | none | Telegram long polling |
 
 All three have `restart: unless-stopped`, memory limits, `init: true`, and json-file log rotation (10 MB × 5). The worker's Playwright image tag **must match** `playwright-core` in `apps/worker/package.json`. Bump both together (`ARG PLAYWRIGHT_VERSION`).
 
-`brain/` is mounted read-write, but the worker runs as uid 1001 (`pwuser`). If agents need to write into `brain/`, run `sudo chown -R 1001 /home/rizehq/rizehub-hq/brain`.
+**Why the worker is root in its container.** Every agent shell command (`bash_sandboxed`, and git/npm the dev tools start for agents) runs as the unprivileged `AGENT_UID` 1001, while the worker, which holds every secret in its environment, runs as uid 0. The kernel only lets a process read `/proc/<pid>/environ` of another process with the same uid (or with `CAP_SYS_PTRACE`, which Docker never grants), so agent code cannot read the worker's keys. Only root can start children under another uid; everything else root could do is dropped (`cap_drop: ALL`, only the six capabilities above, `no-new-privileges`). In production the shell refuses to run at all if this privilege drop is not effective and `DEV_SANDBOX_PREFIX` is empty (the worker logs a `SECURITY` warning at startup). Details: docs/09 "Agent uid".
+
+**Ownership.** `brain/` is mounted read-write and stays owned by `rizehq`: files the worker writes there (brain_write) take `brain/`'s owner, so `git pull`/`git reset` keep working. Task workspaces live in the `workspaces` volume: the top folder is `root:root 0755`, each task folder is owned by uid 1001. `deploy/fix-perms.sh` (run by `setup-vps.sh` and every `update.sh`) repairs both, e.g. after upgrading from an image that ran as `pwuser`.
 
 ## 5. Reverse proxy for `hq.rizehub.ph`
 Pick the one that matches whatever owns port 80/443 (step 0).
@@ -136,7 +151,7 @@ Manual:
 ```bash
 sudo -iu rizehq && cd rizehub-hq && ./deploy/update.sh
 ```
-`update.sh` holds a lock, refuses local changes, fast-forwards `main`, warns about new migrations (run `supabase db push` first) and changed `.env.example`, validates `.env`, builds, tags the running images `:previous`, and runs `up -d`. It then waits until dashboard + worker are **healthy** and the bot is stable. If they are not, it re-tags `:previous` → `:latest`, resets the checkout to the previous commit (so mounted `agents/`, `brain/`, `config/` match), and restarts. On success it tags images with the commit and keeps the last 3, then prunes.
+`update.sh` holds a lock, refuses local changes, fast-forwards `main`, warns about new migrations (run `supabase db push` first) and changed `.env.example`, validates `.env`, re-splits it into the per-service files and checks them, runs `fix-perms.sh`, builds, tags the running images `:previous`, and runs `up -d`. It then waits until dashboard + worker are **healthy** and the bot is stable. If they are not, it re-tags `:previous` → `:latest`, resets the checkout to the previous commit (so mounted `agents/`, `brain/`, `config/` match), and restarts. On success it tags images with the commit and keeps the last 3, then prunes.
 
 Automatic (optional): `.github/workflows/deploy.yml` runs `update.sh` over SSH after CI passes on `main`.
 1. On the VPS: `sudo -iu rizehq ssh-keygen -t ed25519 -f ~/.ssh/gha -N '' && cat ~/.ssh/gha.pub >> ~/.ssh/authorized_keys`

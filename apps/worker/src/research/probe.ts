@@ -2,6 +2,7 @@
 // Files must live inside the task workspace; no network, no provider needed.
 import path from 'node:path';
 import type { ExecFn } from './pagespeed';
+import { publicEnv } from '../config';
 
 export function resolveWorkspaceFile(workspace: string, file: string): string | null {
   const abs = path.resolve(workspace, file);
@@ -12,7 +13,7 @@ export function resolveWorkspaceFile(workspace: string, file: string): string | 
 interface FfStream { codec_type?: string; codec_name?: string; width?: number; height?: number; r_frame_rate?: string; sample_rate?: string; channels?: number; bit_rate?: string }
 
 export async function probeMedia(file: string, exec: ExecFn, ffprobe = process.env.FFPROBE_PATH || 'ffprobe'): Promise<string> {
-  const { stdout: out } = await exec(ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file], { timeout: 60_000, env: process.env, maxBuffer: 8 * 1024 * 1024 });
+  const { stdout: out } = await exec(ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file], { timeout: 60_000, env: publicEnv(), maxBuffer: 8 * 1024 * 1024 });
   const j = JSON.parse(out) as { format?: { duration?: string; format_name?: string; size?: string; bit_rate?: string }; streams?: FfStream[] };
   const lines = [`${path.basename(file)} · ${j.format?.format_name ?? '?'} · ${Number(j.format?.duration ?? 0).toFixed(2)} s · ${Math.round(Number(j.format?.size ?? 0) / 1024)} KiB`];
   for (const s of j.streams ?? []) {
@@ -30,7 +31,7 @@ export async function probeMedia(file: string, exec: ExecFn, ffprobe = process.e
 export async function measureLoudness(file: string, exec: ExecFn, ffmpeg = process.env.FFMPEG_PATH || 'ffmpeg'): Promise<string> {
   let out = '';
   try {
-    const r = await exec(ffmpeg, ['-hide_banner', '-nostats', '-i', file, '-af', 'ebur128=peak=true', '-f', 'null', '-'], { timeout: 180_000, env: process.env, maxBuffer: 32 * 1024 * 1024 });
+    const r = await exec(ffmpeg, ['-hide_banner', '-nostats', '-i', file, '-af', 'ebur128=peak=true', '-f', 'null', '-'], { timeout: 180_000, env: publicEnv(), maxBuffer: 32 * 1024 * 1024 });
     out = `${r.stdout}\n${r.stderr}`;
   } catch (e) {
     out = String((e as { stderr?: string }).stderr ?? (e instanceof Error ? e.message : e));

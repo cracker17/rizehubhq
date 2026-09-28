@@ -51,7 +51,7 @@ test('pending change note: one per chat, consumed once, expires after 10 minutes
   p.set(1, 'ap-1', 100, 0);
   p.set(2, 'ap-2', 200, 0);
   assert.equal(p.peek(1, 60_000)?.approvalId, 'ap-1');
-  assert.deepEqual(p.take(1, 9 * 60_000), { approvalId: 'ap-1', messageId: 100, at: 0 });
+  assert.deepEqual(p.take(1, 9 * 60_000), { approvalId: 'ap-1', messageId: 100, at: 0, decision: 'changes' });
   assert.equal(p.take(1, 9 * 60_000), null);
   assert.equal(p.take(2, 10 * 60_000 + 1), null); // expired
   assert.equal(p.size, 0);

@@ -4,7 +4,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { open, seal, type Keyring } from './crypto';
-import { parseAllowEntry, safeUrl } from './guards';
+import { parseAllowEntry, parseWriteEntry, safeUrl } from './guards';
 import type { AccessLinkState, VaultStore } from './store';
 
 export const PLATFORM = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/, 'unknown platform');
@@ -24,6 +24,8 @@ export const StoreInput = z.object({
   twofaMethod: z.enum(TWOFA).default('none'),
   scopeNotes: optText(2000),
   urlAllowlist: z.array(z.string().trim().max(500).refine((v) => parseAllowEntry(v) !== null, 'invalid allowlist entry')).max(25).default([]),
+  /** "PUT /admin/api/2025-07/themes/123/assets.json" per entry; empty = vault_api is read-only (GET/HEAD). */
+  writeAllowlist: z.array(z.string().trim().max(520).refine((v) => parseWriteEntry(v) !== null, 'invalid write entry (use "PUT /path")')).max(25).default([]),
   expiresAt: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nullish().transform((v) => v ?? null),
   grants: z.array(z.string().regex(/^[a-z0-9-]{1,64}$/)).max(40).default([]),
 });
@@ -84,7 +86,7 @@ export function createVaultService(store: VaultStore, keyring: Keyring | null): 
       await store.insertCredential({
         id, clientId: i.clientId, platform: i.platform, label: i.label, loginUrl: i.loginUrl, username: i.username,
         secretType: i.secretType, sealed, twofaMethod: i.twofaMethod, scopeNotes: i.scopeNotes, urlAllowlist: i.urlAllowlist,
-        expiresAt: i.expiresAt, grants: i.grants,
+        writeAllowlist: i.writeAllowlist, expiresAt: i.expiresAt, grants: i.grants,
       });
       return { id };
     },

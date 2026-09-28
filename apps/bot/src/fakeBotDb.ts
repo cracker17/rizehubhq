@@ -29,8 +29,13 @@ export class FakeBotDb implements BotDb {
   async decide(id: string, decision: Decision, note: string | null) {
     const a = this.approvals.find((x) => x.id === id);
     if (!a) throw new Error('approval not found');
-    if (decision === 'changes' && !note?.trim()) throw new Error('say what should change');
     if (a.status !== 'pending') return `already_${a.status}`;
+    // Mirrors decide_approval for Vault 2FA (20260928070000_review_fixes.sql): an answer is an approve with the code.
+    if ((a.payload as { vault?: { kind?: string } } | null)?.vault?.kind === '2fa' && decision !== 'reject') {
+      if (!note?.trim()) throw new Error('2FA: reply with the one-time code');
+      decision = 'approve';
+    }
+    if (decision === 'changes' && !note?.trim()) throw new Error('say what should change');
     this.decisions.push({ id, decision, note });
     a.status = decision === 'approve' ? 'approved' : decision === 'reject' ? 'rejected' : 'changes_requested';
     a.ceo_note = note; a.decided_at = this.now().toISOString(); a.decided_via = 'telegram';

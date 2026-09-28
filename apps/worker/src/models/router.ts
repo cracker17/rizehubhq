@@ -3,7 +3,7 @@ import YAML from 'yaml';
 import { z } from 'zod';
 import type { LanguageModel } from 'ai';
 import type { ModelRole } from '@rizehubhq/shared';
-import { config } from '../config';
+import { config, workerEnv } from '../config';
 
 export const PROVIDERS = ['google', 'groq', 'openrouter', 'anthropic', 'openai'] as const;
 export type Provider = (typeof PROVIDERS)[number];
@@ -78,13 +78,17 @@ export class QuotaExhaustedError extends Error {
   }
 }
 
-/** Creates the AI SDK model object. Providers are imported lazily so unused ones cost nothing. */
-export async function createModel(c: Candidate): Promise<LanguageModel> {
+/**
+ * Creates the AI SDK model object. Providers are imported lazily so unused ones cost nothing. API keys are passed
+ * explicitly from workerEnv(): process.env no longer carries them after scrubProcessEnv() (config.ts).
+ */
+export async function createModel(c: Candidate, env: Readonly<Record<string, string | undefined>> = workerEnv()): Promise<LanguageModel> {
+  const apiKey = env[KEY_ENV[c.provider]];
   switch (c.provider) {
-    case 'google': { const { createGoogleGenerativeAI } = await import('@ai-sdk/google'); return createGoogleGenerativeAI()(c.modelId); }
-    case 'groq': { const { createGroq } = await import('@ai-sdk/groq'); return createGroq()(c.modelId); }
-    case 'openrouter': { const { createOpenRouter } = await import('@openrouter/ai-sdk-provider'); return createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY })(c.modelId); }
-    case 'anthropic': { const { createAnthropic } = await import('@ai-sdk/anthropic'); return createAnthropic()(c.modelId); }
-    case 'openai': { const { createOpenAI } = await import('@ai-sdk/openai'); return createOpenAI()(c.modelId); }
+    case 'google': { const { createGoogleGenerativeAI } = await import('@ai-sdk/google'); return createGoogleGenerativeAI({ apiKey })(c.modelId); }
+    case 'groq': { const { createGroq } = await import('@ai-sdk/groq'); return createGroq({ apiKey })(c.modelId); }
+    case 'openrouter': { const { createOpenRouter } = await import('@openrouter/ai-sdk-provider'); return createOpenRouter({ apiKey })(c.modelId); }
+    case 'anthropic': { const { createAnthropic } = await import('@ai-sdk/anthropic'); return createAnthropic({ apiKey })(c.modelId); }
+    case 'openai': { const { createOpenAI } = await import('@ai-sdk/openai'); return createOpenAI({ apiKey })(c.modelId); }
   }
 }

@@ -47,6 +47,8 @@ export interface CredentialView {
   twofa_method: TwofaMethod;
   scope_notes: string | null;
   url_allowlist: string[];
+  /** "METHOD /path-prefix" writes vault_api may make; empty = read-only (GET/HEAD). */
+  write_allowlist: string[];
   status: CredentialStatus;
   expires_at: string | null;
   last_used_at: string | null;
@@ -128,7 +130,7 @@ export interface Loaded<T> { data: T; error?: string }
 // ---------- shared ----------
 export const PLATFORMS = ['shopify', 'webflow', 'wordpress', 'github', 'figma', 'hosting', 'ftp', 'gmail', 'ga4', 'halaxy', 'other'] as const;
 
-export const CRED_COLS = 'id,client_id,platform,label,login_url,username,secret_type,twofa_method,scope_notes,url_allowlist,status,'
+export const CRED_COLS = 'id,client_id,platform,label,login_url,username,secret_type,twofa_method,scope_notes,url_allowlist,write_allowlist,status,'
   + 'expires_at,last_used_at,last_used_by,failed_login_count,created_by,created_at,revoked_at';
 const LINK_COLS = 'id,client_id,platforms,expires_at,used_at,created_at,note,credential_id,cancelled_at';
 const CLIENT_COLS = 'id,name,slug,platforms,website,service_package,status,notes,rizehub_workspace_id,created_at';
@@ -162,7 +164,7 @@ async function withGrants(db: SupabaseClient, creds: Omit<CredentialView, 'grant
   if (!creds.length) return [];
   const g = must<{ credential_id: string; agent_id: string }[]>(
     await db.from('credential_grants').select('credential_id,agent_id').in('credential_id', creds.map((c) => c.id)), 'credential_grants');
-  return creds.map((c) => ({ ...c, url_allowlist: c.url_allowlist ?? [], grants: g.filter((x) => x.credential_id === c.id).map((x) => x.agent_id).sort() }));
+  return creds.map((c) => ({ ...c, url_allowlist: c.url_allowlist ?? [], write_allowlist: c.write_allowlist ?? [], grants: g.filter((x) => x.credential_id === c.id).map((x) => x.agent_id).sort() }));
 }
 
 // ---------- clients ----------

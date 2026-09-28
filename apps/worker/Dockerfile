@@ -8,7 +8,7 @@ FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble
 ARG INSTALL_LIGHTHOUSE=false
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1 TZ=Asia/Manila COREPACK_HOME=/usr/local/share/corepack
 # git: github tool (branches/PRs) · ffmpeg/ffprobe: media QA probes · pnpm via corepack in a shared dir so the
-# non-root runtime user can use it inside sandboxed workspaces. Lighthouse CLI is optional (QA falls back to the PageSpeed API).
+# unprivileged agent uid can use it inside sandboxed workspaces. Lighthouse CLI is optional (QA falls back to the PageSpeed API).
 RUN export DEBIAN_FRONTEND=noninteractive && apt-get update \
  && apt-get install -y --no-install-recommends git ffmpeg ca-certificates tzdata \
  && rm -rf /var/lib/apt/lists/* \
@@ -33,13 +33,29 @@ COPY apps/worker apps/worker
 COPY agents agents
 COPY brain brain
 COPY config config
-# workspaces volume + a pnpm home the sandboxed dev tools can write to at runtime
-RUN mkdir -p /app/workspaces /pnpm && chown -R pwuser:pwuser /app/workspaces /pnpm
+# Agent uid (docs/09 "Agent uid"): every agent command (bash_sandboxed, git/npm for agents) runs as AGENT_UID, never
+# as the worker. The Playwright image already has pwuser = 1001 (reused); otherwise an "hqagent" user is created. No password,
+# no sudo, no capabilities; HOME is the task workspace for every agent command.
+ARG AGENT_UID=1001
+ARG AGENT_GID=1001
+RUN (getent group "${AGENT_GID}" >/dev/null || groupadd -g "${AGENT_GID}" hqagent) \
+ && (getent passwd "${AGENT_UID}" >/dev/null || useradd -l -u "${AGENT_UID}" -g "${AGENT_GID}" -M -d /nonexistent -s /usr/sbin/nologin hqagent) \
+ && mkdir -p /app/workspaces /pnpm \
+ && chown root:root /app/workspaces && chmod 0755 /app/workspaces \
+ && chown -R "${AGENT_UID}:${AGENT_GID}" /pnpm
+# Each task jail (/app/workspaces/<task-id>) is created by the worker and chowned to AGENT_UID; the workspaces root
+# stays root-owned so one task's commands cannot rename or replace another task's folder.
 
 ENV NODE_ENV=production \
     AGENTS_DIR=/app/agents BRAIN_DIR=/app/brain WORKSPACES_DIR=/app/workspaces MODELS_FILE=/app/config/models.yaml \
-    WORKER_HTTP_PORT=4000
-USER pwuser
+    WORKER_HTTP_PORT=4000 AGENT_UID=${AGENT_UID} AGENT_GID=${AGENT_GID}
+# Runs as ROOT inside the container on purpose: only root can start child processes under another uid (setuid), and
+# a different uid is what keeps agent code away from the worker's secrets (/proc/<worker pid>/environ is readable
+# only by the same uid or with CAP_SYS_PTRACE). docker-compose.yml drops every capability except CHOWN, DAC_OVERRIDE,
+# FOWNER, SETUID, SETGID and KILL and sets no-new-privileges. Container root is still uid 0 on bind mounts, so files
+# the worker writes into ./brain take brain/'s owner (tools/brainWrite.ts) and deploy/fix-perms.sh repairs ownership.
+# hadolint ignore=DL3002
+USER 0
 WORKDIR /app/apps/worker
 # Internal only (dashboard + RizeHub webhooks on the Docker networks). Never publish this port.
 EXPOSE 4000

@@ -3,11 +3,14 @@
 // preview/staging host. A vault session for the run is reused so logged-in previews can be checked.
 import fs from 'node:fs';
 import path from 'node:path';
+import { publicEnv } from '../config';
 import { assertPublicUrl, bareHost, type NetEnv } from './net';
 
 export interface RResponse { status(): number }
 export interface RRequest { url(): string; method(): string; failure?(): { errorText: string } | null }
 export interface RRoute { request(): RRequest; abort(code?: string): Promise<void>; continue(): Promise<void>; fallback?(): Promise<void> }
+/** Subset of Playwright's WebSocketRoute (playwright-core ≥ 1.48). */
+export interface RWebSocketRoute { url(): string; connectToServer(): unknown; close(o?: { code?: number; reason?: string }): Promise<void> }
 export interface RLocator {
   first(): RLocator;
   click(o?: { timeout?: number }): Promise<void>;
@@ -29,6 +32,8 @@ export interface RPage {
   waitForLoadState(s?: 'load' | 'domcontentloaded' | 'networkidle', o?: { timeout?: number }): Promise<void>;
   waitForTimeout(ms: number): Promise<void>;
   route(url: string, h: (r: RRoute) => unknown): Promise<void>;
+  /** page.route() never sees WebSocket connections; they are guarded here. */
+  routeWebSocket(url: string | RegExp, h: (ws: RWebSocketRoute) => unknown): Promise<void>;
   on(event: string, h: (arg: never) => void): unknown;
   close(): Promise<void>;
 }
@@ -63,7 +68,8 @@ export const launchResearchChromium: LaunchResearchBrowser = async () => {
   }
   if (!mod?.chromium) throw new ResearchBrowserUnavailable('playwright-core is not installed on the worker.');
   try {
-    return await mod.chromium.launch({ headless: true, executablePath: resolveChromiumPath() });
+    // env: no secrets for the browser process (Playwright defaults to the whole process.env).
+    return await mod.chromium.launch({ headless: true, executablePath: resolveChromiumPath(), env: publicEnv() });
   } catch (e) {
     throw new ResearchBrowserUnavailable(`Chromium could not start (set PLAYWRIGHT_CHROMIUM_PATH): ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
   }
@@ -146,6 +152,17 @@ export async function openGuardedPage(o: OpenPageOptions): Promise<PageSession> 
       return route.abort('blockedbyclient');
     }
     return pass();
+  });
+  // WebSockets bypass page.route(): without this a page could open ws://10.0.0.5/ or wss://169.254.169.254/.
+  // Every socket gets the same SSRF check (ws→http, wss→https) before it is connected to its server; blocked
+  // ones are closed with 1008 (policy violation) and listed under `blocked`. Must be registered before goto().
+  await page.routeWebSocket(/.*/, async (ws) => {
+    const url = ws.url();
+    let httpUrl = '';
+    try { const u = new URL(url); u.protocol = u.protocol === 'wss:' ? 'https:' : u.protocol === 'ws:' ? 'http:' : u.protocol; httpUrl = u.toString(); } catch { /* invalid */ }
+    if (httpUrl && /^https?:/.test(httpUrl) && (await allowed(httpUrl))) { ws.connectToServer(); return; }
+    push(blocked, `${url} (WebSocket to a private/blocked address)`);
+    await ws.close({ code: 1008, reason: 'blocked by QA browser guard' }).catch(() => undefined);
   });
   page.on('console', ((m: { type(): string; text(): string }) => {
     // Chromium logs our own guard aborts as "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT"; those are listed under blocked.

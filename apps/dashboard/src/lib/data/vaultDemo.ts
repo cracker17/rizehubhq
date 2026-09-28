@@ -41,7 +41,7 @@ function seed(now = Date.now()): DemoState {
 
   const cred = (id: string, client_id: string, o: Partial<CredentialView>): CredentialView => ({
     id, client_id, platform: 'shopify', label: '', login_url: null, username: null, secret_type: 'password', twofa_method: 'none',
-    scope_notes: null, url_allowlist: [], status: 'active', expires_at: null, last_used_at: null, last_used_by: null,
+    scope_notes: null, url_allowlist: [], write_allowlist: [], status: 'active', expires_at: null, last_used_at: null, last_used_by: null,
     failed_login_count: 0, created_by: 'ceo', created_at: iso(-20 * DAY), grants: [], ...o,
   });
   const creds: CredentialView[] = [
@@ -55,6 +55,7 @@ function seed(now = Date.now()): DemoState {
       label: 'Madam Muse · Admin API (custom app)', secret_type: 'api_token', username: null,
       scope_notes: 'read_products, read_themes, write_themes. header: X-Shopify-Access-Token',
       url_allowlist: ['https://madammuse.myshopify.com/admin/api'], last_used_at: iso(-35 * 60_000), last_used_by: 'shopify-dev',
+      write_allowlist: ['PUT /admin/api/2025-07/themes/148213/assets.json'],
       grants: ['shopify-dev'],
     }),
     cred('cr-mm-gh', 'c-mm', {
@@ -67,6 +68,7 @@ function seed(now = Date.now()): DemoState {
       platform: 'wordpress', label: 'Vinyl Icons · WordPress (app password)', secret_type: 'app_password',
       login_url: 'https://www.vinylicons.com/wp-login.php', username: 'rizehub-agent', status: 'check_needed', failed_login_count: 2,
       scope_notes: 'Editor role on staging first. Drafts only.', url_allowlist: ['https://www.vinylicons.com/wp-json/wp/v2'],
+      write_allowlist: ['POST /wp-json/wp/v2/posts'],
       last_used_at: iso(-3 * DAY), last_used_by: 'wordpress-dev', grants: ['seo-1', 'wordpress-dev'],
     }),
     cred('cr-vi-ga4', 'c-vi', {
@@ -77,6 +79,7 @@ function seed(now = Date.now()): DemoState {
     cred('cr-lv-wf', 'c-lv', {
       platform: 'webflow', label: 'LvlUp · Webflow site token', secret_type: 'api_token',
       scope_notes: 'CMS read/write as drafts; pages read. Publishing needs approval.', url_allowlist: ['https://api.webflow.com/v2/sites', 'https://api.webflow.com/v2/collections'],
+      write_allowlist: ['POST /v2/collections/64f1e0a9c3b2d10012ab34cd/items', 'PATCH /v2/collections/64f1e0a9c3b2d10012ab34cd/items'],
       expires_at: iso(80 * DAY), last_used_at: iso(-5 * HOUR), last_used_by: 'webflow-dev', grants: ['webflow-dev'],
     }),
     cred('cr-sb-shop', 'c-sb', {
@@ -275,7 +278,7 @@ export function demoVault() {
       const id = this.addCredential({
         client_id: l.client_id, platform: i.platform, label: i.label || `${i.platform[0]!.toUpperCase()}${i.platform.slice(1)} access (from client)`,
         login_url: i.loginUrl, username: i.username, secret_type: i.secretType, twofa_method: i.twofaMethod, scope_notes: i.notes,
-        url_allowlist: [], expires_at: null, created_by: 'client_link', grants: [],
+        url_allowlist: [], write_allowlist: [], expires_at: null, created_by: 'client_link', grants: [],
       });
       if (token !== DEMO_TOKEN) l.credential_id = id;
       return true;

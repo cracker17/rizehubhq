@@ -7,6 +7,7 @@ import type { DevEnv } from './env';
 import { apiError, httpRequest, truncate, type Redactor } from './http';
 import { isSecretName, relOf, resolveIn, type Jail } from './jail';
 import { externalAction, type Token } from './creds';
+import { readInJail, writeInJail } from './safefs';
 
 export const DEFAULT_API_VERSION = '2025-07';
 const STORE_RE = /^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$/;
@@ -162,7 +163,7 @@ export async function putAsset(c: ShopCtx, jail: Jail, id: string, keyIn: string
   let body: { type: 'TEXT' | 'BASE64'; value: string };
   if (fromFile !== undefined) {
     const abs = resolveIn(jail, fromFile);
-    const buf = fs.readFileSync(abs);
+    const buf = readInJail(jail, abs, MAX_PUSH_BYTES + 1);
     if (buf.length > MAX_PUSH_BYTES) refuse('file too large');
     body = BINARY_EXT.test(key) ? { type: 'BASE64', value: buf.toString('base64') } : { type: 'TEXT', value: buf.toString('utf8') };
   } else body = { type: 'TEXT', value: value! };
@@ -206,8 +207,7 @@ export async function pull(c: ShopCtx, jail: Jail, id: string, dir: string, only
       if (res?.ok) data = Buffer.from(await res.arrayBuffer());
     }
     if (!data) { skipped.push(f.filename); continue; }
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, data);
+    writeInJail(jail, abs, data, c.env.agentUser);
     n++;
   }
   return `Pulled ${n} file(s) from theme ${id} into ${relOf(jail, root)}/.${skipped.length ? ` Skipped ${skipped.length}: ${skipped.slice(0, 20).join(', ')}` : ''}`;
@@ -238,7 +238,7 @@ export async function push(c: ShopCtx, jail: Jail, id: string, dir: string, only
   let total = 0;
   const list = keys.map((k) => {
     const abs = resolveIn(jail, `${relOf(jail, root)}/${k}`);
-    const buf = fs.readFileSync(abs);
+    const buf = readInJail(jail, abs, MAX_PUSH_BYTES + 1);
     total += buf.length;
     if (total > MAX_PUSH_BYTES) refuse(`push is larger than ${MAX_PUSH_BYTES / 1024 / 1024} MB; push fewer files (\`files\`)`);
     return { filename: k, body: BINARY_EXT.test(k) ? { type: 'BASE64' as const, value: buf.toString('base64') } : { type: 'TEXT' as const, value: buf.toString('utf8') } };

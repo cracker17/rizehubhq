@@ -91,3 +91,101 @@ export function authHeaderFromScope(scope: string | null | undefined): string | 
   const m = /\bheader\s*[:=]\s*([A-Za-z0-9-]{1,64})/i.exec(scope ?? '');
   return m ? m[1]! : null;
 }
+
+// ---------- vault_api writes (docs/09: read-only unless the CEO allowed a specific write) ----------
+
+export const WRITE_METHODS = ['POST', 'PUT', 'PATCH'] as const;
+export type WriteMethod = (typeof WRITE_METHODS)[number];
+/** Headers / query params that let a request pretend to be another method; never forwarded. */
+export const METHOD_OVERRIDE_HEADERS = ['x-http-method-override', 'x-http-method', 'x-method-override'];
+const WRITE_ENTRY = /^(POST|PUT|PATCH) ((?:\/|https:\/\/)\S*)$/;
+
+export interface WriteEntry { method: WriteMethod; allow: AllowEntry | null; path: string }
+
+/** "PUT /admin/api/2025-07/themes/123/assets.json" or "PATCH https://host/path" → entry; anything else → null. */
+export function parseWriteEntry(raw: string): WriteEntry | null {
+  const m = WRITE_ENTRY.exec(raw.trim());
+  if (!m || m[2]!.length > 500) return null;
+  const method = m[1] as WriteMethod;
+  if (m[2]!.startsWith('/')) {
+    let path: string;
+    try { path = new URL(m[2]!, 'https://x.invalid').pathname; } catch { return null; }
+    return { method, allow: null, path };
+  }
+  const allow = parseAllowEntry(m[2]!);
+  return allow ? { method, allow, path: allow.path } : null;
+}
+
+function pathUnder(prefix: string, pathname: string): boolean {
+  if (prefix === '/' || prefix === '') return true;
+  const p = prefix.endsWith('/') ? prefix : `${prefix}/`;
+  return pathname === prefix || pathname.startsWith(p);
+}
+
+/** True when METHOD + URL matches an entry of the credential's write allowlist (whole path segments). */
+export function writeAllowed(method: string, url: URL, writeAllowlist: readonly string[]): boolean {
+  return writeAllowlist.some((raw) => {
+    const e = parseWriteEntry(raw);
+    if (!e || e.method !== method.toUpperCase()) return false;
+    return e.allow ? entryMatches(e.allow, url) : pathUnder(e.path, url.pathname);
+  });
+}
+
+function jsonValues(body: string | undefined): unknown {
+  if (!body) return null;
+  try { return JSON.parse(body); } catch { return null; }
+}
+
+/** Every value of `key` anywhere in a JSON document. */
+function valuesOf(doc: unknown, key: string, out: unknown[] = []): unknown[] {
+  if (Array.isArray(doc)) for (const v of doc) valuesOf(v, key, out);
+  else if (doc && typeof doc === 'object') {
+    for (const [k, v] of Object.entries(doc)) {
+      if (k.toLowerCase() === key) out.push(v);
+      valuesOf(v, key, out);
+    }
+  }
+  return out;
+}
+
+/**
+ * Known "go live" endpoints are never called with a client's token, whatever the write allowlist says: they change
+ * what the public sees and must go through request_external_action (the CEO approves, fixed worker code runs it).
+ * Returns a short reason, or null.
+ */
+export function publishBlocked(method: string, url: URL, body: string | undefined): string | null {
+  const m = method.toUpperCase();
+  if (m === 'GET' || m === 'HEAD') return null;
+  const path = url.pathname.toLowerCase();
+  const text = body ?? '';
+  const doc = jsonValues(body);
+  const form = new URLSearchParams(doc ? '' : text);
+
+  // Shopify: publishing a theme = setting role (main) on themes.json / themes/{id}.json; GraphQL themePublish.
+  if (/\/admin(\/api\/[^/]+)?\/themes(\/\d+)?\.json$/.test(path)
+      && (valuesOf(doc, 'role').length > 0 || /"role"\s*:/i.test(text) || form.has('theme[role]') || form.has('role'))) {
+    return 'Shopify theme role change (publishing a theme)';
+  }
+  if (/\/admin\/api\/[^/]+\/graphql\.json$/.test(path) && /\b(themePublish|publishablePublish|publishablePublishToCurrentChannel)\b/.test(text)) {
+    return 'Shopify publish mutation';
+  }
+  // Webflow: site publish, collection item publish / live endpoints.
+  if (/\/sites\/[^/]+\/publish\/?$/.test(path) || /\/collections\/[^/]+\/items\/(publish|live)\/?$/.test(path)
+      || /\/collections\/[^/]+\/items\/[^/]+\/live\/?$/.test(path)) {
+    return 'Webflow publish';
+  }
+  // WordPress REST: anything that sets status publish/future (body, form or query string).
+  if (/\/wp-json\//.test(path) || url.searchParams.has('rest_route')) {
+    const statuses = [...valuesOf(doc, 'status'), form.get('status'), url.searchParams.get('status')]
+      .filter((v): v is string => typeof v === 'string').map((v) => v.toLowerCase());
+    if (statuses.some((s) => s === 'publish' || s === 'future') || /"status"\s*:\s*"(publish|future)"/i.test(text)) {
+      return 'WordPress publish (status=publish)';
+    }
+  }
+  return null;
+}
+
+/** A GET that asks the server to treat it as another method (`?_method=POST`, WordPress / Rails style). */
+export function hasMethodOverride(url: URL): boolean {
+  return [...url.searchParams.keys()].some((k) => k.toLowerCase() === '_method');
+}

@@ -8,6 +8,8 @@ import { reviewNext } from './qa';
 import { runDueReports } from './reportsJob';
 import { runTask } from './runner';
 import { startRizehubBackground } from './rizehub/background';
+import { DailyBudgetGuard, overBudgetNote } from './budget';
+import type { TaskRow } from './hqdb';
 
 /** settings.paused may be stored as true or "true". */
 export function isPausedSetting(v: unknown): boolean {
@@ -24,6 +26,8 @@ export interface LoopOptions {
   reportsEveryMs?: number;
   /** How long a settings.paused read is trusted before re-reading. */
   pausedCheckMs?: number;
+  /** Pause before claiming again when every claimable task belongs to an agent over its daily budget. */
+  budgetBackoffMs?: number;
 }
 
 export class WorkerLoop {
@@ -37,8 +41,11 @@ export class WorkerLoop {
   private pausedUntil = { tasks: 0, planning: 0, qa: 0 };
   private reporting: Promise<unknown> | null = null;
   private paused = { value: false, checkedAt: -Infinity };
+  readonly budget: DailyBudgetGuard;
 
-  constructor(private deps: WorkerDeps, private opts: LoopOptions) {}
+  constructor(private deps: WorkerDeps, private opts: LoopOptions) {
+    this.budget = new DailyBudgetGuard(deps.db, { now: deps.now });
+  }
 
   private backoff(kind: keyof WorkerLoop['pausedUntil']) {
     this.pausedUntil[kind] = Date.now() + (this.opts.quotaBackoffMs ?? 60_000);
@@ -79,20 +86,39 @@ export class WorkerLoop {
         .catch((e) => log(this.deps, '[worker] planning failed', errMsg(e)))
         .finally(() => { this.planning = null; });
     }
-    while (!this.stopping && now >= this.pausedUntil.tasks && this.running.size < this.opts.maxParallelTasks) {
-      const task = await this.deps.db.claimNextTask();
-      if (!task) break;
-      log(this.deps, `[worker] ${task.agent_id} claimed "${task.title}"`);
-      const ctrl = new AbortController();
-      this.controllers.set(task.id, ctrl);
-      const p = runTask(task, this.deps, { abortSignal: ctrl.signal })
-        .then((r) => {
-          log(this.deps, `[worker] ${task.agent_id} → ${r.status} ($${r.costUsd.toFixed(4)})`);
-          if (r.status === 'requeued' && !this.stopping) this.backoff('tasks');
-        })
-        .catch((e) => log(this.deps, `[worker] task ${task.id} crashed`, errMsg(e)))
-        .finally(() => { this.running.delete(task.id); this.controllers.delete(task.id); });
-      this.running.set(task.id, p);
+    // Tasks of agents over their daily budget are held (still 'working', so claim_next_task skips them and the
+    // queue behind them keeps moving) and re-queued with a note once this claim round is over.
+    const held: { task: TaskRow; note: string }[] = [];
+    let started = 0;
+    try {
+      while (!this.stopping && now >= this.pausedUntil.tasks && this.running.size < this.opts.maxParallelTasks && held.length < 20) {
+        const task = await this.deps.db.claimNextTask();
+        if (!task) break;
+        const b = await this.budget.check(task.agent_id).catch((e) => {
+          log(this.deps, `[worker] budget check for ${task.agent_id} failed (task runs)`, errMsg(e));
+          return null;
+        });
+        if (b?.over) { held.push({ task, note: overBudgetNote(task, b) }); continue; }
+        started++;
+        log(this.deps, `[worker] ${task.agent_id} claimed "${task.title}"`);
+        const ctrl = new AbortController();
+        this.controllers.set(task.id, ctrl);
+        const p = runTask(task, this.deps, { abortSignal: ctrl.signal })
+          .then((r) => {
+            log(this.deps, `[worker] ${task.agent_id} → ${r.status} ($${r.costUsd.toFixed(4)})`);
+            if (r.status === 'requeued' && !this.stopping) this.backoff('tasks');
+          })
+          .catch((e) => log(this.deps, `[worker] task ${task.id} crashed`, errMsg(e)))
+          .finally(() => { this.running.delete(task.id); this.controllers.delete(task.id); this.budget.invalidate(task.agent_id); });
+        this.running.set(task.id, p);
+      }
+    } finally {
+      for (const h of held) {
+        log(this.deps, `[worker] ${h.note}`);
+        await this.deps.db.requeueTask(h.task.id, h.note).catch((e) => log(this.deps, `[worker] could not re-queue ${h.task.id}`, errMsg(e)));
+      }
+      // Only over-budget work was claimable: don't re-claim (and re-log) it every poll.
+      if (held.length && !started) this.pausedUntil.tasks = Date.now() + (this.opts.budgetBackoffMs ?? 5 * 60_000);
     }
     if (!this.reviewing && now >= this.pausedUntil.qa) {
       this.reviewing = reviewNext(this.deps)

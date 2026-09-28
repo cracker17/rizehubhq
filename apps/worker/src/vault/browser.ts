@@ -4,6 +4,7 @@
 // blocked, password/OTP fields are blurred on every page, and sessions close (cookies cleared) when the
 // task ends, goes idle, or gets too old.
 
+import { publicEnv, workerEnv } from '../config';
 export interface LocatorLike {
   first(): LocatorLike;
   count(): Promise<number>;
@@ -52,7 +53,8 @@ export const launchPlaywright: LaunchBrowser = async () => {
     throw new BrowserUnavailable('Playwright is not installed on the worker (pnpm --filter worker add playwright && npx playwright install chromium).');
   }
   try {
-    return await mod.chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined });
+    // No secrets in the browser process environment (Playwright defaults to the whole process.env).
+    return await mod.chromium.launch({ headless: true, executablePath: workerEnv().PLAYWRIGHT_CHROMIUM_PATH || undefined, env: publicEnv(workerEnv()) });
   } catch (e) {
     throw new BrowserUnavailable(`Chromium could not start: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
   }

@@ -10,8 +10,9 @@
 #   3. creates the shared Docker network rizehub-internal (docs/12)
 #   4. clones the repo into /home/rizehq/rizehub-hq, or fast-forwards it
 #   5. creates .env from .env.example (chmod 600), generates internal secrets, prompts for the rest
-#   6. validates .env (scripts/check-env.mjs --production, run inside a node container: no Node on the host needed)
-#   7. builds and starts the stack (docker compose up -d --build) and waits for health
+#   6. validates .env, splits it into .env.dashboard / .env.bot / .env.worker (each container gets only its own
+#      variables) and validates those too (scripts/check-env.mjs --production / --split, run inside a node container)
+#   7. fixes brain/ + workspaces ownership (deploy/fix-perms.sh), builds and starts the stack, waits for health
 #   8. optional --with-nginx: installs deploy/nginx/hq.rizehub.ph.conf and runs certbot
 #   9. prints the go-live checklist
 # It never touches existing nginx sites, the firewall, or RizeHub itself.
@@ -150,7 +151,7 @@ ask() { # ask KEY "question" [secret]
   if [[ "${3:-}" == secret ]]; then read -r -s -p "    $2: " v; echo; else read -r -p "    $2: " v; fi
   if [[ -n "$v" ]]; then env_set "$1" "$v"; fi
 }
-echo "    Fill in production values (Enter = skip; edit later with: sudo -u ${HQ_USER} nano ${ENV_FILE})"
+echo "    Fill in production values (Enter = skip; edit later with: sudo -u ${HQ_USER} nano ${ENV_FILE}, then deploy/update.sh --force)"
 ask SUPABASE_URL "Supabase URL (https://<ref>.supabase.co)"
 if [[ "$(env_get SUPABASE_URL)" == https://* && "$(env_get NEXT_PUBLIC_SUPABASE_URL)" != https://* ]]; then
   env_set NEXT_PUBLIC_SUPABASE_URL "$(env_get SUPABASE_URL)"; ok "NEXT_PUBLIC_SUPABASE_URL = SUPABASE_URL"
@@ -164,14 +165,25 @@ ask GROQ_API_KEY "Groq API key (free, console.groq.com)" secret
 ask OPENROUTER_API_KEY "OpenRouter API key (free models, openrouter.ai)" secret
 chown "$HQ_USER:$HQ_USER" "$ENV_FILE"; chmod 600 "$ENV_FILE"
 
-# ---------- 6. validate ----------
+# ---------- 6. validate + split ----------
+node_run() { # node_run <mount mode ro|rw> args…: Node inside a container, files written as the app user
+  local mode="$1"; shift
+  docker run --rm -u "$(id -u "$HQ_USER"):$(id -g "$HQ_USER")" -v "${APP_DIR}:/app:${mode}" -w /app node:22-alpine node "$@"
+}
 say "Validating .env (production rules)"
-if ! docker run --rm -v "${APP_DIR}:/app:ro" -w /app node:22-alpine node scripts/check-env.mjs --file .env --production; then
+if ! node_run ro scripts/check-env.mjs --file .env --production; then
   $NONINTERACTIVE && die "fix .env, then re-run"
   read -r -p "    .env has errors. Start anyway? [y/N] " a; [[ "$a" =~ ^[Yy]$ ]] || die "fix ${ENV_FILE}, then re-run"
 fi
+say "Per-service env files (.env.dashboard / .env.bot / .env.worker)"
+node_run rw scripts/split-env.mjs --in .env
+for f in .env.dashboard .env.bot .env.worker; do chown "$HQ_USER:$HQ_USER" "${APP_DIR}/${f}"; chmod 600 "${APP_DIR}/${f}"; done
+# Hard stop: a server secret in the dashboard file (service-role key, vault key) must never be deployed.
+node_run ro scripts/check-env.mjs --split --production --file .env || die "per-service env files failed the check (see ✗ above)"
 
 # ---------- 7. build + start ----------
+say "File ownership (brain/ → ${HQ_USER}, workspaces → agent uid 1001)"
+as_app bash "${APP_DIR}/deploy/fix-perms.sh"
 say "Building and starting the stack (first build takes a few minutes)"
 as_app bash -c "cd '$APP_DIR' && docker compose up -d --build --remove-orphans"
 for img in dashboard worker bot; do docker image inspect "rizehubhq-${img}:latest" >/dev/null 2>&1 && docker tag "rizehubhq-${img}:latest" "rizehubhq-${img}:$(as_app git -C "$APP_DIR" rev-parse --short HEAD)"; done
@@ -210,4 +222,5 @@ cat <<EOF
     [ ] Hostinger VPS snapshot taken; existing sites on this VPS still load
     [ ] Auto-deploy (optional): GitHub secrets VPS_HOST, VPS_USER=${HQ_USER}, VPS_SSH_KEY + variable DEPLOY_ENABLED=true
 Useful: sudo -iu ${HQ_USER}; cd ${APP_DIR}; docker compose ps; docker compose logs -f worker
+After editing .env: node scripts/split-env.mjs (or deploy/update.sh --force) so the containers get the new values.
 EOF

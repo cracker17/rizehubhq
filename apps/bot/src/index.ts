@@ -144,6 +144,8 @@ bot.on('message:text', async (ctx) => {
   try {
     const note = await onNoteText(decisionDeps, ctx.chat.id, text);
     if (note) {
+      // A 2FA code never stays in the chat history.
+      if (note.secret) await ctx.deleteMessage().catch((e) => console.error('[bot] could not delete the code message', e instanceof Error ? e.message : e));
       await sender.edit(ctx.chat.id, note.messageId, note.edit.text, note.edit.markup).catch((e) => console.error('[bot] edit failed', e));
       return ctx.reply(note.reply);
     }

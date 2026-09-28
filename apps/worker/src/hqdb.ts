@@ -3,6 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStatus, Plan, QaVerdict, RequestStatus, TaskStatus } from '@rizehubhq/shared';
 import type { DayFacts } from './reports';
+import { manilaMonthStartIso } from './budget';
 
 export interface RequestRow {
   id: string;
@@ -29,6 +30,7 @@ export interface TaskRow {
   status: TaskStatus;
   revision_count: number;
   max_revisions: number;
+  qa_attempts?: number;
   qa_feedback: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   cost_usd?: number | string;
@@ -45,6 +47,8 @@ export interface AgentRow {
   idle_activity: string | null;
   idle_since: string | null;
   enabled: boolean;
+  /** agents.daily_budget_usd (numeric: may arrive as a string). */
+  daily_budget_usd?: number | string | null;
 }
 
 export interface ClientRow {
@@ -137,6 +141,8 @@ export interface HqDb {
   claimQaReview(): Promise<TaskRow | null>;
   recordQaVerdict(taskId: string, reviewer: string, verdict: QaVerdict, threshold: number): Promise<string>;
   releaseQaReview(taskId: string, reason: string): Promise<void>;
+  /** QA produced no valid verdict: counts the attempt; 'retry' (back to qa_pending) or 'escalated' (3rd attempt → CEO). */
+  qaReviewFailed(taskId: string, reason: string): Promise<'retry' | 'escalated' | 'not_under_qa'>;
   // office
   setIdleActivity(agentId: string, activity: string | null): Promise<boolean>;
   updateAgentScreen(agentId: string, taskId: string | null, screen: ScreenUpdate & { step_note?: string; progress?: number }): Promise<void>;
@@ -150,7 +156,10 @@ export interface HqDb {
   getTask(id: string): Promise<TaskRow | null>;
   getAgentScreen(agentId: string): Promise<ScreenRow | null>;
   recentActivity(agentId: string, limit: number): Promise<ActivityRow[]>;
+  /** Spend (activity_log usage.* rows) since the start of the current Asia/Manila month. */
   monthSpendUsd(): Promise<number>;
+  /** One agent's spend (usage.* rows) since an ISO instant. */
+  agentSpendSinceUsd(agentId: string, sinceIso: string): Promise<number>;
   // reports + settings (M7)
   reportFacts(from: string, days: number): Promise<DayFacts>;
   /** Returns the new id, or null when that (author, date, kind) already exists and overwrite is false. */
@@ -182,6 +191,21 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
     return (data as T | null) ?? null;
   }
 
+  /** Sums activity_log.cost_usd of usage.* rows, paging past PostgREST's default row limit. */
+  async function sumUsage(sinceIso: string, actor?: string): Promise<number> {
+    const PAGE = 1000;
+    let total = 0;
+    for (let from = 0; ; from += PAGE) {
+      let q = sb.from('activity_log').select('cost_usd').like('action', 'usage.%').gte('created_at', sinceIso).gt('cost_usd', 0);
+      if (actor) q = q.eq('actor', actor);
+      const { data, error } = await q.order('id').range(from, from + PAGE - 1);
+      if (error) throw new Error(`activity_log: ${error.message}`);
+      const rows = (data ?? []) as { cost_usd: number | string }[];
+      total += rows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
+      if (rows.length < PAGE) return total;
+    }
+  }
+
   return {
     claimRequestForPlanning: async () => rowOrNull<RequestRow>(await rpc('claim_request_for_planning')),
     submitPlan: (requestId, plan) => rpc<string>('submit_plan', { p_request: requestId, p_plan: plan }),
@@ -205,6 +229,7 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
     recordQaVerdict: (taskId, reviewer, verdict, threshold) =>
       rpc<string>('record_qa_verdict', { p_task: taskId, p_reviewer: reviewer, p_verdict: verdict, p_threshold: threshold }),
     releaseQaReview: async (taskId, reason) => { await rpc('release_qa_review', { p_task: taskId, p_reason: reason }); },
+    qaReviewFailed: (taskId, reason) => rpc<'retry' | 'escalated' | 'not_under_qa'>('qa_review_failed', { p_task: taskId, p_reason: reason }),
 
     setIdleActivity: async (agentId, activity) => Boolean(await rpc('set_idle_activity', { p_agent: agentId, p_activity: activity })),
     updateAgentScreen: async (agentId, taskId, screen) => { await rpc('update_agent_screen', { p_agent: agentId, p_task: taskId, p_screen: screen }); },
@@ -226,7 +251,7 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
       return (data ?? []) as AgentRow[];
     },
     getAgent: (id) => maybeOne<AgentRow>(sb.from('agents')
-      .select('id,name,department,model_role,model_override,status,current_task_id,idle_activity,idle_since,enabled').eq('id', id).maybeSingle(), 'agent'),
+      .select('id,name,department,model_role,model_override,status,current_task_id,idle_activity,idle_since,enabled,daily_budget_usd').eq('id', id).maybeSingle(), 'agent'),
     getClient: (id) => maybeOne<ClientRow>(sb.from('clients')
       .select('id,name,slug,platforms,website,service_package,status,notes').eq('id', id).maybeSingle(), 'client'),
     getRequest: (id) => maybeOne<RequestRow>(sb.from('requests').select('*').eq('id', id).maybeSingle(), 'request'),
@@ -238,12 +263,8 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
       if (error) throw new Error(`activity_log: ${error.message}`);
       return (data ?? []) as ActivityRow[];
     },
-    monthSpendUsd: async () => {
-      const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0);
-      const { data, error } = await sb.from('activity_log').select('cost_usd').like('action', 'usage.%').gte('created_at', start.toISOString());
-      if (error) throw new Error(`activity_log: ${error.message}`);
-      return (data ?? []).reduce((s, r: { cost_usd: number | string }) => s + Number(r.cost_usd ?? 0), 0);
-    },
+    monthSpendUsd: () => sumUsage(manilaMonthStartIso()),
+    agentSpendSinceUsd: (agentId, sinceIso) => sumUsage(sinceIso, agentId),
 
     reportFacts: (from, days) => rpc<DayFacts>('report_facts', { p_from: from, p_days: days }),
     saveReport: async (r, overwrite = false) => (await rpc<string | null>('save_report', {

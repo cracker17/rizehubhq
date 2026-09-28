@@ -27,7 +27,8 @@
   ▼  (you)
  [6] CEO REVIEW ── approve → task done → release_ready_tasks() (unblocks dependents)
   │               request changes → task revision with your note
-  │               approve includes external action? → worker executes it, logs it
+  │               approve includes external action? → worker executes it (rizehub.* types only), logs it;
+  │                                                     any other type is a MANUAL step: you do it (dashboard says so)
   ▼
  [7] CLOSE ── all tasks done → request done ─────────── done
              EA includes it in the 6pm daily digest

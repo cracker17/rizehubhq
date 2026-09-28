@@ -4,8 +4,9 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { config } from '../config';
+import { config, workerEnv } from '../config';
 import type { VaultToolEnv } from '../tools/vault';
+import { agentIdentity, type AgentIdentity } from './agentUser';
 
 export interface RunOptions {
   cwd: string;
@@ -15,6 +16,11 @@ export interface RunOptions {
   stdoutFile?: { path: string; append: boolean };
   /** Stop capturing after this many bytes per stream (the process keeps running). */
   maxCaptureBytes?: number;
+  /** Already-open fd (opened race-safely by the caller, see safefs.openForWrite) that receives stdout; closed when done. */
+  stdoutFd?: number;
+  /** Run the process under this uid/gid (privilege drop, dev/agentUser.ts). */
+  uid?: number;
+  gid?: number;
 }
 export interface RunResult { code: number | null; signal: string | null; stdout: string; stderr: string; timedOut: boolean }
 export type RunProcess = (file: string, args: string[], opts: RunOptions) => Promise<RunResult>;
@@ -32,41 +38,54 @@ export interface DevEnv {
   helperDir: () => string;
   /** PATH given to sandboxed processes. */
   sandboxPath: string;
+  /** uid/gid every agent command runs as (null: no privilege drop; see agentUser.ts). */
+  agentUser?: AgentIdentity | null;
+  /** process.getuid (injectable for tests of the privilege-drop gate). */
+  getuid?: () => number | undefined;
 }
 
-/** Real process runner: no shell, own process group (killed as a group on timeout), capped capture. */
-export const runProcess: RunProcess = (file, args, opts) => new Promise((resolve) => {
-  const max = opts.maxCaptureBytes ?? 256 * 1024;
-  let out: fs.WriteStream | null = null;
-  if (opts.stdoutFile) out = fs.createWriteStream(opts.stdoutFile.path, { flags: opts.stdoutFile.append ? 'a' : 'w' });
-  const child = spawn(file, args, { cwd: opts.cwd, env: opts.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false });
-  const bufs = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
-  const sizes = { stdout: 0, stderr: 0 };
-  const take = (k: 'stdout' | 'stderr') => (b: Buffer) => {
-    if (k === 'stdout' && out) { out.write(b); return; }
-    if (sizes[k] < max) { bufs[k].push(b.subarray(0, max - sizes[k])); }
-    sizes[k] += b.length;
-  };
-  child.stdout?.on('data', take('stdout'));
-  child.stderr?.on('data', take('stderr'));
-  let timedOut = false;
-  const kill = () => {
-    timedOut = true;
-    try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
-  };
-  const timer = setTimeout(kill, opts.timeoutMs);
-  const finish = (code: number | null, signal: string | null, extraErr = '') => {
-    clearTimeout(timer);
-    const done = () => resolve({
-      code, signal, timedOut,
-      stdout: Buffer.concat(bufs.stdout).toString('utf8') + (sizes.stdout > max ? `\n…[stdout truncated: ${sizes.stdout} bytes]` : ''),
-      stderr: Buffer.concat(bufs.stderr).toString('utf8') + extraErr + (sizes.stderr > max ? `\n…[stderr truncated: ${sizes.stderr} bytes]` : ''),
-    });
-    if (out) out.end(done); else done();
-  };
-  child.on('error', (e) => finish(127, null, `\n${e.message}`));
-  child.on('close', (code, signal) => finish(code, signal));
-});
+/** Real process runner: no shell, own process group (killed as a group on timeout), capped capture, optional uid/gid. */
+export function makeRunProcess(spawnFn: typeof spawn = spawn): RunProcess {
+  return (file, args, opts) => new Promise((resolve) => {
+    const max = opts.maxCaptureBytes ?? 256 * 1024;
+    let out: fs.WriteStream | null = null;
+    if (opts.stdoutFd !== undefined) out = fs.createWriteStream('', { fd: opts.stdoutFd, autoClose: true });
+    else if (opts.stdoutFile) out = fs.createWriteStream(opts.stdoutFile.path, { flags: opts.stdoutFile.append ? 'a' : 'w' });
+    const ids = opts.uid !== undefined ? { uid: opts.uid, gid: opts.gid ?? opts.uid } : {};
+    const child = spawnFn(file, args, { cwd: opts.cwd, env: opts.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false, ...ids });
+    const bufs = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
+    const sizes = { stdout: 0, stderr: 0 };
+    const take = (k: 'stdout' | 'stderr') => (b: Buffer) => {
+      if (k === 'stdout' && out) { out.write(b); return; }
+      if (sizes[k] < max) { bufs[k].push(b.subarray(0, max - sizes[k])); }
+      sizes[k] += b.length;
+    };
+    child.stdout?.on('data', take('stdout'));
+    child.stderr?.on('data', take('stderr'));
+    let timedOut = false;
+    const kill = () => {
+      timedOut = true;
+      try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+    };
+    const timer = setTimeout(kill, opts.timeoutMs);
+    let finished = false;
+    const finish = (code: number | null, signal: string | null, extraErr = '') => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      const done = () => resolve({
+        code, signal, timedOut,
+        stdout: Buffer.concat(bufs.stdout).toString('utf8') + (sizes.stdout > max ? `\n…[stdout truncated: ${sizes.stdout} bytes]` : ''),
+        stderr: Buffer.concat(bufs.stderr).toString('utf8') + extraErr + (sizes.stderr > max ? `\n…[stderr truncated: ${sizes.stderr} bytes]` : ''),
+      });
+      if (out) out.end(done); else done();
+    };
+    child.on('error', (e) => finish(127, null, `\n${e.message}`));
+    child.on('close', (code, signal) => finish(code, signal));
+  });
+}
+
+export const runProcess: RunProcess = makeRunProcess();
 
 let helperDirCache: string | null = null;
 function defaultHelperDir(): string {
@@ -86,10 +105,11 @@ export function defaultDevEnv(vault: DevEnv['vault']): DevEnv {
     fetch: (...a) => fetch(...a),
     run: runProcess,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    env: process.env,
+    env: workerEnv(),
     vault,
     helperDir: defaultHelperDir,
     sandboxPath: defaultSandboxPath(),
+    agentUser: agentIdentity(workerEnv()),
   };
 }
 

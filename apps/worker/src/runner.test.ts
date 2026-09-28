@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { APICallError } from 'ai';
-import { buildTaskPrompt, buildTools, runTask } from './runner';
+import { buildTaskPrompt, buildTools, externalActionSpec, runTask } from './runner';
 import { FakeHqDb } from './fakeHqDb';
 import { loadRole } from './roles';
 import { makeDeps, mockModel, promptText, textResponse, toolCalls } from './testing';
@@ -114,6 +114,22 @@ test('ask_ceo pauses the task; request_external_action only queues an approval',
   assert.equal(db.tasks.get(task.id)!.status, 'awaiting_ceo');
   assert.equal(db.approvals.filter((a) => a.payload.type === 'external_action').length, 1);
   assert.match(promptText(model.doGenerateCalls[1]!), /queued for CEO approval/i);
+});
+
+test('request_external_action: types without a worker executor are marked manual and the agent is told the CEO does it', async () => {
+  const { db, task } = setup();
+  const model = mockModel([
+    toolCalls([{ name: 'request_external_action', input: { type: 'merge_pr', spec: 'Merge acme/theme#7 into main' } }]),
+    toolCalls([{ name: 'request_external_action', input: { type: 'rizehub.report_publish', spec: 'Publish report r1' } }]),
+    toolCalls([{ name: 'ask_ceo', input: { question: 'ok?' } }]),
+  ]);
+  await runTask(task, makeDeps({ db, model }));
+  const actions = db.approvals.filter((a) => a.payload.type === 'external_action');
+  assert.equal(actions.length, 1, 'rizehub.* is refused here (its own tool builds the executable payload)');
+  assert.deepEqual((actions[0]!.payload as { spec: unknown }).spec, { description: 'Merge acme/theme#7 into main', executor: 'manual' });
+  assert.match(promptText(model.doGenerateCalls[1]!), /MANUAL action: nothing runs automatically after approval/);
+  assert.match(promptText(model.doGenerateCalls[2]!), /Not queued: \\?"rizehub\.report_publish\\?" is executed by the worker/);
+  assert.deepEqual(externalActionSpec('rizehub.invite_send', 'x'), { description: 'x', executor: 'worker' });
 });
 
 test('provider 429 → task re-queued, not failed', async () => {

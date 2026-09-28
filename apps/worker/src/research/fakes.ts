@@ -1,6 +1,6 @@
 // Test fakes for research tools: DNS, HTTP transport, browser, API fetch. No network, no real Chromium.
 import type { LookupAddress, NetEnv, Transport } from './net';
-import type { RBrowser, RContext, RLocator, RPage, RRequest, RRoute } from './browser';
+import type { RBrowser, RContext, RLocator, RPage, RRequest, RRoute, RWebSocketRoute } from './browser';
 
 export type FakeReply = { status?: number; headers?: Record<string, string>; body?: string | Buffer; delayMs?: number; chunks?: number };
 
@@ -73,6 +73,8 @@ export interface FakeSitePage {
   text?: string;
   /** Requests fired when a selector is clicked (e.g. a form POST). */
   onClick?: Record<string, { url: string; method?: string }[]>;
+  /** WebSocket URLs the page opens when loaded. */
+  sockets?: string[];
 }
 
 export class FakeResearchBrowser {
@@ -96,7 +98,12 @@ export class FakeResearchPage implements RPage {
   private width = 1440;
   private handlers: Record<string, ((a: never) => void)[]> = {};
   private router: ((r: RRoute) => unknown) | null = null;
+  private wsRouter: ((ws: RWebSocketRoute) => unknown) | null = null;
   aborted: string[] = [];
+  /** WebSockets: connected to their server / closed by the guard / opened with no guard installed at all. */
+  wsConnected: string[] = [];
+  wsClosed: { url: string; code?: number }[] = [];
+  wsUnguarded: string[] = [];
   continued: string[] = [];
   actions: string[] = [];
   viewports: number[] = [];
@@ -117,6 +124,17 @@ export class FakeResearchPage implements RPage {
     return st.result === true;
   }
 
+  private async socket(url: string) {
+    // Like Chromium: page.route() is NOT consulted for WebSockets; only routeWebSocket handlers are.
+    if (!this.wsRouter) { this.wsUnguarded.push(url); return; }
+    const ws: RWebSocketRoute = {
+      url: () => url,
+      connectToServer: () => { this.wsConnected.push(url); return ws; },
+      close: async (o) => { this.wsClosed.push({ url, code: o?.code }); },
+    };
+    await this.wsRouter(ws);
+  }
+
   async goto(url: string) {
     const ok = await this.request(url);
     if (!ok) throw new Error(`page.goto: net::ERR_BLOCKED_BY_CLIENT at ${url}`);
@@ -124,6 +142,7 @@ export class FakeResearchPage implements RPage {
     if (!p) throw new Error(`page.goto: net::ERR_NAME_NOT_RESOLVED at ${url}`);
     this.currentUrl = url;
     for (const s of p.subrequests ?? []) await this.request(s.url, s.method ?? 'GET');
+    for (const w of p.sockets ?? []) await this.socket(w);
     for (const c of p.console ?? []) this.emit('console', { type: () => 'error', text: () => c });
     for (const e of p.pageErrors ?? []) this.emit('pageerror', new Error(e));
     const status = p.status ?? 200;
@@ -166,6 +185,7 @@ export class FakeResearchPage implements RPage {
   async waitForLoadState() { /* settled */ }
   async waitForTimeout() { /* instant */ }
   async route(_url: string, h: (r: RRoute) => unknown) { this.router = h; }
+  async routeWebSocket(_url: string | RegExp, h: (ws: RWebSocketRoute) => unknown) { this.wsRouter = h; }
   on(event: string, h: (a: never) => void) { (this.handlers[event] ??= []).push(h); return this; }
   async close() { this.closedPage = true; }
 }

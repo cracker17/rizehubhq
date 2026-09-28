@@ -151,6 +151,7 @@ export class FakeHqDb implements HqDb {
     this.log('recordQaVerdict', taskId, reviewer, verdict, threshold);
     const t = this.task(taskId);
     if (t.status !== 'qa_reviewing') throw new Error(`task ${taskId} is not under QA`);
+    t.qa_attempts = 0;
     if (isQaPass(verdict, threshold)) { t.status = 'awaiting_ceo'; t.qa_feedback = null; return 'pass'; }
     t.revision_count++;
     t.qa_feedback = { source: 'qa', fix_list: verdict.fix_list, failed_checks: verdict.checks.filter((c) => c.result !== 'pass') };
@@ -161,6 +162,21 @@ export class FakeHqDb implements HqDb {
   async releaseQaReview(taskId: string, reason: string) {
     this.log('releaseQaReview', taskId, reason);
     const t = this.task(taskId); if (t.status === 'qa_reviewing') t.status = 'qa_pending';
+  }
+  /** Mirrors qa_review_failed (20260928070000_review_fixes.sql). */
+  async qaReviewFailed(taskId: string, reason: string) {
+    this.log('qaReviewFailed', taskId, reason);
+    const t = this.task(taskId);
+    if (t.status !== 'qa_reviewing') return 'not_under_qa' as const;
+    t.qa_attempts = (t.qa_attempts ?? 0) + 1;
+    if (t.qa_attempts >= 3) {
+      t.status = 'failed';
+      this.approval({ kind: 'external_action', request_id: t.request_id, task_id: t.id, agent_id: t.agent_id, title: `QA can't review: ${t.title}`,
+        payload: { type: 'qa_stuck', reason, attempts: t.qa_attempts } });
+      return 'escalated' as const;
+    }
+    t.status = 'qa_pending';
+    return 'retry' as const;
   }
 
   async setIdleActivity(agentId: string, activity: string | null) {
@@ -193,6 +209,10 @@ export class FakeHqDb implements HqDb {
     return this.activity.filter((a) => a.actor === agentId).slice(-limit).reverse();
   }
   async monthSpendUsd() { return this.usage.reduce((s, u) => s + u.costUsd, 0); }
+  async agentSpendSinceUsd(agentId: string, sinceIso: string) {
+    return this.activity.filter((a) => a.actor === agentId && a.action.startsWith('usage.') && a.created_at >= sinceIso)
+      .reduce((s, a) => s + Number(a.cost_usd ?? 0), 0);
+  }
 
   async reportFacts(from: string, days: number) {
     this.log('reportFacts', from, days);

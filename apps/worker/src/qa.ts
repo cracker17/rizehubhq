@@ -66,7 +66,16 @@ async function gatherEvidence(task: TaskRow, deps: WorkerDeps, screen: (note: st
 export type QaOutcome =
   | { status: 'idle' }
   | { status: 'recorded'; taskId: string; result: string; verdict: QaVerdict; pass: boolean }
-  | { status: 'deferred'; taskId: string; reason: string };
+  | { status: 'deferred'; taskId: string; reason: string }
+  /** No valid verdict for the 3rd time: the task waits for the CEO ('qa_stuck' approval). */
+  | { status: 'escalated'; taskId: string; reason: string };
+
+/** QA ran and failed without a verdict: count it (the 3rd time goes to the CEO instead of looping forever). */
+async function noVerdict(task: TaskRow, deps: WorkerDeps, reason: string): Promise<QaOutcome> {
+  const r = await deps.db.qaReviewFailed(task.id, reason);
+  if (r === 'escalated') log(deps, `[qa-lead] ${task.title}: no valid verdict 3 times; escalated to the CEO`);
+  return r === 'escalated' ? { status: 'escalated', taskId: task.id, reason } : { status: 'deferred', taskId: task.id, reason };
+}
 
 export async function reviewNext(deps: WorkerDeps): Promise<QaOutcome> {
   const task = await deps.db.claimQaReview();
@@ -80,8 +89,11 @@ export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOut
   let usage = {};
   let calls = 0;
   let cost = 0;
-  const screen = (step_note: string, progress: number, content?: string) =>
-    db.updateAgentScreen(QA_REVIEWER, task.id, { app: 'review', title: task.title, step_note, progress, content }).catch(() => undefined);
+  // Every screen update is also a heartbeat, so the stale sweep never takes a live review away.
+  const screen = (step_note: string, progress: number, content?: string) => Promise.all([
+    db.updateAgentScreen(QA_REVIEWER, task.id, { app: 'review', title: task.title, step_note, progress, content }).catch(() => undefined),
+    db.touchHeartbeat(task.id).catch(() => undefined),
+  ]);
 
   try {
     const role = deps.loadRole(QA_REVIEWER);
@@ -107,11 +119,7 @@ export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOut
         log(deps, `[qa-lead] verdict attempt ${attempt} invalid: ${lastError}`);
       }
     }
-    if (!verdict) {
-      const reason = `QA could not produce a valid verdict: ${lastError}`.slice(0, 500);
-      await db.releaseQaReview(task.id, reason);
-      return { status: 'deferred', taskId: task.id, reason };
-    }
+    if (!verdict) return await noVerdict(task, deps, `QA could not produce a valid verdict: ${lastError}`.slice(0, 500));
 
     verdict = enforceCriteria(verdict, task.acceptance_criteria);
     if (evidence?.refs.length) verdict = { ...verdict, checks: attachEvidence(verdict.checks, evidence.refs) };
@@ -123,8 +131,15 @@ export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOut
   } catch (e) {
     if (isQuotaError(e) && picked) deps.onProviderQuota?.(picked.provider);
     const reason = (isQuotaError(e) ? `model quota: ${errMsg(e)}` : `QA crashed: ${errMsg(e)}`).slice(0, 500);
-    await db.releaseQaReview(task.id, reason).catch(() => undefined);
-    return { status: 'deferred', taskId: task.id, reason };
+    if (isQuotaError(e)) {
+      // Not QA's fault: hand the review back without counting an attempt.
+      await db.releaseQaReview(task.id, reason).catch(() => undefined);
+      return { status: 'deferred', taskId: task.id, reason };
+    }
+    return await noVerdict(task, deps, reason).catch(async () => {
+      await db.releaseQaReview(task.id, reason).catch(() => undefined);
+      return { status: 'deferred' as const, taskId: task.id, reason };
+    });
   } finally {
     if (picked && calls > 0) {
       const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };

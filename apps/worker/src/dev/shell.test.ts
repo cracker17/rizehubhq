@@ -5,15 +5,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openJail } from './jail';
 import { defaultSandboxPath, runProcess } from './env';
+import { fdPath } from './safefs';
 import { BASE_ALLOWED_HOSTS, planCommand, runSandboxed, sandboxEnv, ShellRefusal, tokenize, wrapWithPrefix, type ShellPolicyCtx } from './shell';
 import { devSetup, fakeEnv, run, tmpDir } from './testkit';
 
 const SP = defaultSandboxPath();
-function ctx(): ShellPolicyCtx {
+function ctx(isolated = false): ShellPolicyCtx {
   const j = openJail(path.join(tmpDir(), 'ws'), 'task-sh');
   fs.mkdirSync(path.join(j.root, 'src'));
   fs.writeFileSync(path.join(j.root, 'src', 'a.ts'), 'export {}');
-  return { jail: j, cwd: j.root, allowedHosts: [...BASE_ALLOWED_HOSTS, 'madammuse.co'] };
+  return { jail: j, cwd: j.root, allowedHosts: [...BASE_ALLOWED_HOSTS, 'madammuse.co'], isolated };
 }
 const plan = (c: ShellPolicyCtx, line: string) => planCommand(tokenize(line).argv, c, SP);
 const refused = (c: ShellPolicyCtx, line: string, re?: RegExp) => assert.throws(() => plan(c, line), (e: unknown) => e instanceof ShellRefusal && (!re || re.test((e as Error).message)), line);
@@ -53,7 +54,7 @@ test('path arguments: no absolute, no .., no secrets, no symlink escapes', () =>
   refused(c, 'cat .env', /secret/);
   refused(c, 'head -n 5 app/.env.production', /secret/);
   refused(c, 'cp keys/server.pem x', /secret/);
-  refused(c, 'node --require=/tmp/evil.js a.js', /absolute/);
+  refused(c, 'node --require=/tmp/evil.js a.js', /not allowed/);
   refused(c, 'tsc -p=/etc', /absolute/);
   const outside = tmpDir('rzh-out-');
   fs.writeFileSync(path.join(outside, 'x'), 'secret');
@@ -128,8 +129,14 @@ test('package managers: no publish/global/registry/exec; npx only allowlisted pa
   refused(c, 'npx evil-package', /npx evil-package is not allowed/);
   refused(c, 'npx -p evil tsc', /npx option -p/);
   refused(c, 'npx --yes left-pad@1.0.0', /not allowed/);
-  for (const ok of ['npm ci', 'npm run build', 'npm test', 'pnpm install', 'pnpm typecheck', 'pnpm --filter web test', 'npx --yes @shopify/cli@3 theme check --path theme', 'npx playwright test', 'npx tsc --noEmit', 'npx prettier --check src']) {
+  for (const ok of ['npm ci', 'pnpm install', 'npx --yes @shopify/cli@3 theme check --path theme', 'npx tsc --noEmit', 'npx prettier --check src']) {
     assert.ok(plan(c, ok), ok);
+  }
+  // Scripts and test runners execute workspace code: only with isolation (privilege drop / OS sandbox).
+  const iso = ctx(true);
+  for (const ok of ['npm run build', 'npm test', 'pnpm typecheck', 'pnpm --filter web test', 'npx playwright test']) {
+    refused(c, ok, /isolated/);
+    assert.ok(plan(iso, ok), ok);
   }
 });
 
@@ -198,7 +205,9 @@ test('bash_sandboxed tool: runs in the jail with scrubbed env, clamps timeout, t
   assert.match(big, /chars omitted/);
   assert.ok(big.length < 25_000);
   await run(s.tools, 'bash_sandboxed', { command: 'git log > logs.txt' });
-  assert.equal(f.runCalls.at(-1)!.opts.stdoutFile?.path, path.join(s.jailDir, 'logs.txt'));
+  const fd = f.runCalls.at(-1)!.opts.stdoutFd!;
+  assert.equal(fdPath(fd), path.join(s.jailDir, 'logs.txt'), 'the redirect file is opened by the worker (race-safe) and handed over as an fd');
+  fs.closeSync(fd);
   assert.match(await run(s.tools, 'bash_sandboxed', { command: 'ls > ../../x' }), /^Refused/);
   assert.match(await run(s.tools, 'bash_sandboxed', { command: 'ls', cwd: '../' }), /^Refused/);
   assert.match(await run(s.tools, 'bash_sandboxed', { command: 'cat .env' }), /^Refused/);
@@ -221,10 +230,13 @@ test('real process runner: timeout kills the process group; output goes to the r
   const r2 = await runProcess('ls', ['-a'], { cwd: j.root, env, timeoutMs: 5000, stdoutFile: { path: path.join(j.root, 'o.txt'), append: false } });
   assert.equal(r2.code, 0);
   assert.match(fs.readFileSync(path.join(j.root, 'o.txt'), 'utf8'), /\.tmp/);
-  const f = fakeEnv();
+  const f = fakeEnv({ env: { DEV_SANDBOX_PREFIX: '["env"]' } }); // any wrapper = "isolated" for the policy
   f.env.run = runProcess;
   f.env.workspacesDir = path.dirname(j.root);
-  assert.match(await runSandboxed(f.env, j, BASE_ALLOWED_HOSTS, { command: 'node -e "console.log(Object.keys(process.env).sort().join(\',\'))"' }), /HOME/);
+  fs.writeFileSync(path.join(j.root, 'keys.js'), "console.log(Object.keys(process.env).sort().join(','))");
+  const out = await runSandboxed(f.env, j, BASE_ALLOWED_HOSTS, { command: 'node keys.js > keys.txt' });
+  assert.match(out, /exit 0/);
+  assert.match(fs.readFileSync(path.join(j.root, 'keys.txt'), 'utf8'), /HOME/);
 });
 
 test('DEV_SANDBOX_PREFIX wraps every command (e.g. bubblewrap) with the jail path substituted', async () => {

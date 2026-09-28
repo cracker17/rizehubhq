@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # RizeHub HQ: deploy the latest main on the VPS, with automatic rollback. Run as the app user (rizehq).
 #
-#   deploy/update.sh                 pull main → validate .env → build → up -d → health check → prune
+#   deploy/update.sh                 pull main → validate .env → split into .env.dashboard/.env.bot/.env.worker
+#                                    → fix brain/ + workspaces ownership → build → up -d → health check → prune
 #                                    (health fails → previous images + previous commit restored)
 #   deploy/update.sh --health-only   just wait for / report container health (used by setup-vps.sh)
 #   deploy/update.sh --force         rebuild even if main has not moved
@@ -67,6 +68,18 @@ if $HEALTH_ONLY; then wait_healthy; exit $?; fi
 exec 9>"${TMPDIR:-/tmp}/rizehubhq-update.lock"
 flock -n 9 || die "another update is running"
 
+# ---------- validate .env, split per service (inside a node container: no Node needed on the host) ----------
+node_run() { docker run --rm -u "$(id -u):$(id -g)" -v "${APP_DIR}:/app:$1" -w /app node:22-alpine node "${@:2}"; }
+fail_env() { cat /tmp/rizehubhq-check-env.log; git reset --quiet --hard "$PREV_SHA"; die "$1; code reset to ${PREV_SHA:0:7}, nothing deployed"; }
+prepare_env() {
+  node_run ro scripts/check-env.mjs --file .env --production >/tmp/rizehubhq-check-env.log 2>&1 || fail_env ".env check failed"
+  # Each container gets only its own variables (the dashboard never sees the service-role or vault key).
+  node_run rw scripts/split-env.mjs --in .env >/tmp/rizehubhq-check-env.log 2>&1 || fail_env "splitting .env failed"
+  chmod 600 .env.dashboard .env.bot .env.worker
+  node_run ro scripts/check-env.mjs --split --production --file .env >/tmp/rizehubhq-check-env.log 2>&1 || fail_env "per-service env files failed the check"
+  bash "${APP_DIR}/deploy/fix-perms.sh" || log "warning: deploy/fix-perms.sh failed (brain/ or workspaces ownership); continuing"
+}
+
 # ---------- pull ----------
 if ! git diff --quiet || ! git diff --cached --quiet; then die "local changes in ${APP_DIR}: commit/stash them first (git status)"; fi
 PREV_SHA="$(git rev-parse HEAD)"
@@ -76,7 +89,8 @@ git merge --ff-only --quiet "origin/${BRANCH}" || die "cannot fast-forward ${BRA
 NEW_SHA="$(git rev-parse HEAD)"
 NEW_TAG="$(git rev-parse --short HEAD)"
 if [[ "$PREV_SHA" == "$NEW_SHA" ]] && ! $FORCE; then
-  log "already at ${NEW_TAG}; ensuring the stack is up"
+  log "already at ${NEW_TAG}; ensuring the stack is up (with the current .env)"
+  prepare_env
   dc up -d --remove-orphans
   wait_healthy; exit $?
 fi
@@ -89,12 +103,10 @@ if ! git diff --quiet "$PREV_SHA" "$NEW_SHA" -- supabase/migrations; then
   log "!!! Apply them with 'supabase db push' (deploy/supabase-setup.md) if you have not already."
 fi
 if ! git diff --quiet "$PREV_SHA" "$NEW_SHA" -- .env.example; then
-  log "note: .env.example changed; new variables may need values in .env"
+  log "note: .env.example changed; new variables may need values in .env (then re-run with --force)"
 fi
 
-# ---------- validate .env (inside a node container: no Node needed on the host) ----------
-docker run --rm -v "${APP_DIR}:/app:ro" -w /app node:22-alpine node scripts/check-env.mjs --file .env --production >/tmp/rizehubhq-check-env.log 2>&1 \
-  || { cat /tmp/rizehubhq-check-env.log; git reset --quiet --hard "$PREV_SHA"; die ".env check failed; code reset to ${PREV_SHA:0:7}, nothing deployed"; }
+prepare_env
 
 # ---------- build + switch ----------
 for s in "${SERVICES[@]}"; do

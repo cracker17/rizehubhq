@@ -5,6 +5,7 @@ import path from 'node:path';
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { ToolFactory } from './types';
+import { inheritOwner } from '../dev/agentUser';
 
 export const BRAIN_WRITE_MAX_BYTES = 32 * 1024;
 const REL = /^(?:brain\/)?clients\/([a-z0-9][a-z0-9-]{0,62})\/([a-z0-9][a-z0-9-]{0,62})\.md$/;
@@ -37,8 +38,11 @@ export const brainWriteTools: ToolFactory = ({ task, deps }) => ({
           return 'Error: this looks like it contains a secret. Put logins in the Client Vault (vault tools / access link), not in brain files.';
         }
         const target = brainWriteTarget(deps.brain.root, rel);
-        fs.mkdirSync(path.dirname(target), { recursive: true });
+        const made = fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.writeFileSync(target, content.endsWith('\n') ? content : `${content}\n`, 'utf8');
+        // The worker runs as root in its container; brain/ is a host bind mount owned by the deploy user.
+        // New files/folders take brain/'s owner so `git pull` on the host (deploy/update.sh) never trips over root-owned files.
+        inheritOwner([...new Set([made, path.dirname(target)].filter((x): x is string => !!x)), target], deps.brain.root);
         deps.log?.(`[${task.agent_id}] brain_write ${path.relative(deps.brain.root, target)}`);
         return `Saved brain/${path.relative(deps.brain.root, target).split(path.sep).join('/')}.`;
       } catch (e) {

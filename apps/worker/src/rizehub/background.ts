@@ -41,6 +41,12 @@ export async function pollPendingJobs(db: HqDb, client: RizehubClient, logf: Log
   return n;
 }
 
+/**
+ * External action types the worker executes itself after approval (report publish / invite send here; onboarding
+ * inside its resumed task, tools/rizehub.ts). Every other approved action type is a MANUAL step for the CEO.
+ */
+export const WORKER_EXECUTED_ACTIONS: ReadonlySet<string> = new Set(['rizehub.report_publish', 'rizehub.invite_send', 'rizehub.onboarding']);
+
 const MAX_ATTEMPTS = 3;
 /** Approved rizehub.report_publish / rizehub.invite_send actions → the real call, once. Onboarding runs in its task. */
 export async function executeApprovedActions(db: HqDb, client: RizehubClient, logf: Logger = () => undefined): Promise<number> {

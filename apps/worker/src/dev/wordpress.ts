@@ -8,6 +8,7 @@ import type { DevEnv } from './env';
 import { apiError, httpRequest, truncate, type HttpRes, type Redactor } from './http';
 import { resolveIn, type Jail } from './jail';
 import { externalAction, type Token } from './creds';
+import { readInJail, statInJail } from './safefs';
 
 export class WpRefusal extends Error {}
 const refuse = (m: string): never => { throw new WpRefusal(m); };
@@ -130,10 +131,11 @@ export async function wpOp(c: WpCtx, jail: Jail, i: WpInput): Promise<string> {
       const ext = path.extname(abs).toLowerCase();
       const type = MEDIA_TYPES[ext];
       if (!type) refuse(`file type ${ext || '(none)'} is not allowed for uploads (${Object.keys(MEDIA_TYPES).join(' ')})`);
-      const st = fs.statSync(abs);
-      if (!st.isFile() || st.size > MAX_MEDIA) refuse(`file must exist and be ≤ ${MAX_MEDIA / 1024 / 1024} MB`);
+      let st: { isFile(): boolean; size: number } | null = null;
+      try { st = statInJail(jail, abs); } catch { st = null; }
+      if (!st || !st.isFile() || st.size > MAX_MEDIA) refuse(`file must exist and be ≤ ${MAX_MEDIA / 1024 / 1024} MB`);
       const name = path.basename(abs).replace(/[^A-Za-z0-9._-]/g, '-');
-      const r = await wp(c, 'POST', '/media', undefined, { 'content-type': type!, 'content-disposition': `attachment; filename="${name}"` }, fs.readFileSync(abs));
+      const r = await wp(c, 'POST', '/media', undefined, { 'content-type': type!, 'content-disposition': `attachment; filename="${name}"` }, readInJail(jail, abs, MAX_MEDIA));
       if (!r.ok) return apiError('Uploading media', r);
       const m = r.json as Any;
       if (i.alt_text || i.caption) {

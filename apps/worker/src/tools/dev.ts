@@ -12,6 +12,7 @@ import { defaultDevEnv, envSlug, type DevEnv } from '../dev/env';
 import { JailError, openJail, type Jail } from '../dev/jail';
 import { Redactor, truncate } from '../dev/http';
 import { workspaceFs } from '../dev/workspace';
+import { chownTreeToAgent } from '../dev/agentUser';
 import { BASE_ALLOWED_HOSTS, MAX_TIMEOUT_S, runSandboxed, ShellRefusal } from '../dev/shell';
 import * as gh from '../dev/github';
 import * as shop from '../dev/shopify';
@@ -42,7 +43,11 @@ export function createDevTools(ctx: ToolContext, env: DevEnv): ToolSet {
   const { task, deps } = ctx;
   const agent = task.agent_id;
   let jail: Jail | null = null;
-  const getJail = () => (jail ??= openJail(env.workspacesDir, task.id));
+  // With the privilege drop the jail (and anything left from an earlier run of this task) belongs to the agent uid.
+  const getJail = () => {
+    if (!jail) { jail = openJail(env.workspacesDir, task.id); chownTreeToAgent(jail.root, env.agentUser); }
+    return jail;
+  };
 
   async function call(name: string, input: Record<string, unknown>, fn: (red: Redactor) => Promise<string> | string): Promise<string> {
     const red = new Redactor(env.env);
@@ -102,7 +107,7 @@ export function createDevTools(ctx: ToolContext, env: DevEnv): ToolSet {
       start_line: z.number().int().min(1).optional(),
       end_line: z.number().int().min(1).optional(),
     }),
-    execute: async (input) => call('workspace_fs', input, () => truncate(workspaceFs(getJail(), deps.brain, input), 110_000)),
+    execute: async (input) => call('workspace_fs', input, () => truncate(workspaceFs(getJail(), deps.brain, input, env.agentUser ?? null), 110_000)),
   });
 
   // ---------------- bash_sandboxed ----------------

@@ -1,6 +1,6 @@
 // Client Vault routes (M9a). Called only by the dashboard SERVER (private network), never by browsers.
 //   auth 'secret'  POST /vault/store   {clientId, platform, label, loginUrl, username, secretType, secret, twofaMethod,
-//                                       scopeNotes, urlAllowlist, grants[], expiresAt?}      → {id}
+//                                       scopeNotes, urlAllowlist, writeAllowlist?, grants[], expiresAt?}  → {id}
 //                  POST /vault/rotate  {id, secret}                                          → {ok}
 //                  POST /vault/reveal  {id}  (CEO re-authenticated by the dashboard; logged)  → {label, secret}
 //   auth 'self'    POST /vault/access        {token, platform, label?, loginUrl, username, secretType, secret, twofaMethod, notes}
@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type http from 'node:http';
 import type { Route } from './types';
 import { createServiceClient } from '../db';
+import { workerEnv } from '../config';
 import { loadKeyring, VaultConfigError } from '../vault/crypto';
 import { createSupabaseVaultStore } from '../vault/store';
 import {
@@ -72,7 +73,7 @@ export function createVaultRoutes(o: VaultRouteOptions): Route[] {
     const msg = errMsg(e);
     if (/body too large|invalid JSON/.test(msg)) return [400, { error: msg }];
     if (/not found/.test(msg)) return [404, { error: /client/.test(msg) ? 'client not found' : 'credential not found' }];
-    if (/revoked|archived|platform not requested|bad platform|label is required/.test(msg)) return [409, { error: msg.replace(/^\w+: /, '') }];
+    if (/revoked|archived|platform not requested|bad platform|label is required|write allowlist/.test(msg)) return [409, { error: msg.replace(/^\w+: /, '') }];
     logError(`[vault] ${where} failed: ${msg.slice(0, 300)}`);
     return [500, { error: `vault ${where} failed` }];
   };
@@ -133,6 +134,6 @@ export function createVaultRoutes(o: VaultRouteOptions): Route[] {
 
 let service: VaultService | null = null;
 export const vaultRoutes: Route[] = createVaultRoutes({
-  service: () => (service ??= createVaultService(createSupabaseVaultStore(createServiceClient()), loadKeyring())),
-  secret: () => process.env.HQ_INTERNAL_SECRET ?? '',
+  service: () => (service ??= createVaultService(createSupabaseVaultStore(createServiceClient()), loadKeyring(workerEnv()))),
+  secret: () => workerEnv().HQ_INTERNAL_SECRET ?? '',
 });

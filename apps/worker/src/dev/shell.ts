@@ -3,11 +3,16 @@
 // is refused, and only a trailing `> file` / `>> file` into the jail is supported. Every argument is checked:
 // no absolute paths, no `..`, no secret files, no symlink escapes, URLs only to allowlisted hosts.
 // Children get a minimal env (PATH, HOME=jail, no tokens) and a timeout that kills the whole process group.
+// Code execution (node scripts, npm/pnpm scripts, npx of arbitrary packages, test runners) is refused unless the
+// command runs isolated from the worker's secrets: privilege drop to AGENT_UID (agentUser.ts) or DEV_SANDBOX_PREFIX.
+// In production without either, the tool refuses everything (sandboxStatus().refusal).
 import fs from 'node:fs';
 import path from 'node:path';
 import { urlAllowed } from '../vault/guards';
+import { agentIdentity, chownToAgent, sandboxStatus, type AgentIdentity } from './agentUser';
 import { which, type DevEnv, type RunResult } from './env';
-import { inside, isGitInternal, pathHasSecret, type Jail } from './jail';
+import { inside, isGitInternal, JailError, pathHasSecret, type Jail } from './jail';
+import { openForWrite } from './safefs';
 
 export class ShellRefusal extends Error {}
 const refuse = (m: string): never => { throw new ShellRefusal(m); };
@@ -84,7 +89,15 @@ export function tokenize(line: string): ParsedCommand {
 }
 
 // ---------- argument policy ----------
-export interface ShellPolicyCtx { jail: Jail; cwd: string; allowedHosts: string[] }
+export interface ShellPolicyCtx {
+  jail: Jail; cwd: string; allowedHosts: string[];
+  /** Agent code cannot read the worker's secrets (privilege drop or OS sandbox): code-running commands allowed. */
+  isolated?: boolean;
+}
+
+const NEEDS_ISOLATION = 'it runs code from the workspace, which is only allowed when agent commands are isolated from the worker '
+  + '(AGENT_UID privilege drop or DEV_SANDBOX_PREFIX; see docs/09). Ask the CEO (ask_ceo) if you need it';
+const needsIsolation = (ctx: ShellPolicyCtx, what: string) => { if (!ctx.isolated) refuse(`${what} is not allowed here: ${NEEDS_ISOLATION}.`); };
 
 const URLISH = /^[a-z][a-z0-9+.-]*:\/\//i;
 
@@ -162,6 +175,10 @@ const NPM_ALLOWED = new Set(['install', 'i', 'ci', 'add', 'remove', 'rm', 'unins
 const PM_BLOCKED = new Set(['publish', 'unpublish', 'dlx', 'exec', 'x', 'login', 'logout', 'adduser', 'token', 'config', 'set', 'owner', 'deprecate', 'dist-tag', 'access', 'team', 'org', 'star', 'hook', 'profile', 'link', 'env', 'self-update', 'setup', 'server', 'store', 'deploy']);
 const PM_BAD_FLAGS = ['--registry', '--userconfig', '--globalconfig', '--global', '-g', '--prefix', '--dir', '-C', '--workspace-root', '-w', '--location', '--script-shell', '--node-options'];
 
+/** Subcommands that never run project code (lifecycle scripts are off: npm_config_ignore_scripts=true). */
+const NPM_NO_CODE = new Set(['install', 'i', 'ci', 'add', 'remove', 'rm', 'uninstall', 'un', 'ls', 'list', 'outdated', 'audit', 'why', 'view', 'info', 'version', '--version', '-v']);
+const PNPM_NO_CODE = new Set(['install', 'i', 'add', 'remove', 'rm', 'uninstall', 'un', 'ls', 'list', 'outdated', 'audit', 'why', 'fetch', 'prune', '--version', '-v']);
+
 function pmRules(bin: 'npm' | 'pnpm', args: string[], ctx: ShellPolicyCtx) {
   const sub = args.find((a) => !a.startsWith('-')) ?? args[0];
   if (!sub) refuse(`${bin} needs a subcommand`);
@@ -170,8 +187,16 @@ function pmRules(bin: 'npm' | 'pnpm', args: string[], ctx: ShellPolicyCtx) {
   if (bin === 'pnpm' && !/^-{0,2}[a-z][a-z0-9:_-]*$/i.test(sub!)) refuse(`pnpm ${sub} is not allowed`);
   const bad = flagIn(args, PM_BAD_FLAGS);
   if (bad) refuse(`${bin} option ${bad} is not allowed (keep installs inside the workspace)`);
+  // npm run / test / start / init <initializer> and pnpm <script> execute package.json scripts or packages.
+  const noCode = bin === 'npm'
+    ? NPM_NO_CODE.has(sub!) || (sub === 'init' && args.filter((a) => !a.startsWith('-')).length === 1)
+    : PNPM_NO_CODE.has(sub!);
+  if (!noCode) needsIsolation(ctx, `"${bin} ${sub}"`);
   checkAll(args, ctx, bin);
 }
+
+/** npx packages that do not run workspace code by themselves (safe without isolation). */
+const NPX_SAFE = new Set(['@shopify/cli', '@shopify/theme-check', 'theme-check', 'typescript', 'tsc', 'eslint', 'prettier', 'lighthouse']);
 
 function npxRules(args: string[], ctx: ShellPolicyCtx): string[] {
   let k = 0;
@@ -183,9 +208,44 @@ function npxRules(args: string[], ctx: ShellPolicyCtx): string[] {
   if (!pkg) refuse('npx needs a package');
   const name = pkg!.replace(/^(@?[^@]+)@.*$/, '$1');
   if (!NPX_ALLOWED.has(name)) refuse(`npx ${name} is not allowed. Allowed: ${[...NPX_ALLOWED].join(', ')}.`);
+  if (!NPX_SAFE.has(name)) needsIsolation(ctx, `"npx ${name}"`);
   if (name === '@shopify/cli') shopifyRules(args.slice(k + 1));
+  if (name === 'lighthouse') lighthouseRules(args.slice(k + 1), ctx);
   checkAll(args.slice(k + 1), ctx, 'npx');
   return args;
+}
+
+/** lighthouse --config-path / --plugins load JavaScript from the workspace. */
+function lighthouseRules(args: string[], ctx: ShellPolicyCtx) {
+  const bad = flagIn(args, ['--config-path', '--plugins', '--chrome-flags']);
+  if (bad) needsIsolation(ctx, `lighthouse ${bad}`);
+}
+
+const NODE_EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print', '-r', '--require', '--import', '--loader', '--experimental-loader',
+  '-i', '--interactive', '--env-file', '--env-file-if-exists', '--inspect', '--inspect-brk', '--inspect-port', '--inspect-wait', '--experimental-vm-modules']);
+const NODE_OK_FLAGS = new Set(['--version', '-v', '--check', '-c', '--no-warnings', '--enable-source-maps', '--trace-warnings', '--test', '--max-old-space-size']);
+
+/** node: never inline code/preloads; only a script file that exists inside the jail, and only when isolated. */
+function nodeRules(args: string[], ctx: ShellPolicyCtx) {
+  let k = 0;
+  for (; k < args.length && args[k]!.startsWith('-'); k++) {
+    const name = args[k]!.split('=')[0]!;
+    if (NODE_EVAL_FLAGS.has(name) || /^--(inspect|require|import|eval|print|loader)/.test(name)) {
+      refuse(`node ${name} is not allowed: write the code to a file in the workspace (workspace_fs) and run that file`);
+    }
+    if (!NODE_OK_FLAGS.has(name)) refuse(`node option ${name} is not allowed`);
+  }
+  const opts = args.slice(0, k);
+  if (opts.some((a) => a === '--version' || a === '-v') && k === args.length) return;
+  const script = args[k];
+  if (script === undefined) refuse('node needs a script file in the workspace (no REPL, no stdin)');
+  checkArg(script!, ctx, 'node');
+  const abs = path.resolve(ctx.cwd, script!);
+  let real: string;
+  try { real = fs.realpathSync(abs); } catch { refuse(`script "${script}" does not exist in the workspace`); }
+  if (!inside(ctx.jail.root, real!) || !fs.statSync(real!).isFile()) refuse(`script "${script}" must be a file inside the workspace`);
+  if (!opts.includes('--check') && !opts.includes('-c')) needsIsolation(ctx, `running "node ${script}"`);
+  checkAll(args.slice(k + 1), ctx, 'node');
 }
 
 const SHOPIFY_THEME_OK = new Set(['check', 'pull', 'push', 'list', 'info', 'package', 'init', 'dev', 'language-server']);
@@ -270,8 +330,11 @@ export function planCommand(argv: string[], ctx: ShellPolicyCtx, sandboxPath: st
       const sub = args[0];
       if (!sub || !['test', 'screenshot', 'pdf', 'install', '--version'].includes(sub)) refuse('playwright: allowed subcommands are test, screenshot, pdf, install');
       if (sub === 'install' && args.includes('--with-deps')) refuse('--with-deps needs root; not allowed');
+      if (sub === 'test') needsIsolation(ctx, '"playwright test"');
       checkAll(args, ctx, cmd); break;
     }
+    case 'node': nodeRules(args, ctx); break;
+    case 'lighthouse': lighthouseRules(args, ctx); checkAll(args, ctx, cmd); break;
     case 'sed': {
       if (flagIn(args, ['--follow-symlinks'])) refuse('--follow-symlinks is not allowed');
       checkAll(args, ctx, cmd);
@@ -320,9 +383,9 @@ export function planCommand(argv: string[], ctx: ShellPolicyCtx, sandboxPath: st
 const PASS_ENV = ['LANG', 'LC_ALL', 'TZ', 'PLAYWRIGHT_BROWSERS_PATH', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy'];
 
 /** Minimal child env: PATH, HOME=jail, no tokens (proxy vars only when they carry no credentials). */
-export function sandboxEnv(jail: Jail, workerEnv: Record<string, string | undefined>, sandboxPath: string): Record<string, string> {
+export function sandboxEnv(jail: Jail, workerEnv: Readonly<Record<string, string | undefined>>, sandboxPath: string, owner?: AgentIdentity | null): Record<string, string> {
   const tmp = path.join(jail.root, '.tmp');
-  fs.mkdirSync(tmp, { recursive: true });
+  if (!fs.existsSync(tmp)) { fs.mkdirSync(tmp, { recursive: true }); chownToAgent(tmp, owner); }
   const env: Record<string, string> = {
     PATH: sandboxPath, HOME: jail.root, TMPDIR: tmp, CI: '1', NO_COLOR: '1', FORCE_COLOR: '0',
     npm_config_ignore_scripts: 'true', npm_config_update_notifier: 'false', npm_config_fund: 'false', npm_config_audit: 'false',
@@ -370,16 +433,20 @@ export interface ShellInput { command: string; cwd?: string; timeout_s?: number 
 
 /** Plans and runs one command. Throws ShellRefusal for policy refusals. */
 export async function runSandboxed(env: DevEnv, jail: Jail, allowedHosts: string[], i: ShellInput): Promise<string> {
+  const status = sandboxStatus(env.env, env.getuid);
+  if (status.refusal) refuse(status.refusal);
+  const owner = status.privilegeDrop ? env.agentUser ?? agentIdentity(env.env, env.getuid) : null;
   const parsed = tokenize(i.command);
   const cwdRel = (i.cwd ?? '.').trim() || '.';
-  const policy: ShellPolicyCtx = { jail, cwd: jail.root, allowedHosts };
+  const policy: ShellPolicyCtx = { jail, cwd: jail.root, allowedHosts, isolated: status.isolated };
   checkArg(cwdRel === '.' ? '' : cwdRel, policy, 'cwd');
   const cwd = path.resolve(jail.root, cwdRel);
   if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) refuse(`cwd "${cwdRel}" is not a directory in the workspace`);
   if (!inside(jail.root, fs.realpathSync(cwd))) refuse('cwd is outside the workspace');
   policy.cwd = cwd;
   const plan = planCommand(parsed.argv, policy, env.sandboxPath);
-  let stdoutFile: { path: string; append: boolean } | undefined;
+  const [file, args] = wrapWithPrefix(env.env.DEV_SANDBOX_PREFIX, plan.file, plan.args, jail.root);
+  let stdoutFd: number | undefined;
   let redirected: string | null = null;
   if (parsed.redirect) {
     const t = parsed.redirect.path;
@@ -389,13 +456,17 @@ export async function runSandboxed(env: DevEnv, jail: Jail, allowedHosts: string
     if (isGitInternal(path.relative(jail.root, abs).split(path.sep).join('/'))) refuse('.git internals are off limits');
     try { if (fs.lstatSync(abs).isSymbolicLink()) refuse('redirect target is a symlink'); } catch (e) { if (e instanceof ShellRefusal) throw e; }
     if (!fs.existsSync(path.dirname(abs))) refuse('redirect target folder does not exist (create it with mkdir first)');
-    stdoutFile = { path: abs, append: parsed.redirect.append };
+    // Opened here (race-safe, never through a symlink, owned by the agent uid), handed to the child as its stdout.
+    try { stdoutFd = openForWrite(jail, abs, { append: parsed.redirect.append, owner }); } catch (e) {
+      if (e instanceof JailError) refuse(e.message);
+      throw e;
+    }
     redirected = path.relative(jail.root, abs);
   }
   const timeoutS = Math.min(Math.max(1, Math.round(i.timeout_s ?? DEFAULT_TIMEOUT_S)), MAX_TIMEOUT_S);
-  const [file, args] = wrapWithPrefix(env.env.DEV_SANDBOX_PREFIX, plan.file, plan.args, jail.root);
   const r = await env.run(file, args, {
-    cwd, env: sandboxEnv(jail, env.env, env.sandboxPath), timeoutMs: timeoutS * 1000, stdoutFile, maxCaptureBytes: 512 * 1024,
+    cwd, env: sandboxEnv(jail, env.env, env.sandboxPath, owner), timeoutMs: timeoutS * 1000, stdoutFd, maxCaptureBytes: 512 * 1024,
+    ...(owner ? { uid: owner.uid, gid: owner.gid } : {}),
   });
   return formatResult(r, plan.display, timeoutS, redirected);
 }

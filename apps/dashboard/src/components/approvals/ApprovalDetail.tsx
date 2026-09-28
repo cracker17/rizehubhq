@@ -1,9 +1,10 @@
 'use client';
 import { forwardRef } from 'react';
-import { CheckCircle2, XCircle, ExternalLink, FileText, Link2, HelpCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, ExternalLink, FileText, Link2, HelpCircle, AlertTriangle, Hand } from 'lucide-react';
 import clsx from 'clsx';
 import { useHq } from '@/lib/data/store';
 import { asAction, asDeliverable, asPlan, money, relDay, timeHM } from '@/lib/data/derive';
+import { actionExecution } from '@/lib/data/actions';
 import type { ApprovalRow, QaVerdictJson, TaskOutput } from '@/lib/data/types';
 import { Avatar } from '../Avatar';
 import { KIND } from '../approvalKinds';
@@ -176,12 +177,25 @@ function DeliverableDetail({ ap }: { ap: ApprovalRow }) {
 // ---------- action ----------
 function ActionDetail({ ap, onPickOption }: { ap: ApprovalRow; onPickOption?: (o: string) => void }) {
   const p = asAction(ap);
+  const exec = actionExecution(ap);
   const isQuestion = p.type === 'question';
   const Icon = isQuestion ? HelpCircle : AlertTriangle;
   const text = p.question ?? p.action ?? p.reason ?? ap.summary ?? ap.title;
   return (
     <>
-      <Section title={isQuestion ? 'Question' : p.type === 'qa_escalation' ? 'QA escalation' : p.type === 'task_failed' ? 'Agent is stuck' : 'Action to approve'}>
+      {exec.executor === 'manual' && (
+        <section className="item p-4" style={{ borderColor: 'color-mix(in oklab, var(--color-warning) 45%, transparent)' }} aria-label="Manual step">
+          <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-warning)]">
+            <Hand size={17} aria-hidden className="shrink-0" /> Manual step: you do this after approving
+          </p>
+          <p className="mt-1 text-[13px] text-[var(--color-muted)]">
+            Nothing runs automatically for {exec.actionType ? <code className="text-[var(--color-ink)]">{exec.actionType}</code> : 'this action'}.
+            Approving records your OK; then carry it out yourself exactly as specified:
+          </p>
+          {exec.spec && <p className="mt-2.5 whitespace-pre-wrap break-words rounded-[10px] border border-[var(--color-line)] p-3 text-sm leading-relaxed">{exec.spec}</p>}
+        </section>
+      )}
+      <Section title={isQuestion ? 'Question' : p.type === 'qa_escalation' ? 'QA escalation' : p.type === 'qa_stuck' ? 'QA can\'t review this' : p.type === 'task_failed' ? 'Agent is stuck' : 'Action to approve'}>
         <div className="flex items-start gap-3">
           <Icon size={20} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden />
           <p className="text-[15px] leading-relaxed">{text}</p>

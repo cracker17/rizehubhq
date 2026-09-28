@@ -1,6 +1,7 @@
 // Button + "What should change?" flow (docs/08 "Approval messages"). Framework-free so it is testable:
 // index.ts adapts grammY contexts to these calls.
 import type { BotDb } from './db';
+import { is2fa } from './format';
 import { renderApproval } from './notifier';
 import type { PendingNotes } from './pending';
 import type { Decision } from './types';
@@ -19,6 +20,12 @@ const TOAST: Record<string, string> = {
   action_approved: 'Approved', action_changes_requested: 'Sent back with your note', action_rejected: 'Rejected',
 };
 
+/** A one-time code as typed ("482 913" → "482913"); null when it doesn't look like one. */
+export function normalizeOtp(text: string): string | null {
+  const code = text.replace(/\s+/g, '');
+  return /^[A-Za-z0-9-]{4,12}$/.test(code) ? code : null;
+}
+
 /** A tap on ✅ / ✏️ / ❌. Re-checks the approval is still pending before applying. */
 export async function onButton(d: DecisionDeps, chatId: number, messageId: number, approvalId: string, action: Decision, now = Date.now()): Promise<ButtonOutcome> {
   const ap = await d.db.getApproval(approvalId);
@@ -26,6 +33,11 @@ export async function onButton(d: DecisionDeps, chatId: number, messageId: numbe
   if (ap.status !== 'pending') {
     const { text, markup } = renderApproval(ap, d.names(), d.dashboardUrl, d.tz());
     return { kind: 'edit', text, markup, toast: 'Already decided' };
+  }
+  // Vault 2FA: ✅ and ✏️ both mean "here is the code", which must be typed; ❌ declines.
+  if (is2fa(ap) && action !== 'reject') {
+    d.pending.set(chatId, approvalId, messageId, now, 'approve');
+    return { kind: 'ask_note', toast: 'Type the code', prompt: `Reply with the one-time code for “${ap.title}” (digits only). It is passed to the agent's login and never shown or logged. /cancel to stop.` };
   }
   if (action === 'changes') {
     d.pending.set(chatId, approvalId, messageId, now);
@@ -44,11 +56,29 @@ async function apply(d: DecisionDeps, approvalId: string, action: Decision, note
   return { kind: 'edit', text, markup, toast: result.startsWith('already_') ? 'Already decided' : TOAST[result] ?? 'Done' };
 }
 
-/** A text message while a note is pending: it becomes the change note. Returns null when nothing was pending. */
+/**
+ * A text message while a note is pending: it becomes the change note (or, for a Vault 2FA question, the code, applied
+ * as 'approve'). Returns null when nothing was pending. `secret` = the CEO's message holds a code: delete it from the chat.
+ */
 export async function onNoteText(d: DecisionDeps, chatId: number, text: string, now = Date.now()):
-  Promise<{ messageId: number; edit: { text: string; markup: InlineMarkup }; reply: string } | null> {
-  const p = d.pending.take(chatId, now);
+  Promise<{ messageId: number; edit: { text: string; markup: InlineMarkup }; reply: string; secret?: boolean } | null> {
+  const p = d.pending.peek(chatId, now);
   if (!p) return null;
+  if (p.decision === 'approve') {
+    const code = normalizeOtp(text);
+    const ap = await d.db.getApproval(p.approvalId);
+    if (!code && ap?.status === 'pending') {
+      // Keep waiting for the code (the entry stays pending); nothing is decided.
+      const { text: t, markup } = renderApproval(ap, d.names(), d.dashboardUrl, d.tz());
+      return { messageId: p.messageId, edit: { text: t, markup }, reply: 'That doesn\'t look like a one-time code (4–12 letters/digits). Send just the code, or /cancel.', secret: true };
+    }
+    d.pending.take(chatId, now);
+    const out = await apply(d, p.approvalId, 'approve', code ?? text.trim());
+    const already = out.toast === 'Already decided';
+    return { messageId: p.messageId, edit: { text: out.text, markup: out.markup }, secret: true,
+      reply: already ? 'That request was already closed, so the code was not used.' : '🔐 Code sent to the agent\'s login. I deleted your message.' };
+  }
+  d.pending.take(chatId, now);
   const note = text.trim();
   const out = await apply(d, p.approvalId, 'changes', note);
   return { messageId: p.messageId, edit: { text: out.text, markup: out.markup }, reply: out.toast === 'Already decided' ? 'That one was already decided, so your note was not applied.' : `✏️ ${out.toast}.` };

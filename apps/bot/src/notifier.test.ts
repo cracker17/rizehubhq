@@ -5,7 +5,7 @@ import { onButton, onNoteText, type DecisionDeps } from './decisions';
 import { PendingNotes } from './pending';
 import { approval, FakeBotDb } from './fakeBotDb';
 import type { InlineMarkup } from './keyboard';
-import type { BotReport } from './types';
+import type { BotApproval, BotReport } from './types';
 
 class FakeSender implements Sender {
   sent: { chatId: number; text: string; markup?: InlineMarkup; id: number }[] = [];
@@ -144,4 +144,61 @@ test('a change note after 10 minutes is not applied (the text is treated as a no
   assert.equal(ask.toast, 'Type your answer');
   assert.equal(await onNoteText(d, 42, 'B', 10 * 60_000 + 1), null);
   assert.equal(db.decisions.length, 0);
+});
+
+const twofa = (p: Partial<BotApproval> = {}) => approval({
+  kind: 'external_action', title: '2FA code needed: Madam Muse store', summary: 'Reply with the code only.',
+  payload: { type: 'question', question: 'Reply with the code only.', options: [], vault: { kind: '2fa', credential_id: 'c1' } }, ...p,
+});
+
+test('2FA: ✅ with no code asks for the code (no decision, no crash); the typed code is applied as approve and hidden', async () => {
+  const db = new FakeBotDb();
+  const ap = twofa(); db.approvals.push(ap);
+  const d = decisionDeps(db);
+  const ask = await onButton(d, 42, 500, ap.id, 'approve', 0);
+  assert.equal(ask.kind, 'ask_note');
+  assert.equal(ask.toast, 'Type the code');
+  assert.match(ask.kind === 'ask_note' ? ask.prompt : '', /one-time code/);
+  assert.equal(db.decisions.length, 0);
+
+  const bad = await onNoteText(d, 42, 'which code?', 1000);
+  assert.match(bad!.reply, /doesn't look like a one-time code/);
+  assert.equal(bad!.secret, true);
+  assert.equal(db.decisions.length, 0, 'still waiting for the code');
+
+  const res = await onNoteText(d, 42, ' 482 913 ', 2000);
+  assert.deepEqual(db.decisions, [{ id: ap.id, decision: 'approve', note: '482913' }]);
+  assert.equal(res!.secret, true, 'index.ts deletes the CEO message holding the code');
+  assert.match(res!.reply, /Code sent/);
+  assert.match(res!.edit.text, /🔐 Code sent by you 14:02/);
+  assert.ok(!res!.edit.text.includes('482913'), 'the code is never echoed in the chat');
+  assert.equal(await onNoteText(d, 42, 'a new request', 3000), null, 'consumed');
+});
+
+test('2FA: ✏️ Answer also records approve + code (never "changes"); ❌ declines without asking', async () => {
+  const db = new FakeBotDb();
+  const ap = twofa(); db.approvals.push(ap);
+  const d = decisionDeps(db);
+  assert.equal((await onButton(d, 42, 500, ap.id, 'changes', 0)).kind, 'ask_note');
+  await onNoteText(d, 42, '111222', 1000);
+  assert.deepEqual(db.decisions, [{ id: ap.id, decision: 'approve', note: '111222' }]);
+  assert.equal(db.approvals[0]!.status, 'approved');
+
+  const ap2 = twofa(); db.approvals.push(ap2);
+  const out = await onButton(d, 42, 501, ap2.id, 'reject', 0);
+  assert.equal(out.kind, 'edit');
+  assert.equal(db.approvals[1]!.status, 'rejected');
+});
+
+test('2FA: a code typed after the request expired is not used', async () => {
+  const db = new FakeBotDb();
+  const ap = twofa(); db.approvals.push(ap);
+  const d = decisionDeps(db);
+  await onButton(d, 42, 500, ap.id, 'approve', 0);
+  Object.assign(db.approvals[0]!, { status: 'rejected', ceo_note: '[2FA request expired]', decided_at: '2026-09-28T06:00:00Z' });
+  const res = await onNoteText(d, 42, '123456', 1000);
+  assert.match(res!.reply, /already closed/);
+  assert.equal(db.decisions.length, 0);
+  assert.match(res!.edit.text, /Expired/);
+  assert.ok(!res!.edit.text.includes('123456'));
 });

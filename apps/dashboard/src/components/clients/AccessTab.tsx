@@ -87,6 +87,11 @@ function CredentialCard({ c, log, onReveal, onEdit, onRotate, onRevoke, onReacti
         <div className="flex flex-wrap items-center gap-2"><span className="text-[var(--color-dim)]">Agents:</span><AgentChips ids={c.grants} /></div>
         {c.scope_notes && <p className="text-[var(--color-muted)]"><span className="text-[var(--color-dim)]">Scope: </span>{c.scope_notes}</p>}
         {c.url_allowlist.length > 0 && <p className="break-all font-mono text-xs text-[var(--color-dim)]">{c.url_allowlist.join('  ·  ')}</p>}
+        {c.url_allowlist.length > 0 && (
+          <p className="break-all text-xs text-[var(--color-dim)]">
+            API writes: {c.write_allowlist?.length ? <span className="font-mono">{c.write_allowlist.join('  ·  ')}</span> : 'none (read-only)'}
+          </p>
+        )}
         {c.status === 'check_needed' && (
           <p className="rounded-lg bg-[color-mix(in_oklab,var(--color-danger)_14%,transparent)] px-3 py-2 text-[#ff8a8d]">
             {c.failed_login_count >= 2 ? 'Login failed twice, so agents stopped trying (so the client\'s account doesn\'t lock).' : 'An agent reported a problem.'} Fix it at {PLATFORM_LABEL[c.platform] ?? c.platform}, then Rotate or Mark fixed.

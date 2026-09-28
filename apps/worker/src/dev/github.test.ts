@@ -194,3 +194,25 @@ test('no token configured → clear instruction, no calls', async () => {
   assert.match(await run(s.tools, 'github', { op: 'open_pr', repo: 'acme/theme', title: 't' }), /GITHUB_TOKEN_DEFAULT is not set/);
   assert.equal(f.fetchCalls.length, 0);
 });
+
+test('privilege drop: git without a token runs as the agent uid; clone/push (token) run as the worker uid and hand files over', async () => {
+  const s = setup({ head: 'agent/x' });
+  s.env.agentUser = { uid: 1001, gid: 1001 };
+  const chowned: string[] = [];
+  const real = fs.lchownSync;
+  (fs as { lchownSync: typeof fs.lchownSync }).lchownSync = ((p: fs.PathLike) => { chowned.push(String(p)); }) as typeof fs.lchownSync;
+  try {
+    await run(s.tools, 'github', { op: 'clone', repo: 'acme/theme', dir: 'theme' });
+    const clone = s.runCalls.find((c) => gitSub(c) === 'clone')!;
+    assert.equal(clone.opts.uid, undefined, 'the token-carrying clone never runs as the agent uid');
+    assert.ok(clone.opts.env.RIZEHUB_GIT_TOKEN);
+    assert.ok(chowned.some((p) => p.endsWith(`${path.sep}theme`)), 'cloned files are chowned to the agent');
+    await run(s.tools, 'github', { op: 'create_branch', dir: 'theme' });
+    const plain = s.runCalls.filter((c) => gitSub(c) !== 'clone');
+    assert.ok(plain.length > 0);
+    for (const c of plain) {
+      assert.equal(c.opts.uid, 1001, `git ${gitSub(c)} runs as the agent`);
+      assert.equal(c.opts.env.RIZEHUB_GIT_TOKEN, undefined);
+    }
+  } finally { (fs as { lchownSync: typeof fs.lchownSync }).lchownSync = real; }
+});

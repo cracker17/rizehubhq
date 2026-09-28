@@ -27,13 +27,13 @@ export class FakeVaultStore implements VaultStore {
     this.creds.set(c.id, {
       id: c.id, client_id: c.clientId, platform: c.platform, label: c.label, login_url: c.loginUrl, username: c.username,
       secret_type: c.secretType, twofa_method: c.twofaMethod, scope_notes: c.scopeNotes, url_allowlist: c.urlAllowlist,
-      status: 'active', expires_at: c.expiresAt, last_used_at: null, sealed: c.sealed, failed_login_count: 0,
+      write_allowlist: c.writeAllowlist ?? [], status: 'active', expires_at: c.expiresAt, last_used_at: null, sealed: c.sealed, failed_login_count: 0,
       grants: new Set(c.grants), created_by: 'ceo',
     });
     await this.logAccess({ credentialId: c.id, agentId: 'ceo', taskId: null, action: 'store', success: true });
     return c.id;
   }
-  async redeemAccessRequest(tokenHash: string, c: Omit<NewCredential, 'clientId' | 'urlAllowlist' | 'expiresAt' | 'grants'>) {
+  async redeemAccessRequest(tokenHash: string, c: Omit<NewCredential, 'clientId' | 'urlAllowlist' | 'writeAllowlist' | 'expiresAt' | 'grants'>) {
     const l = this.links.find((x) => x.tokenHash === tokenHash && !x.usedAt && x.expiresAt > Date.now());
     if (!l) return null;
     if (!l.platforms.includes(c.platform) && !l.platforms.includes('other')) throw new Error('platform not requested');
@@ -71,7 +71,7 @@ export class FakeVaultStore implements VaultStore {
     if (c.status === 'revoked') throw new VaultDenied('revoked');
     if (c.status === 'check_needed' || c.failed_login_count >= 2) throw new VaultDenied('check needed');
     const { grants: _g, created_by: _c, ...rest } = c;
-    return { ...rest, url_allowlist: [...c.url_allowlist] };
+    return { ...rest, url_allowlist: [...c.url_allowlist], write_allowlist: [...c.write_allowlist] };
   }
   async listForAgent(agentId: string, clientId: string): Promise<AgentCredentialList> {
     const client = this.clients.get(clientId);
@@ -116,15 +116,26 @@ export class FakeVaultStore implements VaultStore {
     await this.logAccess({ credentialId: id, agentId, taskId, action: 'twofa_request', success: true });
     return ap.id;
   }
+  /** Mirrors vault_take_2fa_code (20260928070000_review_fixes.sql): one handover, every other outcome scrubs. */
   async take2faCode(approvalId: string): Promise<TwofaAnswer> {
     const ap = this.approvals.find((a) => a.id === approvalId);
     if (!ap) throw new Error('not a 2FA request');
     if (ap.status === 'pending') return { status: 'pending' };
-    if (ap.ceo_note === '[2FA code used]') return { status: 'used' };
-    if (ap.status !== 'approved' || !ap.ceo_note) return { status: ap.status as 'rejected' };
-    const code = ap.ceo_note;
-    ap.ceo_note = '[2FA code used]';
-    return { status: 'approved', code };
+    const note = ap.ceo_note ?? '';
+    if (ap.status === 'approved' && note && !note.startsWith('[2FA ')) {
+      ap.ceo_note = '[2FA code used]';
+      return { status: 'approved', code: note };
+    }
+    if (note && !note.startsWith('[2FA ')) ap.ceo_note = '[2FA code discarded]';
+    if (note === '[2FA code used]') return { status: 'used' };
+    if (note === '[2FA request expired]') return { status: 'expired' };
+    return { status: ap.status === 'approved' ? 'no_code' : (ap.status as 'rejected') };
+  }
+  async expire2fa(approvalId: string) {
+    const ap = this.approvals.find((a) => a.id === approvalId);
+    if (!ap) return;
+    if (ap.status === 'pending') { ap.status = 'rejected'; ap.ceo_note = '[2FA request expired]'; }
+    else if (ap.ceo_note && !ap.ceo_note.startsWith('[2FA ')) ap.ceo_note = '[2FA code expired]';
   }
   /** Test helper: the CEO answers an approval (e.g. types the 2FA code in Telegram). */
   answer(approvalId: string, status: 'approved' | 'rejected', note: string | null) {

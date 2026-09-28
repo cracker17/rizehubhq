@@ -18,6 +18,8 @@ export interface CredentialMeta {
   twofa_method: TwofaMethod;
   scope_notes: string | null;
   url_allowlist: string[];
+  /** "METHOD /path-prefix" entries vault_api may write to; empty = read-only (GET/HEAD). */
+  write_allowlist: string[];
   status: CredentialStatus;
   expires_at?: string | null;
   last_used_at?: string | null;
@@ -44,6 +46,8 @@ export interface NewCredential {
   twofaMethod: TwofaMethod;
   scopeNotes: string | null;
   urlAllowlist: string[];
+  /** Default: read-only. */
+  writeAllowlist?: string[];
   expiresAt: string | null;
   grants: string[];
 }
@@ -60,7 +64,10 @@ export interface AccessLogEntry {
   detail?: Record<string, unknown>;
 }
 
-export type TwofaAnswer = { status: 'pending' | 'rejected' | 'changes_requested' | 'used' } | { status: 'approved'; code: string };
+/** 'no_code': approved without a usable code; 'expired': the tool gave up (vault_expire_2fa). */
+export type TwofaAnswer =
+  | { status: 'pending' | 'rejected' | 'changes_requested' | 'used' | 'no_code' | 'expired' }
+  | { status: 'approved'; code: string };
 
 /** Raised by the database for grant / status refusals ("vault: not granted", "vault: revoked", …). */
 export class VaultDenied extends Error {}
@@ -68,7 +75,7 @@ export class VaultDenied extends Error {}
 export interface VaultStore {
   insertCredential(c: NewCredential): Promise<string>;
   /** null when the token is unknown, used, cancelled or expired. */
-  redeemAccessRequest(tokenHash: string, c: Omit<NewCredential, 'clientId' | 'urlAllowlist' | 'expiresAt' | 'grants'>): Promise<string | null>;
+  redeemAccessRequest(tokenHash: string, c: Omit<NewCredential, 'clientId' | 'urlAllowlist' | 'writeAllowlist' | 'expiresAt' | 'grants'>): Promise<string | null>;
   accessRequestState(tokenHash: string): Promise<AccessLinkState>;
   rotateSecret(id: string, sealed: Sealed): Promise<void>;
   /** CEO reveal/rotate: no grant check (the dashboard re-authenticated the CEO). */
@@ -81,6 +88,8 @@ export interface VaultStore {
   reportProblem(id: string, agentId: string, taskId: string | null, issue: string): Promise<string>;
   request2fa(id: string, agentId: string, taskId: string | null, question: string): Promise<string>;
   take2faCode(approvalId: string): Promise<TwofaAnswer>;
+  /** The tool stopped waiting: a pending question is closed (late answers are refused) and any code is scrubbed. */
+  expire2fa(approvalId: string): Promise<void>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -99,7 +108,7 @@ export function createSupabaseVaultStore(sb: SupabaseClient): VaultStore {
     return data as T;
   }
   const one = <T>(data: unknown): T | null => ((Array.isArray(data) ? data[0] : data) as T | undefined) ?? null;
-  const credArgs = (c: Omit<NewCredential, 'clientId' | 'urlAllowlist' | 'expiresAt' | 'grants'>) => ({
+  const credArgs = (c: Omit<NewCredential, 'clientId' | 'urlAllowlist' | 'writeAllowlist' | 'expiresAt' | 'grants'>) => ({
     p_id: c.id, p_platform: c.platform, p_label: c.label, p_login_url: c.loginUrl, p_username: c.username,
     p_secret_type: c.secretType, p_cipher: toPgBytea(c.sealed.cipher), p_iv: toPgBytea(c.sealed.iv),
     p_key_version: c.sealed.keyVersion, p_twofa: c.twofaMethod, p_scope_notes: c.scopeNotes,
@@ -108,7 +117,7 @@ export function createSupabaseVaultStore(sb: SupabaseClient): VaultStore {
   return {
     insertCredential: (c) => rpc<string>('vault_insert_credential', {
       ...credArgs(c), p_client: c.clientId, p_url_allowlist: c.urlAllowlist, p_expires_at: c.expiresAt,
-      p_created_by: 'ceo', p_grants: c.grants,
+      p_created_by: 'ceo', p_grants: c.grants, p_write_allowlist: c.writeAllowlist ?? [],
     }),
     redeemAccessRequest: async (tokenHash, c) => (await rpc<string | null>('vault_redeem_access_request', { p_token_hash: tokenHash, ...credArgs(c) })) ?? null,
     accessRequestState: (tokenHash) => rpc<AccessLinkState>('vault_access_request_state', { p_token_hash: tokenHash }),
@@ -128,10 +137,14 @@ export function createSupabaseVaultStore(sb: SupabaseClient): VaultStore {
       return {
         ...(meta as unknown as Omit<CredentialForUse, 'sealed'>),
         url_allowlist: (meta.url_allowlist as string[] | null) ?? [],
+        write_allowlist: (meta.write_allowlist as string[] | null) ?? [],
         sealed: { cipher: fromPgBytea(secret_cipher), iv: fromPgBytea(secret_iv), keyVersion: Number(key_version) },
       };
     },
-    listForAgent: (agentId, clientId) => rpc<AgentCredentialList>('vault_list_for_agent', { p_agent: agentId, p_client: clientId }),
+    listForAgent: async (agentId, clientId) => {
+      const l = await rpc<AgentCredentialList>('vault_list_for_agent', { p_agent: agentId, p_client: clientId });
+      return { ...l, granted: l.granted.map((c) => ({ ...c, url_allowlist: c.url_allowlist ?? [], write_allowlist: c.write_allowlist ?? [] })) };
+    },
     resolveClientId: async (ref) => {
       const q = sb.from('clients').select('id');
       const { data, error } = await (isUuid(ref) ? q.eq('id', ref) : q.or(`slug.eq.${ref.replace(/[^a-z0-9-]/gi, '')},name.ilike.${ref.replace(/[^a-z0-9 .&'-]/gi, '')}`)).limit(1);
@@ -146,5 +159,6 @@ export function createSupabaseVaultStore(sb: SupabaseClient): VaultStore {
     reportProblem: (id, agentId, taskId, issue) => rpc<string>('vault_report_problem', { p_credential: id, p_agent: agentId, p_task: taskId, p_issue: issue }),
     request2fa: (id, agentId, taskId, question) => rpc<string>('vault_request_2fa', { p_credential: id, p_agent: agentId, p_task: taskId, p_question: question }),
     take2faCode: (approvalId) => rpc<TwofaAnswer>('vault_take_2fa_code', { p_approval: approvalId }),
+    expire2fa: async (approvalId) => { await rpc('vault_expire_2fa', { p_approval: approvalId }); },
   };
 }

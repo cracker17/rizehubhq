@@ -72,6 +72,17 @@ test('vault routes need the internal secret and validate input without echoing s
   assert.ok(!big.text.includes(PW));
   assert.equal((await call('/vault/store', storeBody({ clientId: '0c000000-0000-4000-8000-0000000000ff' }))).status, 404);
   assert.equal((await call('/vault/store', '{nope')).status, 400);
+  const badWrite = await call('/vault/store', storeBody({ writeAllowlist: ['DELETE /wp-json/wp/v2/posts'] }));
+  assert.equal(badWrite.status, 400);
+  assert.match(String(badWrite.body.error), /writeAllowlist.*write entry/);
+}));
+
+test('/vault/store keeps the write allowlist (default: read-only)', () => withServer(async (call, { store }) => {
+  const ro = await call('/vault/store', storeBody());
+  assert.deepEqual(store.creds.get(String(ro.body.id))!.write_allowlist, []);
+  const rw = await call('/vault/store', storeBody({ writeAllowlist: ['POST /wp-json/wp/v2/posts', ' PUT https://vinylicons.com/wp-json/wp/v2/pages '] }));
+  assert.equal(rw.status, 200);
+  assert.deepEqual(store.creds.get(String(rw.body.id))!.write_allowlist, ['POST /wp-json/wp/v2/posts', 'PUT https://vinylicons.com/wp-json/wp/v2/pages']);
 }));
 
 test('without VAULT_MASTER_KEY the routes answer 503', () => withServer(async (call) => {

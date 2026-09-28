@@ -3,8 +3,10 @@
 #   worker    → no public port; reachable as http://hq-worker:4000 from the dashboard (default network)
 #               and from RizeHub (shared external network `rizehub-internal`, webhooks → /hooks/rizehub)
 #   bot       → Telegram long polling, no inbound port
-# Before the first `up`: `docker network create rizehub-internal` (deploy/setup-vps.sh does it) and a filled .env
-# (`pnpm check:env -- --production`). Images are tagged :latest; deploy/update.sh keeps :previous for rollback.
+# Before the first `up`: `docker network create rizehub-internal` (deploy/setup-vps.sh does it), a filled master .env,
+# then `node scripts/split-env.mjs` → .env.dashboard / .env.bot / .env.worker (each container gets ONLY its own
+# variables: the dashboard never sees the service-role or vault key) and `pnpm check:env -- --split --production`.
+# Images are tagged :latest; deploy/update.sh keeps :previous for rollback.
 name: rizehubhq
 
 x-logging: &logging
@@ -15,7 +17,7 @@ services:
   dashboard:
     image: rizehubhq-dashboard:latest
     build: { context: ., dockerfile: apps/dashboard/Dockerfile }
-    env_file: .env
+    env_file: .env.dashboard                   # NEXT_PUBLIC_SUPABASE_*, HQ_WORKER_URL, HQ_INTERNAL_SECRET, DASHBOARD_URL only
     environment:
       HQ_WORKER_URL: http://hq-worker:4000     # overrides the localhost value used in dev
       AGENTS_DIR: /app/agents
@@ -33,7 +35,7 @@ services:
     image: rizehubhq-worker:latest
     build: { context: ., dockerfile: apps/worker/Dockerfile }
     container_name: hq-worker                  # stable DNS name for the dashboard and RizeHub webhooks
-    env_file: .env
+    env_file: .env.worker                      # AI/vault/RizeHub/platform keys; no Telegram token, no DB password
     environment:
       AGENTS_DIR: /app/agents
       BRAIN_DIR: /app/brain
@@ -43,9 +45,15 @@ services:
     expose: ["4000"]                           # internal networks only, never `ports:`
     volumes:
       - ./agents:/app/agents:ro
-      - ./brain:/app/brain                     # writable by uid 1001 (pwuser) only if you chown it; reads work as-is
+      - ./brain:/app/brain                     # written by the worker (root in the container); new files take brain/'s owner
       - ./config:/app/config:ro
-      - workspaces:/app/workspaces
+      - workspaces:/app/workspaces             # jails owned by AGENT_UID (deploy/fix-perms.sh)
+    # The worker runs as root INSIDE the container only to start agent commands as AGENT_UID (1001): agent code
+    # can then not read the worker's secrets (/proc/<pid>/environ needs the same uid or CAP_SYS_PTRACE; docs/09).
+    # Everything else root could do is dropped: only the capabilities that job needs are kept.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
+    security_opt: ["no-new-privileges:true"]
     networks: [default, rizehub-internal]
     shm_size: 1gb                              # headless Chromium (QA screenshots, vault_login)
     init: true
@@ -57,7 +65,7 @@ services:
   bot:
     image: rizehubhq-bot:latest
     build: { context: ., dockerfile: apps/bot/Dockerfile }
-    env_file: .env
+    env_file: .env.bot                         # Supabase service key + Telegram only
     init: true
     restart: unless-stopped
     mem_limit: 256m

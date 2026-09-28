@@ -1,6 +1,7 @@
 // RizeHub HQ worker (docs/05-ORCHESTRATION.md): COO planner, specialist runner, QA reviewer,
 // stale-task requeue, idle shuffler, scheduled reports (M7) and the internal chat/health endpoint.
-import { config } from './config';
+import { config, scrubProcessEnv, workerEnv } from './config';
+import { sandboxStatus } from './dev/agentUser';
 import { createBrain } from './brain';
 import { createServiceClient } from './db';
 import { createSupabaseHqDb } from './hqdb';
@@ -18,13 +19,21 @@ async function main() {
     process.exit(0);
   }
 
+  // Secrets leave process.env (kept in the frozen workerEnv() snapshot) so later helpers don't inherit them.
+  const scrubbed = scrubProcessEnv();
+  const shell = sandboxStatus(workerEnv());
+  if (shell.warning) console.warn(shell.warning);
+  else console.log(`[worker] agent commands isolated: ${shell.privilegeDrop ? `uid ${workerEnv().AGENT_UID}` : ''}${shell.privilegeDrop && shell.osSandbox ? ' + ' : ''}${shell.osSandbox ? 'DEV_SANDBOX_PREFIX' : ''}`);
+  console.log(`[worker] ${scrubbed.length} secret variable(s) removed from process.env`);
+
   const roles = listRoleIds().map((id) => loadRole(id));
   const models = loadModelsConfig();
   const profile = config.modelProfile ?? models.active_profile;
   const db = createSupabaseHqDb(createServiceClient());
   const picker = new ModelPicker({
-    cfg: models, profile, env: process.env, monthlyBudgetUsd: config.monthlyBudgetUsd,
+    cfg: models, profile, env: workerEnv(), monthlyBudgetUsd: config.monthlyBudgetUsd,
     spentThisMonthUsd: await db.monthSpendUsd().catch(() => 0),
+    monthSpend: () => db.monthSpendUsd(),
   });
   const deps: WorkerDeps = {
     db, brain: createBrain(), pickModel: picker.pick, loadRole: (id) => loadRole(id),

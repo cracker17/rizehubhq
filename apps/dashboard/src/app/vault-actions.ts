@@ -88,6 +88,15 @@ function allowlist(v: unknown): string[] | false {
   return out;
 }
 
+/** "PUT /admin/api/2025-07/themes/123/assets.json" per line (POST/PUT/PATCH + a path or https URL); max 25. */
+const WRITE_ENTRY = /^(POST|PUT|PATCH) (\/|https:\/\/)\S{0,500}$/;
+function writeAllowlist(v: unknown): string[] | false {
+  const lines = (Array.isArray(v) ? v : typeof v === 'string' ? v.split(/\n/) : []).map((x) => String(x).trim().replace(/\s+/g, ' ')).filter(Boolean);
+  if (lines.length > 25) return false;
+  const out = lines.map((l) => l.replace(/^(post|put|patch)\b/i, (m) => m.toUpperCase()));
+  return out.every((l) => WRITE_ENTRY.test(l)) ? out : false;
+}
+
 function grantsOf(v: unknown): string[] {
   return Array.isArray(v) ? [...new Set(v.map(String).filter((a) => AGENT.test(a)))].slice(0, 40) : [];
 }
@@ -110,13 +119,15 @@ export interface CredentialInput {
   twofaMethod: TwofaMethod;
   scopeNotes?: string | null;
   urlAllowlist?: string[] | string;
+  /** vault_api writes; empty = read-only. */
+  writeAllowlist?: string[] | string;
   expiresAt?: string | null;
   grants?: string[];
 }
 
 function validateMeta(i: CredentialInput): { error: string } | {
   platform: string; label: string; loginUrl: string | null; username: string | null; secretType: SecretType; twofaMethod: TwofaMethod;
-  scopeNotes: string | null; urlAllowlist: string[]; expiresAt: string | null; grants: string[];
+  scopeNotes: string | null; urlAllowlist: string[]; writeAllowlist: string[]; expiresAt: string | null; grants: string[];
 } {
   const platform = String(i.platform ?? '').trim().toLowerCase();
   if (!PLATFORM.test(platform)) return { error: 'Pick a platform.' };
@@ -126,13 +137,15 @@ function validateMeta(i: CredentialInput): { error: string } | {
   if (loginUrl === false) return { error: 'The login URL must be an https URL.' };
   const urls = allowlist(i.urlAllowlist);
   if (urls === false) return { error: 'Allowed URLs: one https URL per line (max 25).' };
+  const writes = writeAllowlist(i.writeAllowlist);
+  if (writes === false) return { error: 'Allowed API writes: one "PUT /path" per line (POST, PUT or PATCH; max 25).' };
   const exp = expiry(i.expiresAt);
   if (exp === false) return { error: 'Expiry must be a date.' };
   return {
     platform, label, loginUrl, username: text(i.username, 200),
     secretType: SECRET_TYPES.includes(i.secretType) ? i.secretType : 'password',
     twofaMethod: TWOFA.includes(i.twofaMethod) ? i.twofaMethod : 'none',
-    scopeNotes: text(i.scopeNotes, 2000), urlAllowlist: urls, expiresAt: exp, grants: grantsOf(i.grants),
+    scopeNotes: text(i.scopeNotes, 2000), urlAllowlist: urls, writeAllowlist: writes, expiresAt: exp, grants: grantsOf(i.grants),
   };
 }
 
@@ -150,7 +163,7 @@ export async function storeCredentialAction(input: CredentialInput & { secret: s
     const id = demoVault().addCredential({
       client_id: input.clientId, platform: m.platform, label: m.label, login_url: m.loginUrl, username: m.username,
       secret_type: m.secretType, twofa_method: m.twofaMethod, scope_notes: m.scopeNotes, url_allowlist: m.urlAllowlist,
-      expires_at: m.expiresAt, created_by: 'ceo', grants: m.grants,
+      write_allowlist: m.writeAllowlist, expires_at: m.expiresAt, created_by: 'ceo', grants: m.grants,
     });
     return { ok: true, id };
   }
@@ -169,7 +182,7 @@ export async function updateCredentialAction(input: CredentialInput & { id: stri
     try {
       demoVault().updateCredential(input.id, {
         platform: m.platform, label: m.label, login_url: m.loginUrl, username: m.username, twofa_method: m.twofaMethod,
-        scope_notes: m.scopeNotes, url_allowlist: m.urlAllowlist, expires_at: m.expiresAt,
+        scope_notes: m.scopeNotes, url_allowlist: m.urlAllowlist, write_allowlist: m.writeAllowlist, expires_at: m.expiresAt,
       });
       demoVault().updateCredential(input.id, { grants: m.grants });
       return { ok: true };
@@ -178,6 +191,7 @@ export async function updateCredentialAction(input: CredentialInput & { id: stri
   const up = await ceo.db.rpc('vault_update_credential', {
     p_id: input.id, p_label: m.label, p_login_url: m.loginUrl, p_username: m.username, p_twofa: m.twofaMethod,
     p_scope_notes: m.scopeNotes, p_url_allowlist: m.urlAllowlist, p_expires_at: m.expiresAt, p_platform: m.platform, p_status: null,
+    p_write_allowlist: m.writeAllowlist,
   });
   if (up.error) return { ok: false, error: friendly(up.error.message) };
   return setGrantsAction({ id: input.id, agents: m.grants });

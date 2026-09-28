@@ -12,7 +12,9 @@
     "db:types": "supabase gen types typescript --local > packages/shared/src/db.types.ts",
     "db:reset": "supabase db reset",
     "db:test": "node scripts/db-test.mjs",
-    "test": "pnpm -r --if-present test",
+    "test:integration": "node scripts/integration/run.mjs",
+    "test": "pnpm -r --if-present test && node --test scripts/env.test.mjs",
+    "test:scripts": "node --test scripts/env.test.mjs",
     "check:roles": "pnpm --filter worker check:roles",
     "check:env": "node scripts/check-env.mjs"
   },

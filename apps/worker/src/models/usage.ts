@@ -3,6 +3,7 @@
 import { APICallError, RetryError, type LanguageModel, type LanguageModelUsage } from 'ai';
 import type { ModelRole } from '@rizehubhq/shared';
 import { chooseCandidate, createModel, QuotaExhaustedError, type Candidate, type ModelsConfig, type Provider } from './router';
+import { manilaDay, manilaMonth } from '../budget';
 
 /** USD per million tokens. Anthropic prices from docs/14 (Sep 2026). */
 export interface Price { input: number; output: number; cacheRead?: number }
@@ -54,7 +55,6 @@ export function isQuotaError(e: unknown, depth = 0): boolean {
   return cause ? isQuotaError(cause, depth + 1) : false;
 }
 
-function manilaDay(d = new Date()) { return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }); }
 
 export interface ModelPickerOptions {
   cfg: ModelsConfig;
@@ -63,18 +63,45 @@ export interface ModelPickerOptions {
   monthlyBudgetUsd: number;
   spentThisMonthUsd?: number;
   create?: (c: Candidate) => Promise<LanguageModel>;
+  /** Month-to-date spend from the DB (Asia/Manila month). Re-read every refreshEveryMs and right after a month change. */
+  monthSpend?: () => Promise<number>;
+  refreshEveryMs?: number;
+  now?: () => Date;
 }
 
 export class ModelPicker {
-  private day = manilaDay();
+  private day: string;
+  private month: string;
+  private refreshedAt: number;
   private requestsToday: Partial<Record<Provider, number>> = {};
   spentThisMonthUsd: number;
 
-  constructor(private opts: ModelPickerOptions) { this.spentThisMonthUsd = opts.spentThisMonthUsd ?? 0; }
+  constructor(private opts: ModelPickerOptions) {
+    const now = this.now();
+    this.day = manilaDay(now);
+    this.month = manilaMonth(now);
+    this.refreshedAt = now.getTime();
+    this.spentThisMonthUsd = opts.spentThisMonthUsd ?? 0;
+  }
+
+  private now() { return this.opts.now?.() ?? new Date(); }
 
   private rollDay() {
-    const d = manilaDay();
+    const now = this.now();
+    const d = manilaDay(now);
     if (d !== this.day) { this.day = d; this.requestsToday = {}; }
+    const m = manilaMonth(now);
+    if (m !== this.month) { this.month = m; this.spentThisMonthUsd = 0; this.refreshedAt = -Infinity; } // new budget month
+  }
+
+  /** Re-reads month-to-date spend from the DB. Never lowers the in-memory figure within the same month
+   * (costs of running tasks are only written to the DB when the task ends). */
+  async refreshSpend(): Promise<void> {
+    if (!this.opts.monthSpend) return;
+    const month = this.month;
+    this.refreshedAt = this.now().getTime();
+    const v = await this.opts.monthSpend();
+    if (month === this.month && Number.isFinite(v)) this.spentThisMonthUsd = Math.max(this.spentThisMonthUsd, v);
   }
 
   /** After a provider 429, treat its daily cap as used so the router falls back. */
@@ -85,6 +112,9 @@ export class ModelPicker {
 
   pick: PickModel = async (role, o = {}) => {
     this.rollDay();
+    if (this.opts.monthSpend && this.now().getTime() - this.refreshedAt >= (this.opts.refreshEveryMs ?? 5 * 60_000)) {
+      await this.refreshSpend().catch(() => undefined); // keep the last known figure if the DB is unreachable
+    }
     const c = chooseCandidate(role, this.opts.cfg, {
       profile: this.opts.profile, env: this.opts.env, monthlyBudgetUsd: this.opts.monthlyBudgetUsd, override: o.override ?? null,
       usage: { requestsToday: this.requestsToday, spentThisMonthUsd: this.spentThisMonthUsd },

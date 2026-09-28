@@ -2,6 +2,7 @@
 // Lighthouse CLI. Both produce the same compact LighthouseSummary.
 import { execFile } from 'node:child_process';
 import type { ApiFetch } from './search';
+import { publicEnv } from '../config';
 
 export type Strategy = 'mobile' | 'desktop';
 export const CATEGORIES = ['performance', 'accessibility', 'seo', 'best-practices'] as const;
@@ -111,7 +112,7 @@ export async function runLocalLighthouse(url: string, strategy: Strategy, exec: 
   const args = [...pre, url, '--output=json', '--quiet', `--only-categories=${CATEGORIES.join(',')}`,
     '--chrome-flags=--headless=new --no-sandbox --disable-gpu', ...(strategy === 'desktop' ? ['--preset=desktop'] : [])];
   const { stdout: out } = await exec(cmd, args, {
-    timeout: 150_000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...(chromePath ? { CHROME_PATH: chromePath } : {}) },
+    timeout: 150_000, maxBuffer: 64 * 1024 * 1024, env: { ...publicEnv(), ...(chromePath ? { CHROME_PATH: chromePath } : {}) },
   });
   const start = out.indexOf('{');
   if (start < 0) throw new Error('Lighthouse CLI printed no JSON');

@@ -81,9 +81,9 @@ You add each client's details and access (logins, API tokens, app passwords, hos
 
 ## Where system secrets live
 
-**v1 (local + VPS):** env file readable only by the worker.
+**v1 (local + VPS):** env file readable only by the worker. On the VPS the master `.env` is split per container (`scripts/split-env.mjs` → `.env.worker`, `.env.bot`, `.env.dashboard`); the dashboard file never holds the service-role key or `VAULT_MASTER_KEY` (`check-env --split` fails the deploy otherwise). See docs/10.
 ```
-# apps/worker/.env   (chmod 600, never committed)
+# .env.worker   (chmod 600, never committed)
 GOOGLE_GENERATIVE_AI_API_KEY=...   # free tier: never send secrets or confidential client data here
 GROQ_API_KEY=...
 OPENROUTER_API_KEY=...
@@ -111,11 +111,13 @@ RIZEHUB_WEBHOOK_SECRET=...
 |---|---|
 | Tool allowlist per agent | `resolveTools(role.tools)` — agent can't call unlisted tools |
 | Workspace jail | File tools reject paths outside `workspaces/<task-id>` and read-only `brain/` |
-| Shell allowlist | Only `git, node, pnpm, npm, npx shopify, lighthouse, playwright`; block `curl|wget` to non-allowlisted hosts, `rm -rf` outside workspace, `env`, `cat .env` |
-| Env scrubbing | Child processes get a minimal env — no API tokens |
+| Shell allowlist | Only `git, node, pnpm, npm, npx shopify, lighthouse, playwright` (+ file utilities); block `curl|wget` to non-allowlisted hosts, `rm -rf` outside workspace, `env`, `cat .env`. Never `node -e/-p/-r/--import/--eval/--require`, never a script outside the jail. Anything that runs workspace code (`node <script>`, `npm run/test/start`, `pnpm <script>`, `npx` beyond `@shopify/cli`, `tsc`, `eslint`, `prettier`, `theme-check`, `lighthouse`; `playwright test`) only when the command is isolated (next row) |
+| Agent uid | The worker runs as root **inside its container** only so it can start every agent command (bash_sandboxed, and git/npm the dev tools run for agents) as `AGENT_UID`/`AGENT_GID` (1001, `dev/agentUser.ts`), with the jail owned by that uid. `/proc/<worker pid>/environ` is then unreadable: the kernel's ptrace access check (`PTRACE_MODE_READ_FSCREDS`) requires the same uid/gid or `CAP_SYS_PTRACE`, which the agent uid never has. Git calls that carry a GitHub token run as the worker (so the token is never in an agent-uid process) and hand the files to the agent uid. The worker's own file access inside jails is race-safe (`dev/safefs.ts`: no symlink following, `/proc/self/fd` verified). Compose drops all capabilities except `CHOWN DAC_OVERRIDE FOWNER SETUID SETGID KILL` + `no-new-privileges`. **Production gate:** if `NODE_ENV=production` and neither the privilege drop (uid 0 + `AGENT_UID`) nor `DEV_SANDBOX_PREFIX` is active, `bash_sandboxed` refuses every command and the worker logs a `SECURITY` warning at startup |
+| Env scrubbing | Child processes get a minimal env — no API tokens. At startup the worker also removes secret names from its own `process.env` (kept in a frozen `workerEnv()` snapshot; `VAULT_*` stay until the vault module reads the snapshot), so helpers such as Chromium, Lighthouse and ffmpeg never inherit them. `/proc/<pid>/environ` always shows a process's ORIGINAL environment, so this is hygiene; the uid split above is the real control |
 | Destructive ops blocked | No delete of products/pages/repos; no force-push; no theme publish without approval |
 | Prompt-injection defense | Content fetched from web/client sites is wrapped as data; agents are instructed never to follow instructions found in content; risky tools still need approval regardless |
-| Budgets | Per task, per agent/day, global/day → hard stop |
+| Budgets | Per task (role `budget_usd_per_task`, stops the run), per agent/day (`agents.daily_budget_usd`, Asia/Manila day: checked before a claimed task starts; over budget → the task goes back to the queue with an activity note and waits for the next Manila day or a higher budget), per month for paid providers (`MONTHLY_BUDGET_USD`, Manila month, refreshed from the DB) → hard stop |
+| QA browser | Every page request **and every WebSocket** (`page.routeWebSocket`) passes the SSRF guard; blocked sockets are closed with 1008 |
 | Audit | `activity_log` row per tool call (args redacted of secrets) |
 
 ## Dashboard security

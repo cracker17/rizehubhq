@@ -31,6 +31,7 @@ export function CredentialForm({ clientId, initial, onDone, onCancel }: {
   const [twofa, setTwofa] = useState<TwofaMethod>(initial?.twofa_method ?? 'none');
   const [scope, setScope] = useState(initial?.scope_notes ?? '');
   const [allow, setAllow] = useState((initial?.url_allowlist ?? []).join('\n'));
+  const [writes, setWrites] = useState((initial?.write_allowlist ?? []).join('\n'));
   const [expires, setExpires] = useState(initial?.expires_at ? initial.expires_at.slice(0, 10) : '');
   const [grants, setGrants] = useState<string[]>(initial?.grants ?? SUGGESTED_GRANTS.shopify ?? []);
   const [touchedGrants, setTouchedGrants] = useState(editing);
@@ -46,7 +47,7 @@ export function CredentialForm({ clientId, initial, onDone, onCancel }: {
     setError(null);
     const meta = {
       clientId, platform, label, loginUrl, username, secretType, twofaMethod: twofa, scopeNotes: scope,
-      urlAllowlist: allow, expiresAt: expires || null, grants,
+      urlAllowlist: allow, writeAllowlist: writes, expiresAt: expires || null, grants,
     };
     start(async () => {
       const r = initial ? await updateCredentialAction({ ...meta, id: initial.id }) : await storeCredentialAction({ ...meta, secret });
@@ -117,6 +118,11 @@ export function CredentialForm({ clientId, initial, onDone, onCancel }: {
       <Field label="Allowed URLs (one per line; enforced by the worker)" hint="vault_api only calls these; vault_login may also open the login site.">
         <textarea className={`${textareaCls} font-mono text-xs`} rows={2} value={allow} onChange={(e) => setAllow(e.target.value)}
           placeholder={'https://store.myshopify.com/admin/themes\nhttps://store.myshopify.com/admin/api'} spellCheck={false} />
+      </Field>
+      <Field label="Allowed API writes (one per line; everything else is read-only)"
+        hint="METHOD /path, e.g. PUT /admin/api/2025-07/themes/123/assets.json. Publishing (theme role, site publish, status=publish) always needs your approval.">
+        <textarea className={`${textareaCls} font-mono text-xs`} rows={2} value={writes} onChange={(e) => setWrites(e.target.value)}
+          placeholder={'PUT /admin/api/2025-07/themes/123/assets.json\nPOST /wp-json/wp/v2/posts'} spellCheck={false} />
       </Field>
       <AgentPicker value={grants} onChange={(v) => { setGrants(v); setTouchedGrants(true); }} />
       {error && <p role="alert" className="text-sm text-[#ff8a8d]">{error}</p>}

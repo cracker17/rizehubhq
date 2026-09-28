@@ -176,7 +176,7 @@ Write tools marked external (account/workspace creation, invites, report publish
 | `ask_ceo(question, options?)` | Creates an approval of kind `external_action` / question; pauses the task | DB write + Telegram ping |
 | `request_external_action(type, spec)` | Proposes publish/send/merge — executes only after you approve | queued until approved |
 
-Rule of thumb: **tools that change the outside world never execute directly** — they create an approval, and the worker executes the action only after `approved`.
+Rule of thumb: **tools that change the outside world never execute directly** — they create an approval, and the action happens only after `approved`: the worker executes the types it has an executor for (`rizehub.report_publish`, `rizehub.invite_send`, `rizehub.onboarding`); every other `request_external_action` type is stored with `executor: "manual"` and shown as "Manual step: you do this after approving" (the CEO carries it out).
 
 ## Model & cost policy
 

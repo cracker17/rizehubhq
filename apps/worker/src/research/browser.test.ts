@@ -105,3 +105,17 @@ test('resolveChromiumPath: env first, then the newest chromium-* under the known
   assert.equal(p, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome');
   assert.equal(resolveChromiumPath({}, () => false, () => []), undefined);
 });
+
+test('WebSockets go through the same SSRF guard (page.route never sees them)', async () => {
+  const { browser, e } = env({
+    [URL1]: { title: 'Live chat', sockets: ['wss://chat.example/socket', 'ws://169.254.169.254/latest', 'wss://internal.example/ws', 'ws://127.0.0.1:6379/'] },
+  });
+  const r = await collectConsoleErrors(URL1, e);
+  const page = browser.pages[0]!;
+  assert.deepEqual(page.wsUnguarded, [], 'every socket hit the guard');
+  assert.deepEqual(page.wsConnected, ['wss://chat.example/socket']);
+  assert.deepEqual(page.wsClosed.map((w) => [w.url, w.code]), [
+    ['ws://169.254.169.254/latest', 1008], ['wss://internal.example/ws', 1008], ['ws://127.0.0.1:6379/', 1008],
+  ]);
+  assert.ok(r.blocked.some((b) => b.startsWith('ws://169.254.169.254/latest (WebSocket')));
+});

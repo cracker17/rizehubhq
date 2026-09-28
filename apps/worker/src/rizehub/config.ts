@@ -1,5 +1,6 @@
 // RizeHub connection settings (worker env only; agents never see keys). RIZEHUB_API_URL unset or "mock" →
 // the in-memory mock (same contract) so local dev and tests never touch a real RizeHub (CLAUDE.md rule 9).
+import { workerEnv } from '../config';
 import { API_PREFIX, KEY_GROUPS, type KeyGroup } from './contract';
 import { RizehubClient, type ClientOptions } from './client';
 import { MOCK_KEYS, MockRizehub, mockFetch } from './mock';
@@ -13,7 +14,7 @@ export interface RizehubConfig {
   jobWaitMs: number;
 }
 
-export function rizehubConfig(env: NodeJS.ProcessEnv = process.env): RizehubConfig {
+export function rizehubConfig(env: Readonly<Record<string, string | undefined>> = workerEnv()): RizehubConfig {
   const raw = (env.RIZEHUB_API_URL ?? '').trim();
   const mock = raw === '' || raw.toLowerCase() === 'mock';
   const keys: Partial<Record<KeyGroup, string>> = {};

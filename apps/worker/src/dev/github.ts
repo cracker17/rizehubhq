@@ -5,6 +5,9 @@
 // * the token reaches git only through a GIT_ASKPASS helper in a worker-private dir, via the env of git
 //   processes started by this tool; never in argv, never in the repo config, never in the agent's bash env
 // * git runs with hooks disabled and the repo's local config is checked for command-executing keys first
+// * privilege drop (agentUser.ts): git calls WITHOUT a token run as the agent uid (like bash_sandboxed). Calls that
+//   carry the token (clone, push) run as the worker's uid instead, so no agent-uid process can read the token from
+//   /proc/<git pid>/environ; the files they create are chowned to the agent afterwards.
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DevEnv } from './env';
@@ -12,6 +15,7 @@ import { apiError, httpRequest, truncate, type HttpRes, type Redactor } from './
 import { inside, isSecretName, resolveIn, type Jail } from './jail';
 import { externalAction, type Token } from './creds';
 import { sandboxEnv } from './shell';
+import { chownTreeToAgent } from './agentUser';
 
 export const API = 'https://api.github.com';
 const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -59,13 +63,21 @@ export const GIT_SAFE_FLAGS = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsm
 export interface GitCtx { env: DevEnv; jail: Jail; red: Redactor }
 
 async function git(g: GitCtx, cwd: string, args: string[], token?: Token, timeoutMs = 300_000) {
-  const base = sandboxEnv(g.jail, g.env.env, g.env.sandboxPath);
-  const env: Record<string, string> = { ...base, HOME: g.env.helperDir(), GIT_CONFIG_GLOBAL: '/dev/null' };
+  const owner = g.env.agentUser ?? null;
+  const base = sandboxEnv(g.jail, g.env.env, g.env.sandboxPath, owner);
+  const env: Record<string, string> = { ...base, GIT_CONFIG_GLOBAL: '/dev/null' };
+  let flags = GIT_SAFE_FLAGS;
   if (token) {
+    env.HOME = g.env.helperDir();
     env.GIT_ASKPASS = askpassPath(g.env);
     env.RIZEHUB_GIT_TOKEN = token.token;
+    // The worker's uid runs git on an agent-owned repo: allow exactly this repo (git's "dubious ownership" check).
+    if (owner) flags = [...GIT_SAFE_FLAGS, '-c', `safe.directory=${cwd}`];
+  } else if (!owner) {
+    env.HOME = g.env.helperDir();
   }
-  const r = await g.env.run('git', [...GIT_SAFE_FLAGS, ...args], { cwd, env, timeoutMs });
+  const ids = !token && owner ? { uid: owner.uid, gid: owner.gid } : {};
+  const r = await g.env.run('git', [...flags, ...args], { cwd, env, timeoutMs, ...ids });
   const text = g.red.apply(`${r.stdout}${r.stderr ? `\n${r.stderr}` : ''}`.trim());
   return { ok: r.code === 0 && !r.timedOut, text: r.timedOut ? `timed out. ${text}` : text, stdout: r.stdout };
 }
@@ -102,6 +114,7 @@ export async function clone(g: GitCtx, token: Token, repoIn: string, dirIn?: str
   if (depth) args.push('--depth', String(Math.min(Math.max(1, Math.floor(depth)), 1000)));
   args.push('--', `https://github.com/${repo}.git`, abs);
   const r = await git(g, g.jail.root, args, token);
+  chownTreeToAgent(abs, g.env.agentUser); // cloned by the worker's uid (token call): hand the files to the agent uid
   if (!r.ok) return `Clone failed: ${truncate(r.text, 2000)}`;
   return `Cloned ${repo} into ${dir}/. Next: github op "create_branch" with dir "${dir}".`;
 }
@@ -140,6 +153,7 @@ export async function commitPush(g: GitCtx, token: Token, dir: string, message: 
   }
   // Explicit URL + fixed refspec: remote config (pushurl, mirror, force refspecs) is never used.
   const p = await git(g, cwd, ['push', '--no-verify', '--porcelain', `https://github.com/${repo}.git`, `HEAD:refs/heads/${branch}`], token);
+  chownTreeToAgent(path.join(cwd, '.git'), g.env.agentUser);
   if (!p.ok) {
     const nonFf = /non-fast-forward|fetch first|rejected/i.test(p.text);
     return `Push failed${nonFf ? ' (the remote branch has commits you do not have; force-push is never allowed — pull/rebase onto origin first)' : ''}: ${truncate(p.text, 2000)}`;

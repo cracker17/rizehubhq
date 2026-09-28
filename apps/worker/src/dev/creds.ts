@@ -80,5 +80,5 @@ export async function clientOf(ctx: ToolContext) {
 /** Standard reply for anything that must go through the CEO. */
 export function externalAction(type: string, spec: string): string {
   return `Refused: this changes the live/outside world and is never done by agents. Propose it instead with `
-    + `request_external_action({ type: "${type}", spec: ${JSON.stringify(spec)} }); the CEO approves and the worker executes it. Continue your task.`;
+    + `request_external_action({ type: "${type}", spec: ${JSON.stringify(spec)} }); the CEO approves and then does it by hand (no automatic executor for this type). Continue your task.`;
 }
