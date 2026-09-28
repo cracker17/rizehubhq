@@ -2,5 +2,7 @@
 import type { ToolFactory } from './types';
 import { vaultTools } from './vault';
 import { rizehubTools } from './rizehub';
+import { devTools } from './dev';
+import { researchTools } from './research';
 
-export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools];
+export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools, devTools, researchTools];
