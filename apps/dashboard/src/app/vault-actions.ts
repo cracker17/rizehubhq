@@ -14,8 +14,9 @@ import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv, workerEnv } from '@/lib/env';
 import { CRED_COLS, PLATFORMS, type CredentialView, type SecretType, type TwofaMethod } from '@/lib/data/vault';
 import { demoVault } from '@/lib/data/vaultDemo';
+import { ensureStepUp } from '@/lib/auth/mfaServer';
 
-export type VaultResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+export type VaultResult<T = object> = ({ ok: true } & T) | { ok: false; error: string; stepUp?: boolean };
 
 const SECRET_TYPES: SecretType[] = ['password', 'api_token', 'app_password', 'ssh_key', 'other'];
 const TWOFA: TwofaMethod[] = ['none', 'sms', 'email', 'app', 'collaborator'];
@@ -265,7 +266,7 @@ function limited(map: Map<string, { n: number; reset: number }>, key: string, ma
   return h.n > max;
 }
 
-export async function revealSecretAction(input: { id: string; password: string }): Promise<VaultResult<{ label: string; secret: string; showMs: number }>> {
+export async function revealSecretAction(input: { id: string; password: string; totp?: string | null }): Promise<VaultResult<{ label: string; secret: string; showMs: number }>> {
   if (!ID.test(String(input.id ?? ''))) return { ok: false, error: 'Unknown credential.' };
   const password = typeof input.password === 'string' ? input.password : '';
   if (!password) return { ok: false, error: 'Enter your password to reveal.' };
@@ -274,6 +275,9 @@ export async function revealSecretAction(input: { id: string; password: string }
   if (ceo.demo) {
     try { return { ok: true, ...demoVault().reveal(input.id), showMs: 30_000 }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Failed.' }; }
   }
+  // 2FA on → a TOTP code is required for every reveal (docs/06 "Auth"), checked before the password attempt counts.
+  const step = await ensureStepUp(ceo.db, (s) => (s.factorId ? 'required' : 'not_needed'), input.totp);
+  if (!step.ok) return step;
   if (limited(revealTries, ceo.userId, 5, 10 * 60_000)) return { ok: false, error: 'Too many reveal attempts. Wait 10 minutes.' };
   if (!ceo.email) return { ok: false, error: 'Your account has no email to re-authenticate with.' };
   // Re-authenticate on a throwaway client (no cookies), then drop that extra session locally.
@@ -282,7 +286,6 @@ export async function revealSecretAction(input: { id: string; password: string }
   const { data, error } = await check.auth.signInWithPassword({ email: ceo.email, password });
   if (error || data.user?.id !== ceo.userId) return { ok: false, error: 'Wrong password.' };
   await check.auth.signOut({ scope: 'local' }).catch(() => undefined);
-  // TODO(2FA): once Supabase MFA is on, require a fresh TOTP challenge here too (docs/06 "Auth").
   const r = await callWorker<{ label: string; secret: string }>('/vault/reveal', { id: input.id });
   if (r.status !== 200 || !('secret' in r.body)) return { ok: false, error: friendly(r.body.error ?? 'Could not reveal it.') };
   return { ok: true, label: r.body.label, secret: r.body.secret, showMs: 30_000 };

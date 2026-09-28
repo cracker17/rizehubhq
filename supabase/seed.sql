@@ -17,7 +17,6 @@ insert into settings (key, value) values
 ('daily_budget_usd', '10'),
 ('digest_time', '"18:00"'),
 ('timezone', '"Asia/Manila"'),
-('auto_approve_plans', 'false'),
 ('idle_activities', '["coffee","lounge_sofa","lobby","ping_pong","foosball","chat","gym"]'),
 ('model_profile', '"free"'),
 ('monthly_budget_usd', '0');

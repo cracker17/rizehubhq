@@ -20,6 +20,8 @@ export class FakeBotDb implements BotDb {
   requests: NewRequest[] = [];
   decisions: { id: string; decision: Decision; note: string | null }[] = [];
   now = () => new Date('2026-09-28T06:02:00Z');
+  /** Mirrors ceo_step_up_guard(): the CEO has 2FA on, so the bot (service role) can't approve high-risk actions. */
+  ceoHasTotp = false;
 
   async getSettings() { return { ...this.settings }; }
   async setPaused(paused: boolean) { this.settings.paused = paused; }
@@ -37,6 +39,9 @@ export class FakeBotDb implements BotDb {
       decision = 'approve';
     }
     if (decision === 'changes' && !note?.trim()) throw new Error('say what should change');
+    if (this.ceoHasTotp && decision === 'approve' && a.kind === 'external_action' && (a.payload as { type?: string } | null)?.type === 'external_action') {
+      throw new Error('step_up_required: confirm with a fresh 2FA code in the dashboard');
+    }
     this.decisions.push({ id, decision, note });
     a.status = decision === 'approve' ? 'approved' : decision === 'reject' ? 'rejected' : 'changes_requested';
     a.ceo_note = note; a.decided_at = this.now().toISOString(); a.decided_via = 'telegram';

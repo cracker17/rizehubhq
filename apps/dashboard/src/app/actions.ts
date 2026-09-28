@@ -6,14 +6,18 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { loadLiveSnapshot } from '@/lib/data/loaders';
 import { workerEnv } from '@/lib/env';
+import { approvalRisk, isStepUpError, needsTotpAtSignIn, safeNext, stepUpNeed } from '@/lib/auth/stepUp';
+import { ensureStepUp, totpState, verifyTotp } from '@/lib/auth/mfaServer';
 import type { Decision, HqSnapshot, Priority } from '@/lib/data/types';
 
-export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+/** `stepUp: true` = retry with a fresh 2FA code (the UI opens the code dialog). */
+export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string; stepUp?: boolean };
 
 const PRIORITIES: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const DECISIONS: Decision[] = ['approve', 'changes', 'reject'];
 
 function friendly(message: string): string {
+  if (isStepUpError(message)) return 'Confirm with a fresh 2FA code.';
   if (/not allowed|permission denied|42501/i.test(message)) return 'This account is not allowed to do that (not the CEO).';
   if (/JWT|session/i.test(message)) return 'Your session expired. Sign in again.';
   return message;
@@ -46,7 +50,12 @@ export async function createRequestAction(input: {
   return { ok: true, id: String(res.data) };
 }
 
-export async function decideApprovalAction(input: { id: string; decision: Decision; note: string | null }): Promise<ActionResult<{ result: string }>> {
+/**
+ * CEO decision. Approving a HIGH-RISK external action (approvalRisk) needs a fresh TOTP step-up once 2FA is set up:
+ * without `totp` the result is { ok: false, stepUp: true } and the UI asks for the code; with it the code is verified
+ * (session → aal2 + fresh amr) right before decide_approval, which checks the same thing in the database.
+ */
+export async function decideApprovalAction(input: { id: string; decision: Decision; note: string | null; totp?: string | null }): Promise<ActionResult<{ result: string }>> {
   if (!DECISIONS.includes(input.decision)) return { ok: false, error: 'Unknown decision.' };
   const note = input.note?.trim() ? input.note.trim().slice(0, 4000) : null;
   if (input.decision === 'changes' && !note) return { ok: false, error: 'Say what should change.' };
@@ -54,8 +63,20 @@ export async function decideApprovalAction(input: { id: string; decision: Decisi
 
   const { db, error } = await liveClient();
   if (!db) return { ok: false, error };
+  if (input.decision === 'approve') {
+    const ap = await db.from('approvals').select('kind,payload').eq('id', input.id).maybeSingle();
+    if (ap.error) return { ok: false, error: friendly(ap.error.message) };
+    // No row = not visible to this session (not the CEO / unknown id): decide_approval gives the precise error.
+    if (ap.data) {
+      const risk = approvalRisk(ap.data as { kind: string; payload: Record<string, unknown> });
+      const step = await ensureStepUp(db, (s) => stepUpNeed({
+        decision: input.decision, risk, enrolled: s.factorId !== null, totpAt: s.totpAt, nowSec: Math.floor(Date.now() / 1000),
+      }), input.totp);
+      if (!step.ok) return step;
+    }
+  }
   const res = await db.rpc('decide_approval', { p_approval: input.id, p_decision: input.decision, p_note: note, p_via: 'dashboard' });
-  if (res.error) return { ok: false, error: friendly(res.error.message) };
+  if (res.error) return { ok: false, error: friendly(res.error.message), stepUp: isStepUpError(res.error.message) || undefined };
   const result = String(res.data ?? '');
   if (result.startsWith('already_')) return { ok: false, error: `Already decided (${result.replace('already_', '').replace('_', ' ')}), probably from Telegram.` };
   return { ok: true, result };
@@ -113,9 +134,26 @@ export async function signInAction(_prev: { error: string | null }, form: FormDa
   if (!email || !password) return { error: 'Enter your email and password.' };
   const { error } = await db.auth.signInWithPassword({ email, password });
   if (error) return { error: /invalid/i.test(error.message) ? 'Wrong email or password.' : error.message };
-  // TODO(2FA): require TOTP via Supabase MFA before continuing — see apps/dashboard/README.md "Two-factor (TODO)".
-  const next = String(form.get('next') ?? '/');
-  redirect(next.startsWith('/') && !next.startsWith('//') ? next : '/');
+  const next = safeNext(form.get('next'));
+  // 2FA: with a verified TOTP factor the password alone gives an aal1 session; the TOTP step upgrades it to aal2.
+  const state = await totpState(db);
+  if (state && needsTotpAtSignIn({ currentLevel: state.currentLevel, hasVerifiedFactor: state.factorId !== null })) {
+    redirect(`/login?step=totp&next=${encodeURIComponent(next)}`);
+  }
+  redirect(next);
+}
+
+/** Second sign-in step: the 6-digit code from the authenticator app. */
+export async function verifySignInTotpAction(_prev: { error: string | null }, form: FormData): Promise<{ error: string | null }> {
+  const db = await createSupabaseServer();
+  if (!db) redirect('/');
+  const state = await totpState(db);
+  if (!state) redirect('/login');
+  const next = safeNext(form.get('next'));
+  if (!state.factorId) redirect(next);
+  const v = await verifyTotp(db, state.factorId, form.get('code'));
+  if (!v.ok) return { error: v.error };
+  redirect(next);
 }
 
 export async function signOutAction() {

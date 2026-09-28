@@ -121,9 +121,35 @@ RIZEHUB_WEBHOOK_SECRET=...
 | Audit | `activity_log` row per tool call (args redacted of secrets) |
 
 ## Dashboard security
-- Supabase Auth, single CEO account, RLS (see 03). Add TOTP when deployed.
+- Supabase Auth, single CEO account, RLS (see 03), TOTP 2FA (below).
 - Service-role key only on the server (worker, bot, Next.js server actions) — never `NEXT_PUBLIC_*`.
 - HTTPS only in production (Caddy/Nginx + Let's Encrypt).
+- The browser can't write `approvals` (or the auto-approve rules) directly: every decision goes through `decide_approval()`.
+
+### Two-factor (TOTP)
+Supabase Auth MFA with an authenticator app (migration `20260929000000_totp_auto_approve.sql`, dashboard `src/lib/auth/`).
+
+| | What happens |
+|---|---|
+| **Enroll** | Settings → *Two-factor sign-in* → *Set up 2FA*: `mfa.enroll({ factorType: 'totp' })` shows the QR code and setup key **once** (never stored or logged by HQ), then a code from the app verifies it (`mfa.challengeAndVerify`). Half-finished enrollments are removed when you start again. |
+| **Sign in** | Password → `/login?step=totp` → 6-digit code → session is `aal2`. The middleware keeps an `aal1` session on that step, and the database agrees: `is_ceo()` is false for an `aal1` session once the CEO has a verified factor, so RLS shows nothing and every workflow RPC refuses. |
+| **Step-up** | A TOTP code verified in the **last 5 minutes** (JWT `amr` entry `totp`, `ceo_totp_fresh(300)`) is required to: approve a **high-risk** approval, turn on (or save an enabled) auto-approve rule, and reveal a Client Vault secret (every reveal asks for a code). The dashboard asks for the code in a dialog and verifies it right before the RPC; `decide_approval()` / `save_auto_approve_rule()` check the JWT themselves (`ceo_step_up_guard()`). |
+| **Telegram** | The bot uses the service role and can't do a TOTP step-up, so once 2FA is on it can no longer **approve** high-risk actions ("Needs your 2FA code: approve this one in the dashboard"). Reject / request changes, plans, deliverables and questions still work there. |
+| **Not enrolled** | Nothing changes (password only, Telegram approves everything). Set 2FA up right after deploying. |
+
+**High-risk** = `approvals.kind = 'external_action'` with `payload.type = 'external_action'`: every agent/tool/sales proposal that changes the outside world (publish, merge, deploy, send, spend, `rizehub.*` actions, outreach email batches and single emails). Not high-risk: plans, deliverables, agent questions (`question`), failures (`task_failed`, `qa_stuck`, `qa_escalation`, `planning_failed`, `vault_problem`) and Vault 2FA code relays. The agent-written `risk` label is shown but never lowers this. Mirrors: `approval_is_high_risk()` (SQL) and `approvalRisk()` (dashboard). Rejecting or requesting changes never needs a step-up.
+
+**Recovery (lost phone).** Delete the CEO's TOTP factor with the service role; the next sign-in is password-only and Settings offers *Set up 2FA* again.
+```ts
+// server-side script with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (never in the browser)
+const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false } }).auth.admin;
+const { data } = await admin.mfa.listFactors({ userId: ceoUserId });
+for (const f of data?.factors ?? []) await admin.mfa.deleteFactor({ userId: ceoUserId, id: f.id });
+```
+or in the Supabase SQL editor: `delete from auth.mfa_factors where user_id = (select id from auth.users where email = 'you@example.com');`
+(Supabase signs the user out of sessions that used the factor.) The SQL editor / migrations run without a JWT and are never step-up-checked.
+
+**Setup:** TOTP must be enabled in the Supabase project (Dashboard → Authentication → Multi-Factor → TOTP: enroll + verify; locally `[auth.mfa.totp]` in `supabase/config.toml` is already on).
 
 ## Client trust
 - Tell clients you use AI-assisted workflows with scoped, revocable access, and that a human (you) approves every change that goes live.

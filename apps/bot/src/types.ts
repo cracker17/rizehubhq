@@ -15,7 +15,7 @@ export interface BotApproval {
   status: ApprovalStatus;
   ceo_note: string | null;
   decided_at: string | null;
-  decided_via: 'dashboard' | 'telegram' | null;
+  decided_via: 'dashboard' | 'telegram' | 'auto' | null;
   telegram_message_id: number | null;
   created_at: string;
   /** Embedded parent request (PostgREST `requests(...)`). */

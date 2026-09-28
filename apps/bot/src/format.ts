@@ -87,6 +87,7 @@ function actionBody(ap: BotApproval, names: Names): string[] {
 export function decisionLine(ap: Pick<BotApproval, 'status' | 'decided_at' | 'decided_via' | 'ceo_note'>, tz = 'Asia/Manila'): string {
   if (ap.status === 'pending') return '';
   const at = ap.decided_at ? ` ${hhmmIn(ap.decided_at, tz)}` : '';
+  if (ap.decided_via === 'auto') return `<b>⚡ Auto-approved${at}</b>${ap.ceo_note ? `\n${esc(ap.ceo_note)}` : ''}`;
   const via = ap.decided_via === 'dashboard' ? ' (dashboard)' : '';
   const head = ap.status === 'approved' ? '✅ Approved' : ap.status === 'rejected' ? '❌ Rejected' : '✏️ Changes requested';
   return `<b>${head} by you${at}</b>${via}${ap.ceo_note ? `\n“${esc(ap.ceo_note)}”` : ''}`;

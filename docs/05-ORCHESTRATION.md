@@ -86,6 +86,40 @@ If `questions_for_ceo` is not empty, the plan approval shows the questions first
   - Release: `release_ready_tasks()` queues a pending task only when every dependency is `done`, and a task is `done` only after QA passed it **and** the CEO approved the deliverable. A QA pass alone never releases the developer.
   - Input: the developer's prompt gets the upstream outputs (`apps/worker/src/handoff.ts` `taskHandoffContext` → `upstreamContext`): the designer's `design-spec.md` first (colours, fonts, spacing, layout notes, asset list), then other dependencies' deliverables. The spec and the files listed in the design task's `output.files` are copied into the dev workspace at `upstream/<design-task-id>/` (jail rules, size caps). The Content Writer's prompt gets the samples in `brain/style/writing-samples/` the same way. Both runtimes use it: `buildRunPrompt` in `apps/worker/src/runner.ts` = `buildTaskPrompt` + `taskHandoffContext` (built-in runner and Hermes; on Hermes the prompt adds that the copied files are opened with the HQ `workspace_fs` tool, because they live in the worker's task workspace). A task without dependencies gets exactly `buildTaskPrompt`.
 
+## [3] Plan approval · auto-approve rules (M12)
+
+By default every plan waits for the CEO. The CEO can add **auto-approve rules** (Settings → Auto-approve rules; table
+`plan_auto_approve_rules`, migration `20260929000000_totp_auto_approve.sql`). They are applied **server-side by
+`submit_plan()` itself** (the SQL function that owns plan approval), in the same transaction the COO submits the plan:
+
+1. `auto_approve_plan(approval)` runs only for a *pending* approval of kind **`plan`**. With no enabled rule nothing happens.
+2. **Hard guards** (`plan_auto_approve_blocker`), which no rule can override; any hit → the plan waits for the CEO and
+   activity `plan.auto_approve_skipped` records why:
+   - every task's `work_type` is **internal-only** work (`auto_approve_internal_work_types()`: writer drafts, designer
+     wireframes/mockups/ads/brand assets, lead reports/qualification, DM reply drafts, job search/application drafts,
+     COO summaries/reports/inbox/meeting prep). Never: any Web Developer work, `client-report`, `client-onboarding`,
+     `workspace-setup`, `access-checklist`, `lead-finder-search`, `outreach-draft`, `follow-up-email`, `proposal`;
+   - no `questions_for_ceo`, and `estimated_cost_usd` is present;
+   - no outside-world wording in the plan title/summary or any task title/instructions/criteria (whole words:
+     publish, deploy, merge, send/sent, go live, spend, buy, pay, payment, invoice, refund, delete, "email … to",
+     "post … on/to"; `auto_approve_external_wording()`).
+3. Rules, oldest first; the first that covers the plan wins: `estimated_cost_usd ≤ max_cost_usd`, task count
+   ≤ `max_tasks` (optional), every work type in `work_types` (empty = any internal type), client scope `none`
+   (request without a client) / `any` / `listed` (`client_slugs`).
+4. On a match: `payload.auto_approved = {rule_id, rule_name, max_cost_usd, at}`, then `decide_approval(…, 'approve', 'Auto-approved by rule "<name>"', 'auto')`
+   (tasks created and queued exactly like a CEO approval; `decided_via = 'auto'`, logged with actor `system`) and
+   activity `plan.auto_approved` with the rule. The dashboard's approval history and Telegram show "Auto-approved by rule …".
+
+**Never auto-approved:** anything that is not a plan. External actions (publish/send/merge/deploy/spend) created
+while an auto-approved plan runs are ordinary `external_action` approvals and always wait for the CEO;
+`decide_approval(…, 'auto')` refuses every approval except the plan `auto_approve_plan()` is deciding. (The only other
+automatic approval is the pre-existing, off-by-default `OUTREACH_AUTO_APPROVE_FOLLOW_UPS` for unflagged sales follow-ups.)
+
+Editing rules: `save_auto_approve_rule(jsonb)` / `delete_auto_approve_rule(uuid)` (validated, logged as
+`auto_approve.rule_saved` / `auto_approve.rule_deleted`); turning a rule on needs a fresh 2FA step-up once 2FA is set
+up (docs/09). The shared mirror `packages/shared/src/autoApprove.ts` (`evaluateAutoApprove`) is used by the dashboard
+form and tests; the db tests check its constants match the SQL.
+
 ## [4] Worker loop (pseudocode)
 
 ```ts
@@ -230,6 +264,9 @@ QA toolkit by work type — see `04-AGENTS.md` and `brain/qa-checklists/`.
 | `external_action` | Any agent via `request_external_action` / `ask_ceo` | Exactly what will happen (e.g. "Publish theme #123 on madammuse.co") | Worker executes the action, logs result |
 
 Buttons: **Approve · Edit · Request changes · Reject**. "Request changes" requires a note → becomes `qa_feedback`-style input for the agent.
+
+Approving a **high-risk** `external_action` (an outside-world proposal, `payload.type = 'external_action'`) needs a fresh
+TOTP code once the CEO has 2FA; Telegram can then only reject/request changes on those (docs/09 "Two-factor (TOTP)").
 
 External actions are executed by **fixed worker code**, not by the agent, using the exact `payload` you approved. The agent cannot change the action after approval.
 

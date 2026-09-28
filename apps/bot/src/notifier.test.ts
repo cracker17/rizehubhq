@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { notifierTick, type Sender } from './notifier';
 import { onButton, onNoteText, type DecisionDeps } from './decisions';
+import { decisionLine } from './format';
 import { PendingNotes } from './pending';
 import { approval, FakeBotDb } from './fakeBotDb';
 import type { InlineMarkup } from './keyboard';
@@ -106,6 +107,27 @@ test('✅ Approve applies via decide_approval and edits the message to "Approved
   assert.match(out.text, /✅ Approved by you 14:02/);
   assert.equal(out.markup.inline_keyboard[0]!.length, 1); // only Open
   assert.deepEqual(db.decisions, [{ id: ap.id, decision: 'approve', note: null }]);
+});
+
+test('2FA on: ✅ on a high-risk action is refused with a "use the dashboard" toast; ❌ still works', async () => {
+  const db = new FakeBotDb();
+  db.ceoHasTotp = true;
+  const ap = approval({ kind: 'external_action', title: 'Action: merge_pr', payload: { type: 'external_action', action_type: 'merge_pr', spec: { description: 'Merge PR #12' } } });
+  const q = approval({ kind: 'external_action', title: 'Question: Which title?', payload: { type: 'question', question: 'Which title?' } });
+  db.approvals.push(ap, q);
+  const out = await onButton(decisionDeps(db), 42, 500, ap.id, 'approve');
+  assert.deepEqual(out, { kind: 'toast', toast: 'Needs your 2FA code: approve this one in the dashboard' });
+  assert.equal(db.approvals[0]!.status, 'pending');
+  assert.equal((await onButton(decisionDeps(db), 42, 500, q.id, 'approve')).kind, 'edit', 'questions are not high-risk');
+  const rej = await onButton(decisionDeps(db), 42, 500, ap.id, 'reject');
+  assert.equal(rej.kind === 'edit' && rej.toast, 'Rejected');
+});
+
+test('auto-approved plans read "⚡ Auto-approved" with the rule note', () => {
+  const line = decisionLine({ status: 'approved', decided_at: '2026-09-28T06:02:00Z', decided_via: 'auto', ceo_note: 'Auto-approved by rule "Cheap drafts"' });
+  assert.match(line, /⚡ Auto-approved 14:02/);
+  assert.match(line, /Cheap drafts/);
+  assert.doesNotMatch(line, /by you/);
 });
 
 test('tapping an already-decided approval shows the decision instead of applying again', async () => {

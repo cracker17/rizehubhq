@@ -1,10 +1,11 @@
 'use client';
 import { forwardRef } from 'react';
-import { CheckCircle2, XCircle, ExternalLink, FileText, Link2, HelpCircle, AlertTriangle, Hand } from 'lucide-react';
+import { CheckCircle2, XCircle, ExternalLink, FileText, Link2, HelpCircle, AlertTriangle, Hand, ShieldCheck, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { useHq } from '@/lib/data/store';
 import { asAction, asDeliverable, asPlan, money, relDay, timeHM } from '@/lib/data/derive';
 import { actionExecution } from '@/lib/data/actions';
+import { approvalRisk } from '@/lib/auth/stepUp';
 import type { ApprovalRow, QaVerdictJson, TaskOutput } from '@/lib/data/types';
 import { Avatar } from '../Avatar';
 import { KIND } from '../approvalKinds';
@@ -181,8 +182,15 @@ function ActionDetail({ ap, onPickOption }: { ap: ApprovalRow; onPickOption?: (o
   const isQuestion = p.type === 'question';
   const Icon = isQuestion ? HelpCircle : AlertTriangle;
   const text = p.question ?? p.action ?? p.reason ?? ap.summary ?? ap.title;
+  const high = approvalRisk(ap) === 'high';
   return (
     <>
+      {high && ap.status === 'pending' && (
+        <p className="flex items-center gap-2 text-[13px] text-[var(--color-muted)]">
+          <ShieldCheck size={16} className="shrink-0 text-[var(--color-teal)]" aria-hidden />
+          <span><b className="font-semibold text-[var(--color-ink)]">High risk</b> · changes the outside world. Approving asks for your 2FA code when 2FA is on.</span>
+        </p>
+      )}
       {exec.executor === 'manual' && (
         <section className="item p-4" style={{ borderColor: 'color-mix(in oklab, var(--color-warning) 45%, transparent)' }} aria-label="Manual step">
           <p className="flex items-center gap-2 text-sm font-semibold text-[var(--color-warning)]">
@@ -248,14 +256,21 @@ export function ApprovalHeader({ ap }: { ap: ApprovalRow }) {
 }
 
 export function DecisionRecord({ ap }: { ap: ApprovalRow }) {
+  const auto = ap.decided_via === 'auto' ? (ap.payload?.auto_approved as { rule_name?: string } | undefined) : undefined;
   const color = ap.status === 'approved' ? 'var(--color-success)' : ap.status === 'rejected' ? 'var(--color-danger)' : 'var(--color-warning)';
   return (
     <section className="item p-4" style={{ borderColor: `color-mix(in oklab, ${color} 45%, transparent)` }}>
       <p className="text-sm font-medium" style={{ color }} suppressHydrationWarning>
         {ap.status === 'approved' ? 'Approved' : ap.status === 'rejected' ? 'Rejected' : 'Changes requested'}
-        {ap.decided_at ? ` · ${relDay(ap.decided_at)} ${timeHM(ap.decided_at)}` : ''}{ap.decided_via ? ` · via ${ap.decided_via}` : ''}
+        {ap.decided_at ? ` · ${relDay(ap.decided_at)} ${timeHM(ap.decided_at)}` : ''}{ap.decided_via && ap.decided_via !== 'auto' ? ` · via ${ap.decided_via}` : ''}
       </p>
-      {ap.ceo_note && <p className="mt-1.5 text-sm text-[var(--color-muted)]">“{ap.ceo_note}”</p>}
+      {ap.decided_via === 'auto' && (
+        <p className="mt-1.5 flex items-center gap-1.5 text-sm text-[var(--color-muted)]">
+          <Zap size={15} className="shrink-0 text-[var(--color-warning)]" aria-hidden />
+          Auto-approved by rule <b className="font-medium text-[var(--color-ink)]">{auto?.rule_name ?? 'unknown'}</b> (Settings → Auto-approve rules)
+        </p>
+      )}
+      {ap.ceo_note && ap.decided_via !== 'auto' && <p className="mt-1.5 text-sm text-[var(--color-muted)]">“{ap.ceo_note}”</p>}
     </section>
   );
 }

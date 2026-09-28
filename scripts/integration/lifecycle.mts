@@ -521,9 +521,10 @@ await step('non-CEO user: server actions are refused (hq_guard → 42501)', asyn
 }, { critical: false });
 
 await step('non-CEO user: direct table writes are filtered by RLS', async () => {
+  // Since 20260929000000: browser sessions can't write approvals at all (decisions only via decide_approval).
   const upd = await other.from('approvals').update({ status: 'approved' }).eq('status', 'pending').select('id');
-  assert.equal(upd.error, null);
-  assert.deepEqual(upd.data, []);
+  assert.ok(upd.error, 'approvals update refused');
+  assert.ok(!upd.data?.length);
   const ins = await other.from('requests').insert({ source: 'dashboard', raw_text: 'x' });
   assert.ok(ins.error, 'insert refused');
 }, { critical: false });

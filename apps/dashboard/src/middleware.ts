@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { authGate, needsTotpAtSignIn } from '@/lib/auth/stepUp';
 
-// Protects every page in LIVE mode (Supabase env set): no session → /login.
-// DEMO mode (no env) passes straight through. Also refreshes the Supabase session cookie.
-// TODO(2FA): once Supabase MFA (TOTP) is enabled, also require aal2 here:
-//   const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-//   if (data?.currentLevel !== 'aal2') redirect to /login?step=totp
-// See apps/dashboard/README.md "Two-factor (TODO)".
+// Protects every page in LIVE mode (Supabase env set): no session → /login; password OK but TOTP 2FA still open
+// (a verified factor exists and the session is not aal2) → /login?step=totp. DEMO mode (no env) passes straight
+// through. Also refreshes the Supabase session cookie. The database enforces aal2 too (is_ceo(), docs/09).
 function env(name: string) {
   const v = process.env[name];
   return v && v.trim() ? v.trim() : undefined;
@@ -39,13 +37,31 @@ export async function middleware(request: NextRequest) {
   // getUser() validates the JWT with Supabase Auth (don't trust getSession() on the server).
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isPublic = PUBLIC.some((p) => path === p || path.startsWith(`${p}/`));
-  if (!user && !isPublic) {
-    const to = new URL('/login', request.url);
-    if (path !== '/') to.searchParams.set('next', path + request.nextUrl.search);
-    return NextResponse.redirect(to);
+  let totpPending = false;
+  if (user) {
+    // Factors come from the validated user; the level from the (validated) access token.
+    const hasVerifiedFactor = (user.factors ?? []).some((f) => f.status === 'verified' && f.factor_type === 'totp');
+    if (hasVerifiedFactor) {
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      totpPending = needsTotpAtSignIn({ currentLevel: data?.currentLevel ?? null, hasVerifiedFactor });
+    }
   }
-  if (user && path === '/login') return NextResponse.redirect(new URL('/', request.url));
+
+  const isPublic = PUBLIC.some((p) => path === p || path.startsWith(`${p}/`));
+  const gate = authGate({ signedIn: Boolean(user), totpPending, path, isPublic, step: request.nextUrl.searchParams.get('step') });
+  const redirect = (to: URL) => {
+    const res = NextResponse.redirect(to);
+    for (const c of response.cookies.getAll()) res.cookies.set(c); // keep refreshed session cookies
+    return res;
+  };
+  if (gate === 'to_login' || gate === 'to_totp') {
+    const to = new URL('/login', request.url);
+    if (gate === 'to_totp') to.searchParams.set('step', 'totp');
+    const next = path === '/login' ? request.nextUrl.searchParams.get('next') : path !== '/' ? path + request.nextUrl.search : null;
+    if (next) to.searchParams.set('next', next);
+    return redirect(to);
+  }
+  if (gate === 'to_home') return redirect(new URL('/', request.url));
   return response;
 }
 

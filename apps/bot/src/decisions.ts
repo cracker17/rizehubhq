@@ -45,7 +45,19 @@ export async function onButton(d: DecisionDeps, chatId: number, messageId: numbe
     return { kind: 'ask_note', toast: question ? 'Type your answer' : 'What should change?',
       prompt: `${question ? 'Your answer' : 'What should change'} for “${ap.title}”? Reply within 10 minutes (/cancel to stop).` };
   }
-  return apply(d, approvalId, action, null);
+  try {
+    return await apply(d, approvalId, action, null);
+  } catch (e) {
+    // 2FA is on and this is a high-risk external action: approving needs a fresh TOTP code, which only the dashboard can
+    // ask for (decide_approval → ceo_step_up_guard). Reject / request changes still work here.
+    if (isStepUpError(e)) return { kind: 'toast', toast: 'Needs your 2FA code: approve this one in the dashboard' };
+    throw e;
+  }
+}
+
+/** decide_approval refused because the approval needs a fresh 2FA step-up (docs/09 "Two-factor (TOTP)"). */
+export function isStepUpError(e: unknown): boolean {
+  return /step_up_required/i.test(e instanceof Error ? e.message : String(e ?? ''));
 }
 
 async function apply(d: DecisionDeps, approvalId: string, action: Decision, note: string | null): Promise<ButtonOutcome & { kind: 'edit' }> {

@@ -41,6 +41,7 @@ Your pocket command line. Long polling (no domain or webhook needed), so it runs
 ```
 - **Changes** → bot asks "What should change?" → your reply becomes the change note.
 - **Open** → deep link to the item in the dashboard.
+- **2FA on (docs/09):** ✅ on a high-risk external action (publish, send, merge, deploy, spend…) answers "Needs your 2FA code: approve this one in the dashboard" and changes nothing; ✏️ and ❌ still work. Plans, deliverables and questions are unaffected. Plans approved by an auto-approve rule read "⚡ Auto-approved" with the rule.
 - After a decision the message is edited to show the result ("✅ Approved by you 14:02") so it's never actioned twice. Callback data = `ap:<approval_id>:<action>`; the bot re-checks `status='pending'` before applying.
 
 ## Notifications (bot → you)

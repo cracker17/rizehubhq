@@ -35,14 +35,11 @@ The service-role key is **never** used by the dashboard. Chat reaches the worker
 
 Email + password via Supabase Auth, SSR cookies (`@supabase/ssr`). Only accounts in `ceo_users` see data; any other signed-in account gets a "This account isn't the CEO" screen with the SQL to add it.
 
-### Two-factor (TODO)
+### Two-factor (TOTP)
 
-docs/06 requires **TOTP 2FA**. Not built yet. Follow-up:
+Supabase Auth MFA (TOTP), spec in docs/09 "Two-factor (TOTP)".
 
-1. Enable MFA (TOTP) in Supabase Auth settings.
-2. Add an enrol screen: `supabase.auth.mfa.enroll({ factorType: 'totp' })` → show the QR → `challengeAndVerify`.
-3. In `signInAction` (`src/app/actions.ts`), after the password step, if the user has a verified factor, redirect to `/login?step=totp` and verify with `mfa.challenge` + `mfa.verify`.
-4. In `src/middleware.ts`, require `mfa.getAuthenticatorAssuranceLevel().currentLevel === 'aal2'` for every page except `/login`.
-5. Optionally enforce it in the database too: add `(auth.jwt() ->> 'aal') = 'aal2'` to `is_ceo()` in a new migration.
-
-`TODO(2FA)` comments mark the exact spots in code.
+- **Enroll:** Settings → Two-factor sign-in → *Set up 2FA* (`src/app/security-actions.ts`: `mfa.enroll` → QR + setup key shown once → `mfa.challengeAndVerify`).
+- **Sign-in:** `signInAction` sends a session with a verified factor to `/login?step=totp` (`verifySignInTotpAction`); `src/middleware.ts` keeps an aal1 session there (`authGate` in `src/lib/auth/stepUp.ts`). The database agrees: `is_ceo()` needs `aal2` once the CEO has a verified factor.
+- **Step-up:** approving a high-risk external action (`approvalRisk`), turning on an auto-approve rule, and revealing a vault secret need a TOTP code verified in the last 5 minutes. Server actions answer `{ ok: false, stepUp: true }`; the store opens `StepUpDialog` and retries with the code. `decide_approval` / `save_auto_approve_rule` check the JWT `amr` themselves.
+- Pure logic + tests: `src/lib/auth/stepUp.ts` (`stepUp.test.ts`). Supabase calls: `src/lib/auth/mfaServer.ts`.

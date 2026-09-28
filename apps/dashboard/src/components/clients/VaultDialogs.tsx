@@ -17,6 +17,8 @@ function useCopy() {
 
 export function RevealDialog({ cred, demo, onClose, onRevealed }: { cred: CredentialView | null; demo: boolean; onClose: () => void; onRevealed: () => void }) {
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [needCode, setNeedCode] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
   const [left, setLeft] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export function RevealDialog({ cred, demo, onClose, onRevealed }: { cred: Creden
   const reset = () => {
     if (timer.current) clearInterval(timer.current);
     timer.current = null;
-    setSecret(null); setPassword(''); setError(null); setLeft(0);
+    setSecret(null); setPassword(''); setCode(''); setNeedCode(false); setError(null); setLeft(0);
   };
   const close = () => { reset(); onClose(); };
   useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
@@ -37,7 +39,10 @@ export function RevealDialog({ cred, demo, onClose, onRevealed }: { cred: Creden
     e.preventDefault();
     if (!cred) return;
     start(async () => {
-      const r = await revealSecretAction({ id: cred.id, password });
+      const r = await revealSecretAction({ id: cred.id, password, totp: needCode ? code : null });
+      setCode('');
+      // 2FA on: keep the password and ask for the authenticator code too.
+      if (!r.ok && r.stepUp) { setNeedCode(true); setError(needCode ? r.error : null); return; }
       setPassword('');
       if (!r.ok) { setError(r.error); return; }
       setSecret(r.secret);
@@ -59,6 +64,12 @@ export function RevealDialog({ cred, demo, onClose, onRevealed }: { cred: Creden
           <Field label="Your password" hint={demo ? 'Demo mode: any password works; the value shown is a fake placeholder.' : undefined}>
             <input className={inputCls} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />
           </Field>
+          {needCode && (
+            <Field label="2FA code" hint="The 6-digit code from your authenticator app.">
+              <input className={inputCls} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} value={code}
+                onChange={(e) => setCode(e.target.value)} required autoFocus />
+            </Field>
+          )}
           {error && <p role="alert" className="text-sm text-[#ff8a8d]">{error}</p>}
           <div className="flex justify-end gap-2"><button type="button" className={btn.ghost} onClick={close}>Cancel</button><button className={btn.primary} disabled={pending}>{pending ? 'Checking…' : 'Reveal'}</button></div>
         </form>

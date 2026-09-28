@@ -148,6 +148,10 @@ Status → color mapping (use everywhere: dots, bubbles, progress bars):
 
 ### 10. Settings `/settings`
 - Budgets (global daily, per agent default), digest time, QA thresholds per work type, auto-approve rules (off by default), Telegram link status.
+- Built in M12: **Two-factor sign-in** card (status pill "2FA on/off", *Set up 2FA* → QR + setup key shown once → code → on)
+  and **Auto-approve rules** card (the always-on guards, rule list with on/off switch, edit/delete, "Add rule" dialog:
+  name, max estimated cost, max tasks, internal work-type chips, client scope chips, recent auto-approvals/skips).
+  Turning a rule on asks for the 2FA code (StepUpDialog). Spec: docs/05 "[3]", docs/09 "Two-factor (TOTP)".
 
 ## Agent panel (click any character/tile)
 Tabs: **Screen** (live POV monitor, 07 §6) · **Chat** (07 §7) · **Task** · **Today**.
@@ -167,7 +171,7 @@ supabase.channel('office')
 Keep a client store (Zustand) keyed by id; the grid, office scene, KPIs, and badges all read from it.
 
 ## Auth
-Supabase email/password login (your account only) + **TOTP 2FA required** (the dashboard holds client logins) → middleware protects all routes. Sessions expire after 12 h; revealing a vault secret re-asks for your code.
+Supabase email/password login (your account only) + **TOTP 2FA** (the dashboard holds client logins) → middleware protects all routes; with 2FA on, `/login?step=totp` asks for the code after the password. Sessions expire after 12 h; revealing a vault secret re-asks for your code. Approving a high-risk external action opens a "Confirm with 2FA" dialog (code valid for 5 minutes of approvals); those items show a "High risk" line in the action detail. Details: docs/09 "Two-factor (TOTP)".
 
 ## Build order for the UI
 1. Static shell + tokens + sidebar + top bar (mock data)

@@ -21,7 +21,6 @@ export function LoginForm({ next }: { next: string }) {
       <button disabled={pending} className="h-11 rounded-xl bg-[var(--color-primary)] text-[15px] font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50">
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
-      {/* TODO(2FA): TOTP step (Supabase MFA challenge/verify) goes here. See apps/dashboard/README.md. */}
     </form>
   );
 }

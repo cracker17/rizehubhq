@@ -4,7 +4,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { getSupabaseBrowser } from '@/lib/supabase/browser';
-import { askAgentAction, createRequestAction, decideApprovalAction, refreshSnapshotAction } from '@/app/actions';
+import { askAgentAction, createRequestAction, decideApprovalAction, refreshSnapshotAction, type ActionResult } from '@/app/actions';
+import { StepUpDialog, type StepUpRequest } from '@/components/StepUpDialog';
+import { approvalRisk } from '@/lib/auth/stepUp';
 import { buildIndexes, computeKpis, type Indexes, type Kpis } from './derive';
 import { demoCreateRequest, demoDecide, demoStartPlanning } from './engine';
 import type { Decision, HqSession, HqSnapshot, Priority } from './types';
@@ -85,6 +87,7 @@ export function HqProvider({ session, initial, loadError, children }: {
   const [realtime, setRealtime] = useState<RealtimeState>(session.mode === 'live' && session.isCeo ? 'connecting' : 'off');
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [stepUp, setStepUp] = useState<StepUpRequest | null>(null);
   const snapRef = useRef(snap);
   snapRef.current = snap;
   const live = session.mode === 'live';
@@ -194,15 +197,34 @@ export function HqProvider({ session, initial, loadError, children }: {
       } catch (e) { toast(e instanceof Error ? e.message : 'Could not save the decision', 'error'); return false; }
     }
     setBusyId(id, true);
+    // High-risk approvals may need a 2FA code first: no optimistic "approved" until the server says so.
+    const risky = decision === 'approve' && approvalRisk(before) === 'high';
     const status = decision === 'approve' ? 'approved' : decision === 'changes' ? 'changes_requested' : 'rejected';
-    dispatch({ type: 'upsert', table: 'approvals', row: { id, status, ceo_note: note, decided_at: new Date().toISOString(), decided_via: 'dashboard' } });
-    const res = await decideApprovalAction({ id, decision, note });
+    if (!risky) dispatch({ type: 'upsert', table: 'approvals', row: { id, status, ceo_note: note, decided_at: new Date().toISOString(), decided_via: 'dashboard' } });
+    let res: ActionResult<{ result: string }> = await decideApprovalAction({ id, decision, note });
+    if (!res.ok && res.stepUp) {
+      res = await new Promise<ActionResult<{ result: string }>>((resolve) => {
+        setStepUp({
+          title: 'Confirm with 2FA',
+          detail: `Approving “${before.title}” changes the outside world, so it needs your authenticator code.`,
+          submit: async (code) => {
+            const r = await decideApprovalAction({ id, decision, note, totp: code });
+            if (!r.ok && r.stepUp) return r.error;
+            setStepUp(null);
+            resolve(r);
+            return null;
+          },
+          cancel: () => { setStepUp(null); resolve({ ok: false, error: 'Not approved: it needs your 2FA code.' }); },
+        });
+      });
+    }
     setBusyId(id, false);
     if (!res.ok) {
-      dispatch({ type: 'upsert', table: 'approvals', row: before as unknown as Record<string, unknown> }); // roll back
+      if (!risky) dispatch({ type: 'upsert', table: 'approvals', row: before as unknown as Record<string, unknown> }); // roll back
       toast(res.error, 'error');
       return false;
     }
+    if (risky) dispatch({ type: 'upsert', table: 'approvals', row: { id, status, ceo_note: note, decided_at: new Date().toISOString(), decided_via: 'dashboard' } });
     toast(`${DECISION_TEXT[decision]}: ${before.title}`, decision === 'reject' ? 'info' : 'success');
     if (realtime !== 'live') void refresh();
     return true;
@@ -220,5 +242,5 @@ export function HqProvider({ session, initial, loadError, children }: {
     session, snap, idx, kpis, realtime, loadError, busy, toasts, toast, dismissToast, createRequest, decide, ask, refresh,
   }), [session, snap, idx, kpis, realtime, loadError, busy, toasts, toast, dismissToast, createRequest, decide, ask, refresh]);
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={value}>{children}<StepUpDialog request={stepUp} /></Ctx.Provider>;
 }

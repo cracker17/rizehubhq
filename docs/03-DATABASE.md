@@ -421,6 +421,22 @@ end $$;
 
 > The migration file `supabase/migrations/20260928000000_init_schema.sql` is the source of truth; `pnpm db:test` validates it (queue functions + RLS) in an in-memory Postgres.
 
+## M12 · TOTP + auto-approve (`20260929000000_totp_auto_approve.sql`)
+
+| Object | What |
+|---|---|
+| `is_ceo()` | now also requires `auth.jwt() ->> 'aal' = 'aal2'` once the CEO has a verified TOTP factor (`ceo_totp_enrolled()` reads `auth.mfa_factors`) |
+| `ceo_totp_fresh(max_age)` · `ceo_step_up_guard()` | TOTP verified in the last N seconds (JWT `amr`); raises `step_up_required` unless the caller is a CEO with a fresh TOTP, a CEO without 2FA, or a direct DB session. Service role (Telegram) is refused once 2FA is on |
+| `approval_is_high_risk(approvals)` | `kind = 'external_action'` and `payload.type = 'external_action'` (not Vault 2FA) |
+| `decide_approval()` | approving a high-risk approval → `ceo_step_up_guard()`; `p_via = 'auto'` only for the plan `auto_approve_plan()` is deciding; auto decisions are logged with actor `system` |
+| `approvals.decided_via` | + `'auto'`. Browser sessions lost `insert/update/delete` on `approvals` (RPCs only) |
+| `plan_auto_approve_rules` | `id, name, enabled, max_cost_usd (0–100), max_tasks, work_types ⊆ auto_approve_internal_work_types(), client_scope any/none/listed, client_slugs`. CEO reads (RLS); writes via `save_auto_approve_rule(jsonb)` (turning on = step-up) / `delete_auto_approve_rule(uuid)` |
+| `submit_plan()` | unchanged + calls `auto_approve_plan(approval)` at the end (hard guards `plan_auto_approve_blocker`, rules `plan_auto_approve_rule_miss`; audit: `payload.auto_approved`, activity `plan.auto_approved` / `plan.auto_approve_skipped`) |
+| `settings.auto_approve_plans` | removed (superseded by the rules table; no rules = everything asks) |
+| `ceo_step_up_status()` | `{enrolled, fresh, aal}` for the signed-in CEO |
+
+Tests: `scripts/db-tests/110-totp-auto-approve.mjs` (stubs `auth.mfa_factors`). Details: docs/05 "[3]", docs/09 "Two-factor (TOTP)".
+
 ## Realtime
 
 ```sql
@@ -450,7 +466,6 @@ insert into settings (key, value) values
 ('daily_budget_usd', '10'),
 ('digest_time', '"18:00"'),
 ('timezone', '"Asia/Manila"'),
-('auto_approve_plans', 'false'),
 ('idle_activities', '["coffee","lounge_sofa","lobby","ping_pong","foosball","chat"]'),
 ('model_profile', '"free"'),
 ('monthly_budget_usd', '0');

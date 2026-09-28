@@ -135,7 +135,8 @@ export interface ApprovalRow {
   status: ApprovalStatus;
   ceo_note: string | null;
   decided_at: string | null;
-  decided_via: 'dashboard' | 'telegram' | null;
+  /** 'auto' = a plan approved by an auto-approve rule (payload.auto_approved names it). */
+  decided_via: 'dashboard' | 'telegram' | 'auto' | null;
   created_at: string;
 }
 
