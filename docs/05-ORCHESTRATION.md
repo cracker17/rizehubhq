@@ -170,7 +170,8 @@ deploy: `deploy/hermes/README.md`). The worker still claims the task, heartbeats
    initialize, tools/list, tools/call). Bearer `HQ_MCP_TOKEN_<AGENT>` → agent → only that role's tools (`buildTools`).
    Calls act on the agent's current `working` task (resolved server-side from `agents.current_task_id`, or the
    `task_id` argument); gated tools create approvals exactly as in the built-in runner. Each call → activity
-   `mcp.tool_call` (tool, ok, ms; never arguments).
+   `mcp.tool_call` (tool, ok, ms, run_id; never arguments). Every call must also carry the attempt's `run_id` (see
+   "Run lease" below); refused calls execute nothing and log `mcp.tool_refused`.
 3. Output: if Hermes called `submit_output`/`ask_ceo` over MCP, that stands. Otherwise its final answer is parsed (a
    fenced ```json block with the `submit_output` fields, or `{"ask_ceo": …}`; plain text → `fallback: true` output) and
    saved with `submit_task_output`. Usage is recorded as `usage.task` with `detail.runtime = 'hermes'`, priced with the
@@ -182,6 +183,16 @@ deploy: `deploy/hermes/README.md`). The worker still claims the task, heartbeats
    (`HERMES_TIMEOUT_MS`, default 30 min) → the task runs on the built-in runner and activity `hermes.fallback` says
    "Hermes unavailable for <agent>, ran on the built-in runner (<reason>)". `off` → re-queued (failed if not configured).
    401 or a malformed response fails the task (configuration error, no fallback).
+5. Run lease (`apps/worker/src/hermes/mcpState.ts`): each Hermes attempt gets a run id, sent in the prompt ("Pass
+   task_id … and run_id …"); HQ MCP calls are accepted only for the task's active run of that agent. When the chat call
+   returns, times out or fails, the worker first cancels its request (best effort: Hermes' non-streaming
+   `/v1/chat/completions` returns no run id, so `POST /v1/runs/{id}/stop` cannot reach it and the container may keep
+   working), then revokes the lease and waits up to 30 s for calls already executing under it, then re-reads the task,
+   and only then starts the built-in runner. Late calls from the old run get "HQ ended this Hermes run (<reason>) … stop
+   working on this task" and change nothing, so they cannot double a submit, CEO question or approval. If a call is
+   still executing after the drain window the task is re-queued instead of falling back. Leases live in worker memory
+   (no DB column): `/mcp` is served by the same process that runs the task, and a worker restart drops every lease,
+   which refuses stale calls rather than accepting them.
 
 Hermes holds no publish/send/platform credentials: vault logins, RizeHub keys and platform tokens stay in the worker
 and are only used by HQ tools.

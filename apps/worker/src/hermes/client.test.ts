@@ -6,6 +6,20 @@ import { completion, deadUrl, startMockHermes } from './testServer';
 
 const KEY = 'test-hermes-api-server-key';
 
+test('client: cancel(sessionId) aborts that session\'s in-flight chat (best effort, never throws)', async () => {
+  const srv = await startMockHermes(() => 'hang');
+  try {
+    const c = new HermesClient({ url: srv.url, key: KEY, timeoutMs: 5_000 });
+    assert.equal(c.cancel('nothing-running'), 0);
+    const p = c.chat({ messages: [{ role: 'user', content: 'hi' }], sessionId: 'task-9', sessionKey: 'writer' });
+    while (!srv.seen.length) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(c.cancel('other-task'), 0);
+    assert.equal(c.cancel('task-9'), 1);
+    await assert.rejects(p, (e: unknown) => e instanceof HermesError && e.kind === 'aborted' && /cancelled by HQ/.test(e.message));
+    assert.equal(c.cancel('task-9'), 0, 'nothing left to cancel');
+  } finally { await srv.close(); }
+});
+
 test('client: /health and /v1/chat/completions with bearer key + session headers', async () => {
   const srv = await startMockHermes((r) => {
     if (r.headers.authorization !== `Bearer ${KEY}`) return [401, { error: 'no' }];

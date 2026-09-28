@@ -8,7 +8,10 @@ import { createHttpServer } from '../http';
 import { makeDeps, mockModel, promptText, toolCalls } from '../testing';
 import type { TaskOutput } from '../hqdb';
 import type { HermesAgentConfig } from './config';
+import { MockLanguageModelV2 } from 'ai/test';
+import type { WorkerDeps } from '../deps';
 import { createHqMcpRoutes } from './mcp';
+import { activeHermesLease } from './mcpState';
 import { hermesPricing, parseFinalAnswer } from './runner';
 import { completion, deadUrl, startMockHermes, type MockHandler } from './testServer';
 
@@ -56,7 +59,7 @@ test('hermes agent: task goes to its Hermes instance; the final answer is saved 
     assert.match(sys!.content, /You are RizeHub's Content Writer/);
     assert.match(user!.content, /At least 3 internal links/);
     assert.match(user!.content, /brain\/sops\/seo-article\.md/);
-    assert.match(user!.content, /Pass task_id "[0-9a-f-]{36}" to every HQ tool call/);
+    assert.match(user!.content, /Pass task_id "[0-9a-f-]{36}" and run_id "[0-9a-f-]{36}" to every HQ tool call/);
     assert.match(user!.content, /NO publish, send, merge, deploy or payment credentials/);
 
     assert.equal(db.usage.length, 1);
@@ -68,20 +71,35 @@ test('hermes agent: task goes to its Hermes instance; the final answer is saved 
   } finally { await srv.close(); }
 });
 
+/** The worker's HQ MCP endpoint on an ephemeral port + a caller that acts like Hermes (tool calls with arguments). */
+async function mcpWorker(deps: () => WorkerDeps) {
+  const TOKEN = 'mcp-writer-token'.padEnd(48, 'x');
+  const worker = createHttpServer({ chat: async () => ({ answer: '' }), health: () => ({}) }, 'unused-secret',
+    createHqMcpRoutes({ deps, tokens: () => new Map([[TOKEN, 'writer']]) }));
+  await new Promise<void>((r) => worker.listen(0, '127.0.0.1', r));
+  const mcpUrl = `http://127.0.0.1:${(worker.address() as AddressInfo).port}/mcp`;
+  const tool = (name: string, args: Record<string, unknown>): Promise<{ result: { isError: boolean; content: { text: string }[] } }> =>
+    fetch(mcpUrl, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) }).then((r) => r.json() as never);
+  return { tool, close: () => { worker.closeAllConnections?.(); worker.close(); } };
+}
+
+/** The run id HQ put in the Hermes prompt (what a Hermes agent reads and passes along). */
+function runIdOf(req: { body: unknown }): string {
+  const user = (req.body as { messages: { content: string }[] }).messages[1]!.content;
+  return /run_id "([0-9a-f-]{36})"/.exec(user)![1]!;
+}
+
 test('hermes agent: submit_output through the HQ MCP endpoint during the run wins over the final text', async () => {
   const { db, task } = setup();
   const deps = makeDeps({ db, model: mockModel([]) });
-  const TOKEN = 'mcp-writer-token'.padEnd(48, 'x');
-  const worker = createHttpServer({ chat: async () => ({ answer: '' }), health: () => ({}) }, 'unused-secret',
-    createHqMcpRoutes({ deps: () => deps, tokens: () => new Map([[TOKEN, 'writer']]) }));
-  await new Promise<void>((r) => worker.listen(0, '127.0.0.1', r));
-  const mcpUrl = `http://127.0.0.1:${(worker.address() as AddressInfo).port}/mcp`;
-  const srv = await hermes(async () => {
-    // What Hermes does server-side: call HQ tools over MCP, then answer.
-    const mcp = (method: string, params: unknown) => fetch(mcpUrl, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }).then((r) => r.json());
-    await mcp('tools/call', { name: 'report_progress', arguments: { percent: 60, note: 'Writing in Hermes' } });
-    await mcp('tools/call', { name: 'submit_output', arguments: { summary: 'Via MCP', content: 'body', criteria_map: CRITERIA.map((c) => ({ criterion: c, how_met: 'ok' })) } });
+  const w = await mcpWorker(() => deps);
+  let runId = '';
+  const srv = await hermes(async (req) => {
+    // What Hermes does server-side: call HQ tools over MCP (task_id + run_id from the prompt), then answer.
+    runId = runIdOf(req);
+    await w.tool('report_progress', { percent: 60, note: 'Writing in Hermes', task_id: task.id, run_id: runId });
+    await w.tool('submit_output', { summary: 'Via MCP', content: 'body', criteria_map: CRITERIA.map((c) => ({ criterion: c, how_met: 'ok' })), run_id: runId });
     return [200, completion('I submitted the article.')];
   });
   try {
@@ -92,7 +110,13 @@ test('hermes agent: submit_output through the HQ MCP endpoint during the run win
     assert.equal(db.callsOf('submitTaskOutput').length, 1, 'the final text was not submitted a second time');
     assert.ok(db.callsOf('reportProgress').some((c) => c.args[2] === 'Writing in Hermes'));
     assert.deepEqual(db.activity.filter((a) => a.action === 'mcp.tool_call').map((a) => a.detail.tool), ['report_progress', 'submit_output']);
-  } finally { await srv.close(); worker.close(); }
+    assert.ok(db.activity.filter((a) => a.action === 'mcp.tool_call').every((a) => a.detail.run_id === runId));
+    // The run is over: its lease is gone and a straggling call is refused.
+    assert.equal(activeHermesLease(task.id), null);
+    const late = await w.tool('report_progress', { percent: 99, note: 'after the run', run_id: runId });
+    assert.equal(late.result.isError, true);
+    assert.ok(!db.callsOf('reportProgress').some((c) => c.args[2] === 'after the run'));
+  } finally { await srv.close(); w.close(); }
 });
 
 test('hermes agent: {"ask_ceo": …} in the final answer pauses the task', async () => {
@@ -194,4 +218,113 @@ test('parseFinalAnswer / hermesPricing', () => {
   assert.deepEqual(hermesPricing('anthropic/claude-haiku-5', null), { provider: 'anthropic', modelId: 'claude-haiku-5' });
   assert.deepEqual(hermesPricing('hermes-agent', 'claude-sonnet-5'), { provider: 'anthropic', modelId: 'claude-sonnet-5' });
   assert.equal(hermesPricing('hermes-agent', null).provider, 'hermes');
+});
+
+// ---------- run lease: a Hermes container that keeps working after a fallback ----------
+
+test('run lease: after a timeout fallback, late Hermes tool calls are refused and change nothing; the built-in run is unaffected', async () => {
+  const { db, task } = setup();
+  let runId = '';
+  const late: { tool: string; isError: boolean; text: string }[] = [];
+  const order: string[] = [];
+  let w!: Awaited<ReturnType<typeof mcpWorker>>;
+  // The built-in runner's model: while it works, the Hermes container (whose request to us timed out) keeps
+  // calling HQ tools on the same task with its old run id.
+  const model: MockLanguageModelV2 = new MockLanguageModelV2({
+    doGenerate: async () => {
+      order.push('builtin:step');
+      for (const [name, args] of [
+        ['report_progress', { percent: 90, note: 'late Hermes progress' }],
+        ['request_external_action', { type: 'publish_article', spec: 'Publish it now' }],
+        ['submit_output', { summary: 'late Hermes output', content: 'y' }],
+        ['ask_ceo', { question: 'late question?' }],
+      ] as const) {
+        const r = await w.tool(name, { ...args, task_id: task.id, run_id: runId });
+        late.push({ tool: name, isError: r.result.isError, text: r.result.content[0]!.text });
+      }
+      return toolCalls([{ name: 'submit_output', input: { summary: 'built-in output', content: 'x' } }]);
+    },
+  });
+  const deps = makeDeps({ db, model });
+  w = await mcpWorker(() => deps);
+  const srv = await hermes((req) => { runId = runIdOf(req); return 'hang'; });
+  try {
+    const r = await runTask(task, deps, { hermes: { resolve: () => cfg(srv.url, { timeoutMs: 150 }) } });
+    assert.equal(r.status, 'submitted');
+    assert.deepEqual(order, ['builtin:step']);
+    assert.match(String(fallbackRows(db)[0]!.detail.reason), /^timeout:/);
+
+    // Every late call was refused with a clear reason…
+    assert.equal(late.length, 4);
+    for (const l of late) {
+      assert.equal(l.isError, true, `${l.tool} refused`);
+      assert.match(l.text, /HQ ended this Hermes run .*timeout; HQ took the task back.*Stop working on this task/);
+    }
+    // …and changed nothing: the built-in runner's output stands; no approval, progress or CEO question from Hermes.
+    const t = db.tasks.get(task.id)!;
+    assert.equal(t.status, 'qa_pending');
+    assert.equal((t.output as unknown as TaskOutput).summary, 'built-in output');
+    assert.equal(db.callsOf('submitTaskOutput').length, 1);
+    assert.equal(db.callsOf('askCeo').length, 0);
+    assert.equal(db.approvals.length, 0);
+    assert.ok(!db.callsOf('reportProgress').some((c) => c.args[2] === 'late Hermes progress'));
+    assert.equal(db.activity.filter((a) => a.action === 'mcp.tool_call').length, 0);
+    assert.equal(db.activity.filter((a) => a.action === 'mcp.tool_refused').length, 4);
+
+    // Still refused after the task moved on (now with QA).
+    const after = await w.tool('submit_output', { summary: 'even later', run_id: runId });
+    assert.equal(after.result.isError, true);
+    assert.equal((db.tasks.get(task.id)!.output as unknown as TaskOutput).summary, 'built-in output');
+  } finally { await srv.close(); w.close(); }
+});
+
+test('run lease: a Hermes tool call already executing at the timeout finishes before the built-in runner starts', async () => {
+  const { db, task } = setup();
+  const order: string[] = [];
+  const model: MockLanguageModelV2 = new MockLanguageModelV2({
+    doGenerate: async () => { order.push('builtin:step'); return toolCalls([{ name: 'submit_output', input: { summary: 'built-in output', content: 'x' } }]); },
+  });
+  const deps = makeDeps({ db, model });
+  const orig = db.reportProgress.bind(db);
+  db.reportProgress = async (...a: Parameters<typeof orig>) => {
+    if (a[2] === 'slow Hermes step') { order.push('hermes:start'); await new Promise((r) => setTimeout(r, 400)); order.push('hermes:end'); }
+    return orig(...a);
+  };
+  const w = await mcpWorker(() => deps);
+  const srv = await hermes((req) => {
+    void w.tool('report_progress', { percent: 50, note: 'slow Hermes step', run_id: runIdOf(req) });
+    return 'hang';
+  });
+  try {
+    const r = await runTask(task, deps, { hermes: { resolve: () => cfg(srv.url, { timeoutMs: 150 }) } });
+    assert.equal(r.status, 'submitted');
+    assert.deepEqual(order, ['hermes:start', 'hermes:end', 'builtin:step'], 'the fallback waited for the in-flight call');
+  } finally { await srv.close(); w.close(); }
+});
+
+test('run lease: a Hermes tool call still running past the drain window → task re-queued, built-in runner not started', async () => {
+  const { db, task } = setup();
+  const model = mockModel([]);
+  const deps = makeDeps({ db, model });
+  const orig = db.reportProgress.bind(db);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  db.reportProgress = async (...a: Parameters<typeof orig>) => {
+    if (a[2] === 'stuck Hermes step') await gate;
+    return orig(...a);
+  };
+  const w = await mcpWorker(() => deps);
+  const srv = await hermes((req) => {
+    void w.tool('report_progress', { percent: 50, note: 'stuck Hermes step', run_id: runIdOf(req) });
+    return 'hang';
+  });
+  try {
+    const r = await runTask(task, deps, { hermes: { resolve: () => cfg(srv.url, { timeoutMs: 150 }), drainMs: 100 } });
+    assert.equal(r.status, 'requeued');
+    assert.match(r.status === 'requeued' ? r.reason : '', /still running, re-queued instead of falling back/);
+    assert.equal(model.doGenerateCalls.length, 0, 'no double work');
+    assert.equal(db.tasks.get(task.id)!.status, 'queued');
+    assert.equal(fallbackRows(db).length, 0);
+    assert.equal(db.callsOf('finishAgentTurn').at(-1)?.args[0], 'writer');
+  } finally { release(); await srv.close(); w.close(); }
 });

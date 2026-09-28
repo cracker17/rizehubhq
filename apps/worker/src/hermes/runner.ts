@@ -7,6 +7,11 @@
 // Fallback: Hermes not configured, /health failing, or the run failing with down/timeout → the task runs on the
 // built-in AI SDK runner and an activity row "Hermes unavailable for <agent>, ran on the built-in runner (<reason>)"
 // is written (HERMES_FALLBACK=off: the task is re-queued, or failed when Hermes is not configured at all).
+//
+// Run lease: each Hermes attempt gets a run id (hermes/mcpState.ts) that its HQ MCP calls must carry. When the run
+// returns, times out or fails, the lease is revoked FIRST (waiting briefly for tool calls already executing under it),
+// then the task state is read, and only then may the built-in runner take over. A Hermes container that keeps working
+// after a fallback therefore cannot write to the task any more. The in-flight request is also cancelled (best effort).
 import { z } from 'zod';
 import type { TaskOutput, TaskRow } from '../hqdb';
 import type { Role } from '../roles';
@@ -16,7 +21,7 @@ import type { RunOptions, RunResult } from '../runner';
 import { buildRunPrompt, taskLimits } from '../runner';
 import { HermesClient, HermesError, type HermesUsage } from './client';
 import { hermesAgentConfig, hermesFallbackEnabled, type HermesAgentConfig } from './config';
-import { releaseMcpTaskState } from './mcpState';
+import { acquireHermesLease, revokeHermesLease } from './mcpState';
 
 export interface HermesRunOptions {
   /** Agent id → its Hermes instance (default: HERMES_URL_<AGENT> / HERMES_KEY_<AGENT>). */
@@ -25,7 +30,11 @@ export interface HermesRunOptions {
   fallback?: boolean;
   fetch?: typeof fetch;
   healthTimeoutMs?: number;
+  /** Max wait for HQ tool calls still executing under a revoked run before the built-in runner may start (default 30 s). */
+  drainMs?: number;
 }
+
+export const DEFAULT_LEASE_DRAIN_MS = 30_000;
 
 export type BuiltinRunner = (task: TaskRow, deps: WorkerDeps, opts: RunOptions) => Promise<RunResult>;
 
@@ -36,11 +45,12 @@ export const fallbackNote = (agentId: string, reason: string) =>
 const UPSTREAM_FILES_MARKER = 'Files copied into your workspace:';
 
 /** Extra instructions appended to the task prompt for Hermes runs. */
-export function hermesInstructions(task: Pick<TaskRow, 'id'>, opts: { upstreamFiles?: boolean } = {}): string {
+export function hermesInstructions(task: Pick<TaskRow, 'id'>, opts: { upstreamFiles?: boolean; runId?: string } = {}): string {
   return [
     '## Running on Hermes',
     `HQ tools come from the MCP server "hq" (report_progress, brain_read, brain_search, ask_ceo, request_external_action, submit_output, `
-      + `and your role's other tools). Pass task_id "${task.id}" to every HQ tool call.`,
+      + `and your role's other tools). Pass task_id "${task.id}"${opts.runId ? ` and run_id "${opts.runId}"` : ''} to every HQ tool call.`
+      + (opts.runId ? ' If an HQ tool says this run has ended, stop immediately: HQ has handed the task to someone else.' : ''),
     'You have NO publish, send, merge, deploy or payment credentials and must not try to obtain or use any: propose every such '
       + 'action with request_external_action (the CEO approves it; nothing happens before that). Client logins and API calls go '
       + 'through the HQ vault tools only.',
@@ -173,6 +183,9 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
   let pricing: { provider: string; modelId: string } | null = null;
   let cost = 0;
   let ended = 'other';
+  const runId = await acquireHermesLease(task.id, task.agent_id);
+  /** Revokes this run's lease (idempotent). true = no HQ tool call of this run is still executing. */
+  const endLease = (reason: string, drainMs = 0) => revokeHermesLease(task.id, runId, reason, drainMs).catch(() => false);
   const heartbeat = setInterval(() => { db.touchHeartbeat(task.id).catch(() => undefined); }, opts.heartbeatMs ?? 30_000);
   heartbeat.unref?.();
   try {
@@ -180,7 +193,7 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
     await db.reportProgress(task.id, 5, 'Reading the brief', { app: 'doc', title: task.title });
     // Same prompt as the built-in runner, incl. the design→dev handoff (upstream design spec + assets).
     const base = await buildRunPrompt(task, client0, deps, opts.handoff);
-    const prompt = `${base}\n\n${hermesInstructions(task, { upstreamFiles: base.includes(UPSTREAM_FILES_MARKER) })}`;
+    const prompt = `${base}\n\n${hermesInstructions(task, { upstreamFiles: base.includes(UPSTREAM_FILES_MARKER), runId })}`;
     let res;
     try {
       res = await client.chat({
@@ -189,21 +202,37 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
       });
     } catch (e) {
       const he = e instanceof HermesError ? e : new HermesError('bad_response', errMsg(e));
+      // The container may still be working: cancel what we can, then revoke its lease so no late HQ tool call lands.
+      try { client.cancel(task.id); } catch { /* best effort */ }
       if (he.kind === 'aborted') {
+        await endLease('worker shutting down');
         await db.requeueTask(task.id, 'worker shutting down').catch(() => undefined);
         ended = 'requeued';
         return { result: { status: 'requeued', reason: 'worker shutting down', costUsd: 0 } };
       }
+      const drained = await endLease(`Hermes run ${he.kind}; HQ took the task back`, opts.hermes?.drainMs ?? DEFAULT_LEASE_DRAIN_MS);
       // Hermes may have finished or paused the task through MCP before the connection dropped.
       const settled = await settledByMcp(task, deps, 0);
       if (settled) { ended = settled.status; return { result: settled }; }
-      if (he.kind === 'down' || he.kind === 'timeout') { ended = 'fallback'; return { fallback: `${he.kind}: ${he.message}`, requeue: true }; }
+      if (he.kind === 'down' || he.kind === 'timeout') {
+        if (!drained) {
+          // A tool call of the revoked run is still executing: starting the built-in runner now could double the work.
+          const reason = `Hermes ${he.kind}; an HQ tool call of that run was still running, re-queued instead of falling back`;
+          log(deps, `[${task.agent_id}] ${reason}`);
+          await db.requeueTask(task.id, reason.slice(0, 500)).catch(() => undefined);
+          ended = 'requeued';
+          return { result: { status: 'requeued', reason, costUsd: 0 } };
+        }
+        ended = 'fallback';
+        return { fallback: `${he.kind}: ${he.message}`, requeue: true };
+      }
       const reason = `Hermes run failed (${he.kind}): ${he.message}`.slice(0, 500);
       await db.failTask(task.id, reason).catch(() => undefined);
       ended = 'failed';
       return { result: { status: 'failed', reason, costUsd: 0 } };
     }
 
+    await endLease('Hermes run ended', opts.hermes?.drainMs ?? DEFAULT_LEASE_DRAIN_MS);
     usage = res.usage;
     pricing = hermesPricing(res.model, cfg.model);
     cost = usage ? costUsd(pricing.provider, pricing.modelId, usage) : 0;
@@ -228,6 +257,7 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
     return { result: { status: 'submitted', costUsd: cost, fallback: final.output.fallback === true } };
   } catch (e) {
     const reason = errMsg(e).slice(0, 500);
+    await endLease(`Hermes run failed: ${reason}`);
     const settled = await settledByMcp(task, deps, cost).catch(() => null);
     if (settled) return { result: settled };
     await db.failTask(task.id, reason).catch(() => undefined);
@@ -235,7 +265,7 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
     return { result: { status: 'failed', reason, costUsd: cost } };
   } finally {
     clearInterval(heartbeat);
-    await releaseMcpTaskState(task.id).catch(() => undefined);
+    await endLease(`Hermes run ended (${ended})`);
     if (usage && pricing) {
       const u: TokenUsage = usage;
       const limitUsd = taskLimits(role, opts.limits).maxCostUsd; // stricter of the role budget and MAX_COST_PER_TASK_USD

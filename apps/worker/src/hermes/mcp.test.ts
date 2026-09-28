@@ -8,6 +8,7 @@ import { loadRole } from '../roles';
 import { makeDeps, mockModel } from '../testing';
 import type { WorkerDeps } from '../deps';
 import { createHqMcpRoutes } from './mcp';
+import { acquireHermesLease, activeHermesLease, revokeHermesLease } from './mcpState';
 
 const WRITER_TOKEN = 'writer-token-'.padEnd(48, 'w');
 const SALES_TOKEN = 'sales-token-'.padEnd(48, 's');
@@ -60,6 +61,8 @@ test('MCP initialize + notifications + tools/list shows exactly the role\'s tool
     assert.equal(sub.inputSchema.type, 'object');
     assert.ok(sub.inputSchema.properties.summary, 'zod schema converted to JSON Schema');
     assert.ok(sub.inputSchema.properties.task_id, 'every tool accepts an optional task_id');
+    assert.ok(sub.inputSchema.properties.run_id && sub.inputSchema.required.includes('run_id'), 'every tool requires the run_id');
+    assert.ok(sub.inputSchema.required.includes('summary'), 'the tool\'s own required fields are kept');
 
     const sales = await rpc({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, SALES_TOKEN);
     const salesNames = sales.body.result.tools.map((t: { name: string }) => t.name).sort();
@@ -75,7 +78,8 @@ test('MCP tools/call: request_external_action only creates a CEO approval (logge
   await withMcp(async (rpc, { db }) => {
     const task = db.addTask({ agent_id: 'writer', status: 'working' });
     db.agents.get('writer')!.current_task_id = task.id;
-    const r = await rpc(call('request_external_action', { type: 'publish_article', spec: 'Publish the article on madammuse.co/blogs/news' }));
+    const run_id = await acquireHermesLease(task.id, 'writer');
+    const r = await rpc(call('request_external_action', { type: 'publish_article', spec: 'Publish the article on madammuse.co/blogs/news', run_id }));
     assert.equal(r.body.result.isError, false);
     assert.match(r.body.result.content[0].text, /Queued for CEO approval/);
     const ap = db.approvals.filter((a) => a.kind === 'external_action');
@@ -90,9 +94,9 @@ test('MCP tools/call: request_external_action only creates a CEO approval (logge
     assert.ok(!JSON.stringify(logged[0]!.detail).includes('madammuse'), 'arguments are not logged');
 
     // report_progress + submit_output through MCP (explicit task_id works too)
-    await rpc(call('report_progress', { percent: 40, note: 'Drafting', task_id: task.id }));
+    await rpc(call('report_progress', { percent: 40, note: 'Drafting', task_id: task.id, run_id }));
     assert.equal(db.screens.get('writer')?.step_note, 'Drafting');
-    const sub = await rpc(call('submit_output', { summary: 'Article done', content: '# Hello', criteria_map: [{ criterion: 'a', how_met: 'yes' }] }));
+    const sub = await rpc(call('submit_output', { summary: 'Article done', content: '# Hello', criteria_map: [{ criterion: 'a', how_met: 'yes' }], run_id }));
     assert.match(sub.body.result.content[0].text, /Submitted to QA/);
     assert.equal(db.tasks.get(task.id)!.status, 'qa_pending');
   });
@@ -110,12 +114,45 @@ test('MCP tools/call: no active task, someone else\'s task, bad arguments and un
 
     const mine = db.addTask({ agent_id: 'writer', status: 'working' });
     db.agents.get('writer')!.current_task_id = mine.id;
-    const bad = await rpc(call('report_progress', { percent: 'lots' }));
+    const run_id = await acquireHermesLease(mine.id, 'writer');
+    const bad = await rpc(call('report_progress', { percent: 'lots', run_id }));
     assert.equal(bad.body.result.isError, true);
     assert.match(bad.body.result.content[0].text, /Invalid arguments/);
 
     const unknown = await rpc(call('bash_sandboxed', { command: 'ls' }));
     assert.equal(unknown.body.error.code, -32602, 'a web-dev tool is not in the writer\'s role');
     assert.equal(db.approvals.length, 0);
+  });
+});
+
+test('MCP run lease: calls need the active run_id; revoked, superseded, missing or foreign run ids change nothing', async () => {
+  await withMcp(async (rpc, { db }) => {
+    const task = db.addTask({ agent_id: 'writer', status: 'working' });
+    db.agents.get('writer')!.current_task_id = task.id;
+    const text = (r: { body: any }) => { assert.equal(r.body.result.isError, true); return String(r.body.result.content[0].text); };
+
+    // No Hermes run started by HQ (e.g. the task runs on the built-in runner, or the worker restarted).
+    assert.match(text(await rpc(call('report_progress', { percent: 1, note: 'x', run_id: 'made-up' }))), /has no active Hermes run for writer/);
+
+    const first = await acquireHermesLease(task.id, 'writer');
+    assert.match(text(await rpc(call('report_progress', { percent: 1, note: 'x' }))), /Missing run_id/);
+    assert.match(text(await rpc(call('report_progress', { percent: 1, note: 'x', run_id: 'not-it' }))), /is not the current HQ run/);
+
+    // A newer attempt supersedes the first; the first run's calls are refused with the reason.
+    const second = await acquireHermesLease(task.id, 'writer');
+    assert.notEqual(first, second);
+    assert.match(text(await rpc(call('submit_output', { summary: 'old run', run_id: first }))), /HQ ended this Hermes run .*superseded/);
+    const ok = await rpc(call('report_progress', { percent: 10, note: 'second run', run_id: second }));
+    assert.equal(ok.body.result.isError, false);
+
+    // Revoked (fallback): refused, nothing written.
+    assert.equal(await revokeHermesLease(task.id, second, 'Hermes run timeout; HQ took the task back'), true);
+    assert.equal(activeHermesLease(task.id), null);
+    const late = text(await rpc(call('submit_output', { summary: 'late', run_id: second })));
+    assert.match(late, /HQ ended this Hermes run .*timeout; HQ took the task back.*Stop working on this task/);
+    assert.equal(db.tasks.get(task.id)!.status, 'working');
+    assert.equal(db.callsOf('submitTaskOutput').length, 0);
+    assert.equal(db.activity.filter((a) => a.action === 'mcp.tool_call').length, 1, 'only the accepted call ran');
+    assert.equal(db.activity.filter((a) => a.action === 'mcp.tool_refused').length, 5);
   });
 });

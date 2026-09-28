@@ -38,16 +38,19 @@ export const HERMES_REQUEST_MODEL = 'hermes-agent';
 
 export class HermesClient {
   private readonly base: string;
+  /** In-flight chat requests per session id (cancel()). */
+  private readonly inflight = new Map<string, Set<AbortController>>();
   constructor(private o: HermesClientOptions) {
     this.base = o.url.replace(/\/+$/, '');
   }
 
-  private async request(path: string, init: RequestInit, opts: { timeoutMs: number; signal?: AbortSignal; headers?: Record<string, string> }): Promise<unknown> {
+  private async request(path: string, init: RequestInit, opts: { timeoutMs: number; signal?: AbortSignal; headers?: Record<string, string>; cancel?: AbortSignal }): Promise<unknown> {
     const deadline = AbortSignal.timeout(opts.timeoutMs);
-    const signal = opts.signal ? AbortSignal.any([opts.signal, deadline]) : deadline;
+    const signal = AbortSignal.any([deadline, ...(opts.signal ? [opts.signal] : []), ...(opts.cancel ? [opts.cancel] : [])]);
     const classify = (e: unknown): HermesError => {
       if (e instanceof HermesError) return e;
       if (opts.signal?.aborted) return new HermesError('aborted', 'Hermes request aborted');
+      if (opts.cancel?.aborted) return new HermesError('aborted', 'Hermes request cancelled by HQ');
       if (deadline.aborted) return new HermesError('timeout', `Hermes did not answer within ${Math.round(opts.timeoutMs / 1000)}s`);
       const code = (e as { cause?: { code?: string } })?.cause?.code;
       return new HermesError('down', `Hermes unreachable at ${this.base}${code ? ` (${code})` : ''}`);
@@ -80,15 +83,44 @@ export class HermesClient {
    * Hermes runs its tool loop server-side; the result is its final answer.
    */
   async chat(p: { messages: HermesMessage[]; sessionId: string; sessionKey: string; signal?: AbortSignal; timeoutMs?: number }): Promise<HermesChatResult> {
-    const body = await this.request('/v1/chat/completions', {
-      method: 'POST',
-      body: JSON.stringify({ model: HERMES_REQUEST_MODEL, messages: p.messages, stream: false }),
-    }, {
-      timeoutMs: p.timeoutMs ?? this.o.timeoutMs ?? 30 * 60_000,
-      signal: p.signal,
-      headers: { 'x-hermes-session-id': p.sessionId, 'x-hermes-session-key': p.sessionKey },
-    });
-    return parseChatCompletion(body);
+    const ctrl = new AbortController();
+    let set = this.inflight.get(p.sessionId);
+    if (!set) this.inflight.set(p.sessionId, (set = new Set()));
+    set.add(ctrl);
+    try {
+      const body = await this.request('/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: HERMES_REQUEST_MODEL, messages: p.messages, stream: false }),
+      }, {
+        timeoutMs: p.timeoutMs ?? this.o.timeoutMs ?? 30 * 60_000,
+        signal: p.signal,
+        cancel: ctrl.signal,
+        headers: { 'x-hermes-session-id': p.sessionId, 'x-hermes-session-key': p.sessionKey },
+      });
+      return parseChatCompletion(body);
+    } finally {
+      set.delete(ctrl);
+      if (!set.size && this.inflight.get(p.sessionId) === set) this.inflight.delete(p.sessionId);
+    }
+  }
+
+  /**
+   * Best-effort cancel of a session's run: aborts this client's in-flight chat requests for it (the connection
+   * closes). That is all Hermes' non-streaming /v1/chat/completions supports: it returns no run id, so the
+   * documented POST /v1/runs/{run_id}/stop cannot target it, and the container may keep working on its own.
+   * HQ's run lease (hermes/mcpState.ts) is what keeps such a run from changing anything. Never throws.
+   * Returns how many requests were aborted.
+   */
+  cancel(sessionId: string): number {
+    try {
+      const set = this.inflight.get(sessionId);
+      if (!set) return 0;
+      this.inflight.delete(sessionId);
+      for (const c of set) c.abort();
+      return set.size;
+    } catch {
+      return 0;
+    }
   }
 }
 
