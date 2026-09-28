@@ -14,7 +14,7 @@ const verdict = (score: number, results: ('pass' | 'fail')[], v: 'pass' | 'fail'
 function setup() {
   const db = new FakeHqDb();
   const task = db.addTask({
-    agent_id: 'seo-1', status: 'qa_pending', acceptance_criteria: CRITERIA,
+    agent_id: 'writer', status: 'qa_pending', acceptance_criteria: CRITERIA,
     output: { summary: 'Article about shopify speed', content: 'SENTINEL-OUTPUT-BODY' },
   });
   return { db, task };
@@ -34,7 +34,7 @@ test('passing verdict → record_qa_verdict pass → deliverable awaits the CEO'
   assert.match(text, /SENTINEL-OUTPUT-BODY/);                      // the output
   assert.match(text, /QA checklist: _general/);                     // general checklist
   assert.match(text, /brain\/qa-checklists\/seo-article\.md/);     // work-type checklist
-  assert.match(text, /You are the QA Lead/);                        // role
+  assert.match(text, /You are QA at RizeHub/);                        // role
   assert.equal(db.usage[0]?.kind, 'qa');
 });
 

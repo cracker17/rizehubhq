@@ -216,7 +216,7 @@ test('bash_sandboxed tool: runs in the jail with scrubbed env, clamps timeout, t
 
 test('client website host is allowlisted for the task', async () => {
   const f = fakeEnv();
-  const s = devSetup(f.env, 'webflow-dev', 'https://www.mid-am.com');
+  const s = devSetup(f.env, 'web-dev', 'https://www.mid-am.com');
   assert.match(await run(s.tools, 'bash_sandboxed', { command: 'curl -sI https://mid-am.com/' }), /exit 0/);
   assert.match(await run(s.tools, 'bash_sandboxed', { command: 'curl -sI https://www.mid-am.com/' }), /exit 0/);
   assert.match(await run(s.tools, 'bash_sandboxed', { command: 'curl -sI https://madammuse.co/' }), /^Refused: URL not allowed/);

@@ -11,7 +11,7 @@ import { rizehubConfig, setRizehubForTests } from './config';
 import { MOCK_KEYS, MockRizehub, mockFetch } from './mock';
 import type { JobItem } from './jobSources';
 
-const AGENTS = ['coo', 'qa-lead', 'prospector', 'pipeline', 'ea', 'client-success', 'job-scout', 'seo-1'];
+const AGENTS = ['coo', 'qa-lead', 'sales', 'writer', 'web-dev', 'designer'];
 
 function setup(agent: string, o: { jobDelayMs?: number; jobWaitMs?: number; clientId?: string | null; feeds?: JobItem[] } = {}) {
   const db = new FakeHqDb(AGENTS);
@@ -31,7 +31,7 @@ function setup(agent: string, o: { jobDelayMs?: number; jobWaitMs?: number; clie
 const J = (s: string) => JSON.parse(s) as Record<string, unknown>;
 
 test('rizehub_leads search waits for the job, records job + lead refs, updates the office screen (app "leads")', async () => {
-  const { db, run } = setup('prospector');
+  const { db, run } = setup('sales');
   const res = J(await run('rizehub_leads', { action: 'search', platform: 'shopify', location: 'Australia', industry: 'skincare', signals: ['slow_site'], limit: 5 }));
   const leads = res.leads as { id: string; company: string }[];
   assert.ok(leads.length >= 3);
@@ -46,13 +46,13 @@ test('rizehub_leads search waits for the job, records job + lead refs, updates t
   assert.equal(saltbush.summary.stage, 'new');
   assert.equal(saltbush.summary.platform, 'shopify');
   assert.match(String(saltbush.summary.app_url), /lead-finder\/leads\/ld_1001$/);
-  const screen = db.screens.get('prospector')!;
+  const screen = db.screens.get('sales')!;
   assert.equal(screen.app, 'leads');
   assert.match(screen.content ?? '', /Saltbush Skin Co\. · shopify · LCP 6\.2 s/);
 });
 
 test('a job still running after the wait parks the task (pending) and ends the turn; job.completed resumes it', async () => {
-  const { db, task, state, run } = setup('prospector', { jobDelayMs: 60_000, jobWaitMs: 1 });
+  const { db, task, state, run } = setup('sales', { jobDelayMs: 60_000, jobWaitMs: 1 });
   const msg = await run('rizehub_leads', { action: 'search', platform: 'webflow' });
   assert.match(msg, /still running.*paused/);
   assert.equal(state.ended, 'asked');
@@ -65,7 +65,7 @@ test('a job still running after the wait parks the task (pending) and ends the t
 });
 
 test('notes, lists and stage changes; "contacted" is refused without an approved send for that lead', async () => {
-  const { db, task, run } = setup('pipeline');
+  const { db, task, run } = setup('sales');
   const n = J(await run('rizehub_leads', { action: 'add_notes', lead_id: 'ld_1001', notes: 'Mobile LCP 6.2 s (PSI, 2026-09-28) on /collections/all', fit_score: 84, angle: 'Speed fix before BFCM', findings: ['LCP 6.2 s'] }));
   assert.equal(n.stage, 'researched');
   assert.equal(db.rizehub.refs.find((r) => r.rizehub_id === 'ld_1001')!.summary.fit_score, 84);
@@ -91,14 +91,14 @@ test('notes, lists and stage changes; "contacted" is refused without an approved
 });
 
 test('API errors come back as text, never thrown into the agent loop', async () => {
-  const { mock, run } = setup('prospector');
+  const { mock, run } = setup('sales');
   assert.match(await run('rizehub_leads', { action: 'get', lead_id: 'ld_nope' }), /RizeHub error not_found: Lead ld_nope not found \(retryable: no\)/);
   mock.failNext(10, 503);
   assert.match(await run('rizehub_leads', { action: 'get', lead_id: 'ld_1001' }), /RizeHub error unavailable.*retryable: yes/);
 });
 
 test('rizehub_reports: generate → report ref with preview; notes; publish only via approval, executed by the worker later', async () => {
-  const { db, task, mock, run } = setup('ea');
+  const { db, task, mock, run } = setup('coo');
   const r = J(await run('rizehub_reports', { action: 'generate', workspace_id: 'ws_vinylicons', type: 'seo-monthly', from: '2026-09-01', to: '2026-09-30' }));
   const reportId = String(r.id);
   assert.match(String(r.preview_url), /preview\/reports\//);
@@ -113,9 +113,9 @@ test('rizehub_reports: generate → report ref with preview; notes; publish only
   assert.equal((ap.payload.spec as { rizehub: { report_id: string } }).rizehub.report_id, reportId);
 });
 
-test('rizehub_reports: only the EA generates/publishes; SEO can read metrics and add notes', async () => {
-  const { run } = setup('seo-1');
-  assert.match(await run('rizehub_reports', { action: 'generate', workspace_id: 'ws_vinylicons', type: 'seo-monthly', from: '2026-09-01', to: '2026-09-30' }), /Only the EA/);
+test('rizehub_reports: only the COO generates/publishes; the writer can read metrics and add notes', async () => {
+  const { run } = setup('writer');
+  assert.match(await run('rizehub_reports', { action: 'generate', workspace_id: 'ws_vinylicons', type: 'seo-monthly', from: '2026-09-01', to: '2026-09-30' }), /Only the COO/);
   const m = J(await run('rizehub_reports', { action: 'metrics', workspace_id: 'ws_vinylicons', from: '2026-09-01', to: '2026-09-30' }));
   assert.ok((m.metrics as { sessions: number }).sessions > 0);
 });
@@ -129,7 +129,7 @@ const PAYLOAD: OnboardingPayload = {
 
 test('rizehub_onboarding: dry run changes nothing; approval pauses the task; execute runs the approved payload exactly once', async () => {
   const clientId = 'c-1';
-  const { db, task, state, mock, run } = setup('client-success', { clientId });
+  const { db, task, state, mock, run } = setup('coo', { clientId });
   const accountsBefore = mock.accounts.size;
   const dry = J(await run('rizehub_onboarding', { action: 'dry_run', payload: PAYLOAD }));
   assert.equal(dry.valid, true);
@@ -166,7 +166,7 @@ test('rizehub_onboarding: dry run changes nothing; approval pauses the task; exe
   assert.equal(db.rizehub.refs.find((r) => r.kind === 'account')!.client_id, clientId);
   assert.ok(db.rizehub.refs.find((r) => r.kind === 'workspace'));
   // the audit headers reached RizeHub with idempotency keys taskId:onboarding:<step>
-  assert.ok(mock.audit.some((a) => a.path === '/accounts' && a.task_id === task.id && a.agent_id === 'client-success' && !a.dry_run));
+  assert.ok(mock.audit.some((a) => a.path === '/accounts' && a.task_id === task.id && a.agent_id === 'coo' && !a.dry_run));
 
   // second execute: no duplicate account
   const again = J(await run('rizehub_onboarding', { action: 'execute' }));
@@ -175,7 +175,7 @@ test('rizehub_onboarding: dry run changes nothing; approval pauses the task; exe
 });
 
 test('rizehub_onboarding: duplicates and invalid payloads are refused before any approval', async () => {
-  const { db, run } = setup('client-success');
+  const { db, run } = setup('coo');
   const dup = J(await run('rizehub_onboarding', { action: 'request_approval', payload: { ...PAYLOAD, account: { ...PAYLOAD.account, company: 'Madam Muse', domain: 'madammuse.co' } } }));
   assert.match(String(dup.refused), /duplicate/);
   const bad = J(await run('rizehub_onboarding', { action: 'request_approval', payload: { ...PAYLOAD, workspace: { template: 'nope', name: 'x' } } }));
@@ -184,7 +184,7 @@ test('rizehub_onboarding: duplicates and invalid payloads are refused before any
 });
 
 test('rizehub_onboarding: invite drafted with send=false; sending needs an approval', async () => {
-  const { db, mock, run } = setup('client-success');
+  const { db, mock, run } = setup('coo');
   const inv = J(await run('rizehub_onboarding', { action: 'draft_invite', account_id: 'acc_madammuse', invite_email: 'hello@madammuse.co' }));
   assert.equal(inv.status, 'draft');
   assert.match(await run('rizehub_onboarding', { action: 'request_invite_send', invite_id: String(inv.invite_id) }), /queued for CEO approval/);
@@ -203,7 +203,7 @@ test('rizehub_readonly: duplicate search, workspace read-back, refs without stea
 
 test('job_tracker: upsert dedupes by canonical URL, applied is CEO-only, pasted links, feeds mark tracked items', async () => {
   const feeds: JobItem[] = [{ url: 'https://weworkremotely.com/remote-jobs/kestrel', title: 'Senior Shopify Developer', company: 'Kestrel Goods', source: 'weworkremotely', platform_tags: ['shopify'], rate: null, posted_at: '2026-09-25T10:15:00.000Z', summary: 'Liquid', location: null }];
-  const { db, run } = setup('job-scout', { feeds });
+  const { db, run } = setup('sales', { feeds });
   const a = J(await run('job_tracker', { action: 'upsert', url: 'https://www.weworkremotely.com/remote-jobs/kestrel/?utm_source=rss', title: 'Senior Shopify Developer', company: 'Kestrel Goods', source: 'weworkremotely', fit_score: 86, fit_reasons: ['Liquid OS 2.0'], status: 'shortlisted' }));
   assert.equal(a.created, true);
   const b = J(await run('job_tracker', { action: 'upsert', url: 'https://weworkremotely.com/remote-jobs/kestrel', title: 'Senior Shopify Developer', draft: 'Hi Kestrel team…', status: 'drafted' }));
@@ -212,7 +212,7 @@ test('job_tracker: upsert dedupes by canonical URL, applied is CEO-only, pasted 
   assert.equal(db.rizehub.jobs[0]!.fit_score, 86);
   assert.equal(db.rizehub.jobs[0]!.status, 'drafted');
   // zod refuses "applied" for agents; the RPC/fake refuses it too
-  assert.equal(db.screens.get('job-scout')!.app, 'sheet');
+  assert.equal(db.screens.get('sales')!.app, 'sheet');
   await assert.rejects(db.upsertJobOpportunity({ url: 'https://x.test/j', title: 'x', status: 'applied' }, null), /set by the CEO/);
 
   const p = J(await run('job_tracker', { action: 'add_link', url: 'https://www.onlinejobs.ph/jobseekers/job/1234567' }));
@@ -228,13 +228,13 @@ test('job_tracker: upsert dedupes by canonical URL, applied is CEO-only, pasted 
   assert.equal(list.count, 1);
 });
 
-test('runner wiring: the prospector role gets the real rizehub_leads tool (no stub) and its results reach the model', async () => {
+test('runner wiring: the sales role gets the real rizehub_leads tool (no stub) and its results reach the model', async () => {
   const mock = new MockRizehub({ jobDelayMs: 0 });
   const client = new RizehubClient({ baseUrl: 'http://rizehub.mock/agent-api/v1', keys: MOCK_KEYS, fetch: mockFetch(mock), sleep: async () => {} });
   setRizehubForTests({ client, mock, cfg: { ...rizehubConfig({}), jobWaitMs: 1000 } });
   try {
     const db = new FakeHqDb(AGENTS);
-    const task = db.addTask({ agent_id: 'prospector', status: 'working', title: 'Find AU Shopify leads', work_type: 'lead-finder-search' });
+    const task = db.addTask({ agent_id: 'sales', status: 'working', title: 'Find AU Shopify leads', work_type: 'lead-finder-search' });
     const model = mockModel([
       toolCalls([{ name: 'rizehub_leads', input: { action: 'search', platform: 'shopify', location: 'Australia', limit: 3 } }]),
       toolCalls([{ name: 'submit_output', input: { summary: '3 leads found' } }]),

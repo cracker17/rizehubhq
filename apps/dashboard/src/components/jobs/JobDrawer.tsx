@@ -86,7 +86,7 @@ export function JobDrawer({ job, now, busy, onClose, onCopy, onApplied, onSkip }
                   <li key={i} className="flex gap-2 text-[14px] leading-snug"><CheckCircle2 size={16} className="mt-0.5 shrink-0 text-[var(--color-success)]" aria-hidden />{r}</li>
                 ))}
               </ul>
-            ) : <p className="text-[13px] text-[var(--color-dim)]">Not screened yet. Job Scout scores it in the next job search.</p>}
+            ) : <p className="text-[13px] text-[var(--color-dim)]">Not screened yet. The Sales Agent scores it in the next job search.</p>}
           </section>
 
           <section aria-labelledby="flags-h">
@@ -131,7 +131,7 @@ export function JobDrawer({ job, now, busy, onClose, onCopy, onApplied, onSkip }
 
         <footer className="border-t border-[var(--color-line)] p-4 sm:p-5">
           {applied ? (
-            <p className="text-center text-[13px] text-[var(--color-muted)]">Tracked as {JOB_STATUS_LABEL[job.status].toLowerCase()}. Job Scout drafts the follow-up when it is due.</p>
+            <p className="text-center text-[13px] text-[var(--color-muted)]">Tracked as {JOB_STATUS_LABEL[job.status].toLowerCase()}. The Sales Agent drafts the follow-up when it is due.</p>
           ) : (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <label className="flex items-center gap-2 text-[13px] text-[var(--color-muted)]">

@@ -2,7 +2,7 @@
 // Never interrupts the running task; both messages are stored in agent_messages.
 import { generateText } from 'ai';
 import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
-import { costUsd } from './models/usage';
+import { costUsd, normalizeUsage } from './models/usage';
 
 export const MAX_QUESTION_CHARS = 2000;
 
@@ -51,12 +51,13 @@ export async function answerChat(agentId: string, question: string, deps: Worker
   const picked = await deps.pickModel('light');
   const res = await generateText({ model: picked.model, system, prompt: `# Live state\n${context}\n\n# CEO asks\n${q}` });
   const answer = res.text.trim() || "Sorry, I couldn't put that into words just now. Check my screen in the office for live progress.";
-  const cost = picked.recordCall(res.usage);
+  const cost = picked.recordCall(res.usage, res.providerMetadata);
+  const u = normalizeUsage(picked.provider, res.usage, res.providerMetadata);
   await deps.db.addAgentMessage(agentId, 'agent', answer, taskId);
   await deps.db.recordUsage({
     actor: agentId, kind: 'chat', taskId: null, requestId: null,
-    tokensIn: res.usage.inputTokens ?? 0, tokensOut: res.usage.outputTokens ?? 0,
-    costUsd: cost || costUsd(picked.provider, picked.modelId, res.usage), detail: usageDetail(picked, res.usage),
+    tokensIn: u.inputTokens ?? 0, tokensOut: u.outputTokens ?? 0,
+    costUsd: cost || costUsd(picked.provider, picked.modelId, u), detail: usageDetail(picked, u),
   }).catch((e) => log(deps, `[chat] usage log failed`, errMsg(e)));
   return { answer };
 }

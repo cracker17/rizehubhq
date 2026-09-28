@@ -1,6 +1,6 @@
 # SOP: social-graphic
 
-Owner: graphic-1 / graphic-2 (templates and carousels → graphic-2). Output: organic social posts, carousels, story frames, or reusable templates.
+Owner: designer. Output: organic social posts, carousels, story frames, or reusable templates.
 
 ## 1. Inputs (missing → `ask_ceo`)
 - Platform(s), format (single, carousel, story), count, dates if part of a content calendar.

@@ -34,6 +34,17 @@ export interface BotReport {
 }
 
 export interface SpendRow { actor: string; cost_usd: number | string; created_at: string }
+
+/** budget_alerts row (20260928080000_six_agent_roster.sql): written by the worker at 80% / 100% of the daily AI budget. */
+export interface BudgetAlert {
+  id: string;
+  alert_day: string;
+  level: number;
+  spent_usd: number | string;
+  budget_usd: number | string;
+  created_at: string;
+  telegram_sent_at: string | null;
+}
 export interface AgentLite { id: string; name: string; status: string; enabled?: boolean }
 
 /** The parts of report_facts() the bot's quick /report summary uses. */

@@ -63,14 +63,14 @@ export const COUNTRY_ALIASES: Record<string, string> = {
 };
 
 export const TEMPLATES: Template[] = [
-  { id: 'shopify-growth', name: 'Shopify Growth', services: ['shopify-dev', 'cro', 'seo', 'reports'], projects: ['Baseline speed + CRO audit', 'Month 1 plan', 'Theme backup + staging theme'], report_type: 'seo-monthly' },
+  { id: 'shopify-growth', name: 'Shopify Growth', services: ['shopify', 'cro', 'seo', 'reports'], projects: ['Baseline speed + CRO audit', 'Month 1 plan', 'Theme backup + staging theme'], report_type: 'seo-monthly' },
   { id: 'seo-retainer', name: 'SEO Retainer', services: ['seo', 'content', 'reports'], projects: ['Baseline SEO audit', 'Keyword map', 'Month 1 content plan'], report_type: 'seo-monthly' },
-  { id: 'webflow-build', name: 'Webflow Build', services: ['webflow-dev', 'design', 'seo'], projects: ['Discovery + sitemap', 'Wireframes', 'Build', 'Launch checklist'], report_type: 'site-audit' },
-  { id: 'wordpress-care', name: 'WordPress Care', services: ['wordpress-dev', 'maintenance', 'reports'], projects: ['Backup + staging setup', 'Plugin audit', 'Speed pass'], report_type: 'site-audit' },
+  { id: 'webflow-build', name: 'Webflow Build', services: ['webflow', 'design', 'seo'], projects: ['Discovery + sitemap', 'Wireframes', 'Build', 'Launch checklist'], report_type: 'site-audit' },
+  { id: 'wordpress-care', name: 'WordPress Care', services: ['wordpress', 'maintenance', 'reports'], projects: ['Backup + staging setup', 'Plugin audit', 'Speed pass'], report_type: 'site-audit' },
   { id: 'ads-management', name: 'Ads Management', services: ['ads', 'design', 'reports'], projects: ['Account audit', 'Creative plan', 'Tracking check'], report_type: 'ads-performance' },
 ];
 
-export const SERVICES = ['shopify-dev', 'webflow-dev', 'wordpress-dev', 'cro', 'seo', 'content', 'reports', 'design', 'ads', 'maintenance', 'social'];
+export const SERVICES = ['shopify', 'webflow', 'wordpress', 'cro', 'seo', 'content', 'reports', 'design', 'ads', 'maintenance', 'social'];
 
 export const SEED_ACCOUNTS = [
   { id: 'acc_madammuse', company: 'Madam Muse', domain: 'madammuse.co', plan: 'shopify-growth', country: 'US', time_zone: 'America/New_York',

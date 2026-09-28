@@ -49,6 +49,6 @@ You send `/assign Madam Muse needs a bundle landing page with SEO copy and 3 ad 
 
 1. **CEO approves everything external.** Agents draft, build on staging, and propose. Only you publish, send, merge, or spend.
 2. **Every deliverable is QA'd** by a separate agent before it reaches you.
-3. **Start small.** Two agents working end-to-end beats 22 half-working ones. Add roles one at a time.
+3. **Start small.** Two agents working end-to-end beats six half-working ones. Add roles one at a time.
 4. **Everything is logged.** Every agent action, tool call, cost, and decision is in the activity log.
 5. **Local first, cloud later.** The same code and Docker setup runs on your laptop and on the VPS.

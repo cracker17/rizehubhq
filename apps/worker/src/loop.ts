@@ -8,7 +8,7 @@ import { reviewNext } from './qa';
 import { runDueReports } from './reportsJob';
 import { runTask } from './runner';
 import { startRizehubBackground } from './rizehub/background';
-import { DailyBudgetGuard, overBudgetNote } from './budget';
+import { DailyBudgetGuard, GlobalDailyBudget, globalBudgetNote, overBudgetNote } from './budget';
 import type { TaskRow } from './hqdb';
 
 /** settings.paused may be stored as true or "true". */
@@ -28,6 +28,8 @@ export interface LoopOptions {
   pausedCheckMs?: number;
   /** Pause before claiming again when every claimable task belongs to an agent over its daily budget. */
   budgetBackoffMs?: number;
+  /** DAILY_AI_BUDGET_USD: when today's total AI spend reaches it, no new planning, tasks or QA start (null → settings / none). */
+  dailyBudgetUsd?: number | null;
 }
 
 export class WorkerLoop {
@@ -42,9 +44,23 @@ export class WorkerLoop {
   private reporting: Promise<unknown> | null = null;
   private paused = { value: false, checkedAt: -Infinity };
   readonly budget: DailyBudgetGuard;
+  readonly globalBudget: GlobalDailyBudget;
+  private budgetStopDay: string | null = null;
 
   constructor(private deps: WorkerDeps, private opts: LoopOptions) {
     this.budget = new DailyBudgetGuard(deps.db, { now: deps.now });
+    this.globalBudget = new GlobalDailyBudget(deps.db, { budgetUsd: opts.dailyBudgetUsd ?? null, now: deps.now, log: (m) => log(deps, m) });
+  }
+
+  /** True when today's total AI spend reached DAILY_AI_BUDGET_USD: nothing new is claimed (logged once per day). */
+  private async overDailyAiBudget(): Promise<boolean> {
+    const g = await this.globalBudget.check().catch((e) => {
+      log(this.deps, '[worker] daily AI budget check failed (work continues)', errMsg(e));
+      return null;
+    });
+    if (!g?.over) return false;
+    if (this.budgetStopDay !== g.day) { this.budgetStopDay = g.day; log(this.deps, `[worker] ${globalBudgetNote(g)}`); }
+    return true;
   }
 
   private backoff(kind: keyof WorkerLoop['pausedUntil']) {
@@ -79,6 +95,7 @@ export class WorkerLoop {
 
   async tick(): Promise<void> {
     if (await this.isPaused()) return;
+    if (await this.overDailyAiBudget()) return;
     const now = Date.now();
     if (!this.planning && now >= this.pausedUntil.planning) {
       this.planning = planNext(this.deps)
@@ -109,7 +126,7 @@ export class WorkerLoop {
             if (r.status === 'requeued' && !this.stopping) this.backoff('tasks');
           })
           .catch((e) => log(this.deps, `[worker] task ${task.id} crashed`, errMsg(e)))
-          .finally(() => { this.running.delete(task.id); this.controllers.delete(task.id); this.budget.invalidate(task.agent_id); });
+          .finally(() => { this.running.delete(task.id); this.controllers.delete(task.id); this.budget.invalidate(task.agent_id); this.globalBudget.invalidate(); });
         this.running.set(task.id, p);
       }
     } finally {

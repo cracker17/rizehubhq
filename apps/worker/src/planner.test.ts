@@ -11,7 +11,7 @@ function plan(overrides: Record<string, unknown> = {}, taskOverrides: Record<str
     title: 'Madam Muse — Shopify speed article', client_slug: null, summary: 'One SEO article.',
     assumptions: ['Client is a Shopify store'], questions_for_ceo: [], due_date: null, priority: 'normal', estimated_cost_usd: 0.9,
     tasks: [{
-      key: 'article', agent_id: 'seo-1', work_type: 'seo-article', title: 'Write Shopify speed article',
+      key: 'article', agent_id: 'writer', work_type: 'seo-article', title: 'Write Shopify speed article',
       instructions: 'Write a 1,200-word article on Shopify speed for Madam Muse.',
       acceptance_criteria: ['Primary keyword "shopify speed" in H1', 'Title ≤ 60 characters', 'Meta description ≤ 155 characters'],
       depends_on: [], ...taskOverrides,
@@ -37,7 +37,7 @@ test('valid plan is submitted for CEO approval with usage logged', async () => {
   const text = promptText(model.doGenerateCalls[0]!);
   assert.match(text, /You are the COO of RizeHub/);           // role file
   assert.match(text, /routing:/);                              // roster.yaml
-  assert.match(text, /- seo-1 \(/);                            // enabled agents
+  assert.match(text, /- writer \(/);                            // enabled agents
   assert.match(text, /Make it 1,500 words/);                   // CEO feedback
   assert.match(text, /brain\/playbooks\/client-work\.md/);    // playbook
   assert.equal(db.usage.length, 1);
@@ -84,7 +84,7 @@ test('no staged request → idle, model never called', async () => {
 });
 
 test('validatePlan rejects work types missing from the roster; helpers match playbooks and clients', () => {
-  const v = validatePlan(plan({}, { work_type: 'telepathy' }), { enabledAgents: ['seo-1'], workTypes: ['seo-article'] });
+  const v = validatePlan(plan({}, { work_type: 'telepathy' }), { enabledAgents: ['writer'], workTypes: ['seo-article'] });
   assert.equal(v.ok, false);
   assert.match(!v.ok ? v.error : '', /telepathy/);
   assert.equal(matchPlaybook('Find 30 Shopify stores in Australia and draft outreach'), 'lead-gen');

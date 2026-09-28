@@ -1,5 +1,5 @@
 // M9b/M9c RizeHub integration (supabase/migrations/20260928050000_rizehub.sql): refs, parked jobs, webhook inbox,
-// exactly-once external actions, Job Scout tracker + follow-ups, and who may call what.
+// exactly-once external actions, job tracker (Sales Agent) + follow-ups, and who may call what.
 export default async function ({ db, step, val, one, status, agent, as, assert }) {
   const CEO = '11111111-1111-1111-1111-111111111111';
   const OTHER = '22222222-2222-2222-2222-222222222222';
@@ -11,9 +11,9 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
     req = await val(`insert into requests (source, raw_text, status, client_id) values ('dashboard', 'Find AU leads', 'in_progress', '${CL}') returning id`);
     const mk = (agentId, wt) => val(`insert into tasks (request_id, client_id, agent_id, title, instructions, work_type, status)
                                      values ($1, '${CL}', $2, $3, 'x', $4, 'working') returning id`, [req, agentId, `${agentId} task`, wt]);
-    tLead = await mk('prospector', 'lead-finder-search');
-    tOnb = await mk('client-success', 'workspace-setup');
-    tEa = await mk('ea', 'client-report');
+    tLead = await mk('sales', 'lead-finder-search');
+    tOnb = await mk('coo', 'workspace-setup');
+    tEa = await mk('writer', 'client-report'); // not the COO's, so the COO's status only reflects tOnb
   });
 
   await step('rizehub: record_rizehub_ref upserts one row per object and merges the summary', async () => {
@@ -41,7 +41,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
   await step('rizehub: park_task_for_job → pending; rizehub_job_finished resumes it once', async () => {
     await db.query(`select park_task_for_job($1, 'job_1', '{"type":"lead_search","tool":"rizehub_leads"}'::jsonb)`, [tLead]);
     assert.equal(await status('tasks', tLead), 'pending');
-    assert.equal(await agent('prospector'), 'idle');
+    assert.equal(await agent('sales'), 'idle');
     assert.equal(await val(`select summary->>'status' from rizehub_refs where kind = 'job' and rizehub_id = 'job_1'`), 'pending');
     await assert.rejects(db.query(`select park_task_for_job($1, 'job_2', '{}'::jsonb)`, [tLead]), /not in progress/);
     assert.equal(await val(`select rizehub_job_finished('job_nope', 'completed', '{}')`), 'unknown_job');
@@ -58,7 +58,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
     await assert.rejects(db.query(`select request_rizehub_action($1, 'publish', '{}'::jsonb, false)`, [tOnb]), /must start with rizehub/);
     apOnb = await val(`select request_rizehub_action($1, 'rizehub.onboarding', '{"description":"Create account","rizehub":{"op":"onboarding"}}'::jsonb, true)`, [tOnb]);
     assert.equal(await status('tasks', tOnb), 'awaiting_ceo');
-    assert.equal(await agent('client-success'), 'waiting');
+    assert.equal(await agent('coo'), 'waiting');
     assert.equal(await val(`select payload->>'action_type' from approvals where id = $1`, [apOnb]), 'rizehub.onboarding');
     // not approved yet → cannot be claimed
     assert.equal(await val(`select external_action_exec($1, 'claim')`, [apOnb]), false);

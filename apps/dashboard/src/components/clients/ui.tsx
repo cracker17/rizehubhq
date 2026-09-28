@@ -107,7 +107,7 @@ export const TWOFA_LABEL: Record<string, string> = {
 
 /** Suggested agents per platform for new credentials (least privilege; the CEO can change it). */
 export const SUGGESTED_GRANTS: Record<string, string[]> = {
-  shopify: ['shopify-dev', 'qa-lead'], webflow: ['webflow-dev', 'qa-lead'], wordpress: ['wordpress-dev', 'qa-lead'],
-  github: ['fullstack-dev'], figma: ['uiux-1', 'uiux-2'], ga4: ['ea', 'seo-1'], gmail: ['ea'], hosting: ['fullstack-dev'],
-  ftp: ['wordpress-dev'], halaxy: ['fullstack-dev'], other: [],
+  shopify: ['web-dev', 'qa-lead'], webflow: ['web-dev', 'qa-lead'], wordpress: ['web-dev', 'qa-lead'],
+  github: ['web-dev'], figma: ['designer'], ga4: ['coo', 'writer'], gmail: ['coo'], hosting: ['web-dev'],
+  ftp: ['web-dev'], halaxy: ['web-dev'], other: [],
 };

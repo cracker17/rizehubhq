@@ -1,4 +1,4 @@
-# SOP: job-search (Job Scout)
+# SOP: job-search (Sales Agent)
 
 Goal: a ranked shortlist of live, real, well-fitting remote web-dev jobs for the CEO, tracked in `job_tracker`.
 

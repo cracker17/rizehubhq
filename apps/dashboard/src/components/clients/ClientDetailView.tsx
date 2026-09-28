@@ -51,7 +51,7 @@ function ProfileTab({ detail }: { detail: ClientDetail }) {
           <Field label="Company"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} /></Field>
           <Field label="Website"><input className={inputCls} value={website} onChange={(e) => setWebsite(e.target.value)} inputMode="url" placeholder="https://" /></Field>
           <Field label="Service package"><input className={inputCls} value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="shopify-growth" /></Field>
-          <Field label="RizeHub workspace id"><input className={inputCls} value={ws} onChange={(e) => setWs(e.target.value)} placeholder="Set by Client Success" /></Field>
+          <Field label="RizeHub workspace id"><input className={inputCls} value={ws} onChange={(e) => setWs(e.target.value)} placeholder="Set by the COO during onboarding" /></Field>
           <Field label="Status">
             <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value as 'active' | 'paused')}>
               <option value="active">Active</option><option value="paused">Paused</option>

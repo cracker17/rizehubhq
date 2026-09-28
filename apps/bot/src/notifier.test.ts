@@ -21,7 +21,7 @@ class FakeSender implements Sender {
 
 const DAY = new Date('2026-09-28T06:00:00Z');   // 14:00 Manila
 const NIGHT = new Date('2026-09-28T15:00:00Z'); // 23:00 Manila
-const names = () => new Map([['seo-1', 'SEO Writer 1']]);
+const names = () => new Map([['writer', 'Content Writer']]);
 function setup(now = DAY) {
   const db = new FakeBotDb();
   const sender = new FakeSender();
@@ -29,7 +29,7 @@ function setup(now = DAY) {
   return { db, sender, deps, state: { lastDecisionSync: '2026-09-28T00:00:00Z' } };
 }
 const report = (p: Partial<BotReport> = {}): BotReport => ({
-  id: `r-${Math.random()}`, agent_id: 'ea', report_date: '2026-09-28', kind: 'daily_digest', body_md: '# Digest', data: {},
+  id: `r-${Math.random()}`, agent_id: 'coo', report_date: '2026-09-28', kind: 'daily_digest', body_md: '# Digest', data: {},
   created_at: '2026-09-28T10:00:00Z', telegram_sent_at: null, ...p,
 });
 
@@ -64,7 +64,7 @@ test('quiet hours: only urgent requests and task failures go out; the rest are h
   db.reports.push(report());
   const r = await notifierTick(deps, state);
   assert.deepEqual([r.quiet, r.sent, r.held, r.reports], [true, 2, 1, 0]);
-  assert.deepEqual(sender.sent.map((s) => s.text.split('\n')[0]), ['🔴 <b>URGENT</b> · ✅ <b>QA PASSED 92/100</b> · Urgent one (SEO Writer 1)', '⚠️ <b>TASK FAILED</b> · Build (SEO Writer 1)']);
+  assert.deepEqual(sender.sent.map((s) => s.text.split('\n')[0]), ['🔴 <b>URGENT</b> · ✅ <b>QA PASSED 92/100</b> · Urgent one (Content Writer)', '⚠️ <b>TASK FAILED</b> · Build (Content Writer)']);
   // morning: the held approval and the report go out
   const morning = { ...deps, now: () => new Date('2026-09-28T23:05:00Z') }; // 07:05 Manila
   const m = await notifierTick(morning, state);
@@ -201,4 +201,28 @@ test('2FA: a code typed after the request expired is not used', async () => {
   assert.equal(db.decisions.length, 0);
   assert.match(res!.edit.text, /Expired/);
   assert.ok(!res!.edit.text.includes('123456'));
+});
+
+// ---------- daily AI budget alerts (budget_alerts rows written by the worker) ----------
+const alert = (level: number, day = '2026-09-28') => ({
+  id: `b-${day}-${level}`, alert_day: day, level, spent_usd: level === 100 ? '10.02' : '8.10', budget_usd: '10',
+  created_at: '2026-09-28T05:00:00Z', telegram_sent_at: null,
+});
+
+test('budget alerts: 80% and 100% are sent once each; 80% waits out quiet hours, 100% does not', async () => {
+  const { db, sender, deps, state } = setup();
+  db.budgetAlerts.push(alert(80));
+  assert.equal((await notifierTick(deps, state)).budgetAlerts, 1);
+  assert.match(sender.sent[0]!.text, /^⚠️ <b>80% of the daily AI budget used<\/b> · \$8\.10 of \$10\.00 \(2026-09-28, Manila\)/);
+  assert.equal((await notifierTick(deps, state)).budgetAlerts, 0, 'never twice');
+
+  const night = setup(NIGHT);
+  night.db.budgetAlerts.push(alert(80, '2026-09-29'));
+  assert.equal((await notifierTick(night.deps, night.state)).budgetAlerts, 0, '80% held at night');
+  night.db.budgetAlerts.push(alert(100, '2026-09-29'));
+  const r = await notifierTick(night.deps, night.state);
+  assert.equal(r.budgetAlerts, 1, 'only the 100% alert is sent; the superseded 80% is marked without a message');
+  assert.match(night.sender.sent[0]!.text, /^🛑 <b>Daily AI budget reached<\/b> · \$10\.02 of \$10\.00/);
+  assert.match(night.sender.sent[0]!.text, /No new planning, tasks or QA reviews start until midnight Manila time/);
+  assert.ok(night.db.budgetAlerts.every((a) => a.telegram_sent_at));
 });

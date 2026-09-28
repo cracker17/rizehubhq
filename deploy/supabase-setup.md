@@ -21,13 +21,13 @@ supabase db push                                 # applies supabase/migrations/*
 Later schema changes follow the same path: add a **new** migration file, `pnpm db:test` passes in CI, run `supabase db push`, **then** deploy the code. `deploy/update.sh` prints a warning whenever a deploy contains new migrations.
 
 ## 3. Seed (once)
-`supabase/seed.sql` inserts the 22 agents and default settings. It is **not** idempotent, so run it once:
+The migrations already create the 6 agents (`20260928080000_six_agent_roster.sql`); `supabase/seed.sql` upserts them again and inserts the default settings. The settings part is **not** idempotent, so run it once:
 ```bash
 psql "<session-pooler connection string>" -v ON_ERROR_STOP=1 -f supabase/seed.sql
 ```
 (or open **SQL Editor → New query**, paste the file and run it). Check:
 ```sql
-select count(*) from agents;          -- 22
+select count(*) from agents;          -- 6
 ```
 
 ## 4. Auth settings
@@ -78,11 +78,11 @@ No storage policies are needed. Only the worker (service role) writes, and the d
 
 ## 9. Verify
 ```sql
-select count(*) from agents;                                    -- 22
+select count(*) from agents;                                    -- 6
 select * from pg_publication_tables where pubname = 'supabase_realtime' limit 3;   -- agents, requests, tasks…
 select id, public from storage.buckets where id = 'evidence';   -- evidence | false
 ```
-Then, once the VPS stack runs: log in at https://hq.rizehub.ph and the office shows the 22 agents. Change an agent's status in **Table Editor → agents** and the tile updates live (Realtime).
+Then, once the VPS stack runs: log in at https://hq.rizehub.ph and the office shows the 6 agents. Change an agent's status in **Table Editor → agents** and the tile updates live (Realtime).
 
 ## Backups
 - `deploy/backup.sh` (cron on the VPS) → nightly `pg_dump` of the `public` schema, rotated after `BACKUP_KEEP_DAYS`.

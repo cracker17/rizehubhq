@@ -10,17 +10,17 @@ function setup(jobDelayMs = 0) {
   let now = Date.parse('2026-09-28T02:00:00Z');
   const mock = new MockRizehub({ jobDelayMs, now: () => now });
   const client = new RizehubClient({ baseUrl: 'http://rizehub.mock/agent-api/v1', keys: MOCK_KEYS, fetch: mockFetch(mock), sleep: async () => {} });
-  const db = new FakeHqDb(['coo', 'ea', 'client-success', 'prospector']);
+  const db = new FakeHqDb(['coo', 'sales']);
   return { mock, client, db, advance: (ms: number) => { now += ms; } };
 }
 
 test('approved report publish is executed once by the worker; pending and rejected ones are not', async () => {
   const { mock, client, db } = setup();
-  const ctx = { taskId: 't', agentId: 'ea' };
+  const ctx = { taskId: 't', agentId: 'coo' };
   const acc = await client.generateReport(ctx, 'ws_vinylicons', { type: 'seo-monthly', period: { from: '2026-09-01', to: '2026-09-30' } });
   const rid = (await client.getJob(ctx, acc.job_id)).result!.report_id!;
   await client.addReportNotes(ctx, rid, { summary: 'Up and to the right', insights: [], next_steps: [] });
-  const task = db.addTask({ agent_id: 'ea', status: 'working' });
+  const task = db.addTask({ agent_id: 'coo', status: 'working' });
   const spec = (id: string) => ({ description: 'Publish', rizehub: { op: 'report_publish', report_id: id, notify_client: true } });
   const pending = await db.requestExternalAction(task.id, 'rizehub.report_publish', spec(rid));
   assert.equal(await executeApprovedActions(db, client), 0);
@@ -34,7 +34,7 @@ test('approved report publish is executed once by the worker; pending and reject
   assert.equal((ap.payload.execution as { status: string }).status, 'published');
   assert.equal(db.rizehub.refs.find((r) => r.kind === 'report' && r.rizehub_id === rid)!.summary.status, 'published');
   assert.equal(await executeApprovedActions(db, client), 0); // exactly once
-  assert.ok(mock.audit.some((a) => a.path === `/reports/${rid}/publish` && a.task_id === task.id && a.agent_id === 'ea' && a.status === 200));
+  assert.ok(mock.audit.some((a) => a.path === `/reports/${rid}/publish` && a.task_id === task.id && a.agent_id === 'coo' && a.status === 200));
 
   const rejected = await db.requestExternalAction(task.id, 'rizehub.invite_send', { rizehub: { op: 'invite_send', invite_id: 'inv_x' } });
   db.rizehub.decide(rejected, 'rejected');
@@ -43,8 +43,8 @@ test('approved report publish is executed once by the worker; pending and reject
 
 test('a failing action is recorded (last_error) and retried later; non-retryable errors stop', async () => {
   const { mock, client, db } = setup();
-  const task = db.addTask({ agent_id: 'client-success', status: 'working' });
-  const inv = await client.draftInvite({ taskId: task.id, agentId: 'client-success' }, 'acc_madammuse', { email: 'hello@madammuse.co' });
+  const task = db.addTask({ agent_id: 'coo', status: 'working' });
+  const inv = await client.draftInvite({ taskId: task.id, agentId: 'coo' }, 'acc_madammuse', { email: 'hello@madammuse.co' });
   const ap = await db.requestExternalAction(task.id, 'rizehub.invite_send', { rizehub: { op: 'invite_send', invite_id: inv.id } });
   db.rizehub.decide(ap, 'approved');
   mock.failNext(10, 503, 'unavailable', { match: /send$/ });
@@ -64,8 +64,8 @@ test('a failing action is recorded (last_error) and retried later; non-retryable
 
 test('polling resumes a parked task when its job completed without a webhook', async () => {
   const { client, db, advance } = setup(10_000);
-  const task = db.addTask({ agent_id: 'prospector', status: 'working' });
-  const acc = await client.searchLeads({ taskId: task.id, agentId: 'prospector' }, { platform: 'shopify' });
+  const task = db.addTask({ agent_id: 'sales', status: 'working' });
+  const acc = await client.searchLeads({ taskId: task.id, agentId: 'sales' }, { platform: 'shopify' });
   await db.parkTaskForJob(task.id, acc.job_id, { type: 'lead_search', tool: 'rizehub_leads' });
   assert.equal(await pollPendingJobs(db, client, undefined, 0), 0); // still running
   assert.equal(db.tasks.get(task.id)!.status, 'pending');

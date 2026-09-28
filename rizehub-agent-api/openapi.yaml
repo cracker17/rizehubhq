@@ -438,7 +438,7 @@ components:
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]+$' } }
     TaskId: { name: X-HQ-Task-Id, in: header, required: true, schema: { type: string, maxLength: 100 }, description: HQ task id (audit log) }
-    AgentId: { name: X-HQ-Agent-Id, in: header, required: true, schema: { type: string, maxLength: 100, examples: [prospector] }, description: HQ agent id (audit log) }
+    AgentId: { name: X-HQ-Agent-Id, in: header, required: true, schema: { type: string, maxLength: 100, examples: [sales] }, description: HQ agent id (audit log) }
     IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 255, examples: ['7d1c0e7e-2f7e-4b53-9a57-1c0b6f1e9a10:onboarding:account'] } }
     DryRun: { name: dry_run, in: query, schema: { type: boolean, default: false }, description: Validate and preview; change nothing }
   headers:

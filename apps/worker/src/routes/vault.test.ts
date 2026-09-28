@@ -38,7 +38,7 @@ async function withServer(fn: (call: (path: string, body: unknown, headers?: Rec
 const storeBody = (o: Record<string, unknown> = {}) => ({
   clientId: CLIENT, platform: 'wordpress', label: 'Vinyl Icons WP', loginUrl: 'vinylicons.com/wp-login.php', username: 'rizehub-agent',
   secretType: 'app_password', secret: PW, twofaMethod: 'none', scopeNotes: 'Staging only', urlAllowlist: ['https://vinylicons.com/wp-json/wp/v2'],
-  grants: ['wordpress-dev', 'qa-lead'], ...o,
+  grants: ['web-dev', 'qa-lead'], ...o,
 });
 
 test('/vault/store encrypts + stores; /vault/reveal decrypts and logs; /vault/rotate replaces the secret', () => withServer(async (call, { store }) => {
@@ -47,7 +47,7 @@ test('/vault/store encrypts + stores; /vault/reveal decrypts and logs; /vault/ro
   const id = String(r.body.id);
   const c = store.creds.get(id)!;
   assert.equal(c.login_url, 'https://vinylicons.com/wp-login.php');
-  assert.deepEqual([...c.grants], ['wordpress-dev', 'qa-lead']);
+  assert.deepEqual([...c.grants], ['web-dev', 'qa-lead']);
   assert.ok(!r.text.includes(PW));
 
   const rev = await call('/vault/reveal', { id });

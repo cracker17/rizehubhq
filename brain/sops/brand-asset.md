@@ -1,6 +1,6 @@
 # SOP: brand-asset
 
-Owner: graphic-2 (preferred) / graphic-1. Output: logo files, brand kit, banners, email headers, one-pagers, print-ready collateral.
+Owner: designer. Output: logo files, brand kit, banners, email headers, one-pagers, print-ready collateral.
 
 ## 1. Inputs (missing → `ask_ceo`)
 - Asset list and use (web, social, print, signage), sizes, quantities, deadline.

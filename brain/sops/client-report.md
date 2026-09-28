@@ -1,4 +1,4 @@
-# SOP: client-report (EA & Report Desk)
+# SOP: client-report (COO)
 
 Goal: a correct, client-ready monthly report inside RizeHub, with human commentary, previewed and QA'd before the CEO approves publishing. Playbook: `brain/playbooks/monthly-report.md`.
 

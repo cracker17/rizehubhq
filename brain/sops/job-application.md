@@ -1,4 +1,4 @@
-# SOP: job-application (Job Scout)
+# SOP: job-application (Sales Agent)
 
 Goal: a tailored, honest application draft per shortlisted job that the CEO can paste and submit in under a minute.
 

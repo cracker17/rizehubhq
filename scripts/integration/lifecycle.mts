@@ -117,8 +117,8 @@ const PLAN = {
   title: 'Madam Muse bundle launch', client_slug: 'madam-muse', summary: 'Landing copy, then a wireframe that uses it.',
   assumptions: ['Shopify store'], questions_for_ceo: [], due_date: '2026-10-02', priority: 'high', estimated_cost_usd: 1.2,
   tasks: [
-    { key: 'copy', agent_id: 'seo-1', work_type: 'landing-copy', title: 'Bundle landing copy', instructions: 'Write the bundle page copy.', acceptance_criteria: CRITERIA, depends_on: [] },
-    { key: 'wire', agent_id: 'uiux-1', work_type: 'wireframe', title: 'Bundle page wireframe', instructions: 'Wireframe the bundle page using the copy.', acceptance_criteria: CRITERIA, depends_on: ['copy'] },
+    { key: 'copy', agent_id: 'writer', work_type: 'landing-copy', title: 'Bundle landing copy', instructions: 'Write the bundle page copy.', acceptance_criteria: CRITERIA, depends_on: [] },
+    { key: 'wire', agent_id: 'designer', work_type: 'wireframe', title: 'Bundle page wireframe', instructions: 'Wireframe the bundle page using the copy.', acceptance_criteria: CRITERIA, depends_on: ['copy'] },
   ],
 };
 const BAD_PLAN = { ...PLAN, title: 'Broken', tasks: [{ ...PLAN.tasks[0], agent_id: 'nobody' }] };
@@ -219,8 +219,15 @@ await step('dashboard loadHq: CEO session is recognised (ceo_users own-row polic
   assert.equal(hq.error, undefined, hq.error);
   assert.equal(hq.session.mode, 'live');
   assert.equal(hq.session.isCeo, true);
-  assert.equal(hq.snapshot.agents.length, 22);
+  assert.equal(hq.snapshot.agents.length, 6);
   assert.equal(hq.snapshot.clients.length, 1);
+});
+await step('six-agent roster (20260928080000): exactly coo/web-dev/designer/writer/sales/qa-lead with runtime + desk', async () => {
+  const rows = await q<any[]>(service.from('agents').select('id,model_role,runtime,desk').order('id'));
+  assert.deepEqual(rows.map((r) => [r.id, r.model_role, r.runtime, r.desk?.id]), [
+    ['coo', 'lead', 'worker', 'board-head'], ['designer', 'design', 'hermes', 'design-1'], ['qa-lead', 'qa', 'worker', 'qa-1'],
+    ['sales', 'sales', 'hermes', 'sales-2'], ['web-dev', 'dev', 'hermes', 'dev-1'], ['writer', 'writer', 'hermes', 'sales-1'],
+  ]);
 });
 
 await step('dashboard createRequestAction → create_request RPC (CEO JWT) stages the request', async () => {
@@ -302,12 +309,12 @@ await step('worker: claim → runner (report_progress + submit_output) → QA fa
   const prompts = runnerPrompts.filter((p) => p.taskId === copyId);
   assert.equal(prompts.length, 2);
   assert.match(prompts[1]!.text, /Move the CTA above the fold/, 'QA fix list reached the maker');
-  assert.equal(await svc.agentStatus('seo-1'), 'waiting');
+  assert.equal(await svc.agentStatus('writer'), 'waiting');
   assert.equal(await svc.agentStatus('qa-lead'), 'idle');
   const [deliv] = await svc.approvals({ task_id: copyId, kind: 'deliverable' });
   assert.equal(deliv.status, 'pending');
   assert.match(deliv.summary, /QA 93/);
-  const s = await hqdb.getAgentScreen('seo-1');
+  const s = await hqdb.getAgentScreen('writer');
   assert.equal(s?.task_id, copyId);
   assert.equal(s?.step_note, 'Drafting Bundle landing copy');
   assert.equal((await hqdb.getAgentScreen('qa-lead'))?.step_note, 'Passed');
@@ -325,7 +332,7 @@ await step('bot: deliverable is sent; ✅ tap → decide_approval(via telegram) 
   assert.equal(after.decided_via, 'telegram');
   assert.equal((await svc.task(copyId)).status, 'done');
   assert.equal((await svc.task(wireId)).status, 'queued');
-  assert.equal(await svc.agentStatus('seo-1'), 'idle');
+  assert.equal(await svc.agentStatus('writer'), 'idle');
   const again = await onButton(decisionDeps, CHAT, Number(deliv.telegram_message_id), deliv.id, 'approve');
   assert.equal(again.toast, 'Already decided');
   assert.equal((await notify()).synced, 0, 'telegram decisions are not re-synced');
@@ -378,7 +385,7 @@ await step('lifecycle end state: request done, agents idle, qa_reviews, activity
   for (const a of ['request.created', 'plan.submitted', 'approval.approved', 'approval.changes_requested', 'task.submitted',
     'qa.revision', 'qa.pass', 'usage.plan', 'usage.task', 'usage.qa']) assert.ok(have.has(a), `activity_log has ${a}`);
   const screens = await q<any[]>(service.from('agent_screens').select('agent_id,updated_at').gte('updated_at', START));
-  assert.deepEqual(screens.map((s) => s.agent_id).sort(), ['coo', 'qa-lead', 'seo-1', 'uiux-1']);
+  assert.deepEqual(screens.map((s) => s.agent_id).sort(), ['coo', 'designer', 'qa-lead', 'writer']);
   const r = await svc.request(requestId);
   assert.ok(Number(r.cost_usd) > 0, 'request cost accumulated');
   assert.equal(r.title, 'Madam Muse bundle launch');
@@ -386,7 +393,7 @@ await step('lifecycle end state: request done, agents idle, qa_reviews, activity
 
 await step('dashboard loadLiveSnapshot (CEO): everything the office needs is readable', async () => {
   const s = await loaders.loadLiveSnapshot(ceo);
-  assert.equal(s.agents.length, 22);
+  assert.equal(s.agents.length, 6);
   assert.ok(s.requests.some((r: any) => r.id === requestId && r.status === 'done'));
   assert.equal(s.tasks.filter((t: any) => t.request_id === requestId && t.status === 'done').length, 2);
   assert.ok(s.approvals.length >= 4);
@@ -397,16 +404,27 @@ await step('dashboard loadLiveSnapshot (CEO): everything the office needs is rea
 
 console.log('— worker extras (reads + helpers through PostgREST)');
 await step('worker HqDb reads/helpers: listAgents, recentActivity, monthSpend, settings, idle, messages, stale requeue', async () => {
-  assert.equal((await hqdb.listAgents()).length, 22);
-  assert.ok((await hqdb.recentActivity('seo-1', 5)).length > 0);
+  assert.equal((await hqdb.listAgents()).length, 6);
+  assert.ok((await hqdb.recentActivity('writer', 5)).length > 0);
   assert.ok((await hqdb.monthSpendUsd()) > 0);
   assert.equal((await hqdb.getSettings()).timezone, 'Asia/Manila');
-  assert.equal(await hqdb.setIdleActivity('seo-2', 'coffee'), true);
+  assert.equal(await hqdb.setIdleActivity('sales', 'coffee'), true);
   assert.equal(await hqdb.requeueStaleTasks(), 0);
-  assert.equal(await hqdb.finishAgentTurn('seo-2'), 'idle');
-  await hqdb.addAgentMessage('seo-1', 'agent', 'Copy delivered', copyId);
+  assert.equal(await hqdb.finishAgentTurn('sales'), 'idle');
+  await hqdb.addAgentMessage('writer', 'agent', 'Copy delivered', copyId);
   assert.equal((await hqdb.getTask(copyId))?.status, 'done');
   assert.equal((await hqdb.getClient('33333333-3333-4333-8333-333333333333'))?.slug, 'madam-muse');
+});
+
+await step('budget alerts: worker recordBudgetAlert (once per day+level) → bot unsent list → marked sent', async () => {
+  assert.equal(await hqdb.recordBudgetAlert('2020-01-01', 80, 8.12345, 10), true);
+  assert.equal(await hqdb.recordBudgetAlert('2020-01-01', 80, 8.5, 10), false);
+  const unsent = (await botdb.unsentBudgetAlerts()).filter((a) => a.alert_day === '2020-01-01');
+  assert.deepEqual(unsent.map((a) => [a.level, Number(a.spent_usd)]), [[80, 8.1235]]);
+  await botdb.markBudgetAlertSent(unsent[0].id);
+  assert.equal((await botdb.unsentBudgetAlerts()).filter((a) => a.alert_day === '2020-01-01').length, 0);
+  const denied = await ceo.rpc('record_budget_alert', { p_day: '2020-01-02', p_level: 80, p_spent: 1, p_budget: 1 });
+  assert.ok(denied.error && /permission denied/.test(denied.error.message), `CEO record_budget_alert: ${denied.error?.message ?? 'allowed!'}`);
 });
 
 console.log('— reports: worker writes, bot broadcasts, dashboard reads');
@@ -415,7 +433,7 @@ await step('worker runReportJob(daily_digest) → report_facts + save_report (st
   const r = await runReportJob({ kind: 'daily_digest', date: today, from: today, days: 1 }, deps);
   assert.ok(r.reportId, 'digest saved');
   assert.ok(r.standups >= 2, `standups: ${r.standups}`);
-  const again = await hqdb.saveReport({ agentId: 'ea', date: today, kind: 'daily_digest', bodyMd: 'dup', costUsd: 0 });
+  const again = await hqdb.saveReport({ agentId: 'coo', date: today, kind: 'daily_digest', bodyMd: 'dup', costUsd: 0 });
   assert.equal(again, null, 'second save_report without overwrite returns null');
   const keys = await hqdb.existingReports(today);
   assert.ok(keys.some((k: any) => k.kind === 'daily_digest'));
@@ -475,7 +493,7 @@ await step('bot reads: pendingApprovals count, spendRows, agents', async () => {
   const p = await botdb.pendingApprovals(10);
   assert.equal(p.total, 0);
   assert.ok((await botdb.spendRows(START)).length > 0);
-  assert.equal((await botdb.agents()).length, 22);
+  assert.equal((await botdb.agents()).length, 6);
 });
 
 // =====================================================================================================
@@ -571,7 +589,7 @@ await step('anon key cannot write activity_log through /rpc/hq_log', async () =>
   const c = await ceo.rpc('hq_log', { p_actor: 'ceo', p_action: 'approval.approved', p_request: null, p_task: null, p_detail: { forged: true } });
   assert.ok(c.error && /permission denied/.test(c.error.message), `authenticated hq_log: ${c.error?.message ?? 'allowed!'}`);
   for (const fn of ['refresh_agent_status', 'finish_agent_turn'] as const) {
-    const x = await ceo.rpc(fn, { p_agent: 'seo-1' });
+    const x = await ceo.rpc(fn, { p_agent: 'writer' });
     assert.ok(x.error && /permission denied/.test(x.error.message), `authenticated ${fn}: ${x.error?.message ?? 'allowed!'}`);
   }
 }, { critical: false });
@@ -589,31 +607,31 @@ await step('vault: seal → vault_insert_credential (bytea in) → vault_get_for
   const newId = await store.insertCredential({
     id, clientId: clientId!, platform: 'shopify', label: 'Staff account', loginUrl: 'https://admin.shopify.com', username: 'hq',
     secretType: 'password', sealed: seal('hunter2-ü', kr, id), twofaMethod: 'none', scopeNotes: 'Theme edits only',
-    urlAllowlist: ['admin.shopify.com'], expiresAt: null, grants: ['shopify-dev'],
+    urlAllowlist: ['admin.shopify.com'], expiresAt: null, grants: ['web-dev'],
   });
   assert.equal(newId, id);
-  const got = await store.getForAgent(id, 'shopify-dev');
+  const got = await store.getForAgent(id, 'web-dev');
   assert.equal(open(got.sealed, kr, id), 'hunter2-ü');
   assert.deepEqual(got.url_allowlist, ['admin.shopify.com']);
   const sealed = await store.getSealed(id);
   assert.equal(open(sealed!.sealed, kr, id), 'hunter2-ü');
-  await assert.rejects(store.getForAgent(id, 'seo-1'), (e: unknown) => e instanceof VaultDenied);
-  const list = await store.listForAgent('shopify-dev', clientId!);
+  await assert.rejects(store.getForAgent(id, 'writer'), (e: unknown) => e instanceof VaultDenied);
+  const list = await store.listForAgent('web-dev', clientId!);
   assert.equal(list.granted.length, 1);
   assert.equal(list.not_granted, 1);
-  await store.logAccess({ credentialId: id, agentId: 'shopify-dev', taskId: null, action: 'login', success: true, detail: { host: 'admin.shopify.com' } });
-  const grants = await ceo.rpc('vault_set_grants', { p_credential: id, p_agents: ['shopify-dev', 'webflow-dev'] });
+  await store.logAccess({ credentialId: id, agentId: 'web-dev', taskId: null, action: 'login', success: true, detail: { host: 'admin.shopify.com' } });
+  const grants = await ceo.rpc('vault_set_grants', { p_credential: id, p_agents: ['web-dev', 'designer'] });
   assert.equal(grants.error, null, grants.error?.message);
-  assert.deepEqual(grants.data, ['shopify-dev', 'webflow-dev']);
+  assert.deepEqual(grants.data, ['designer', 'web-dev']);
   // write allowlist (read-only by default): stored by the worker, returned to the agent, readable + editable by the CEO
   assert.deepEqual(got.write_allowlist, []);
   const rwId = crypto.randomUUID();
   await store.insertCredential({
     id: rwId, clientId: clientId!, platform: 'shopify', label: 'Theme assets token', loginUrl: null, username: null,
     secretType: 'api_token', sealed: seal('shpat_x', kr, rwId), twofaMethod: 'none', scopeNotes: null,
-    urlAllowlist: ['https://mm.myshopify.com/admin/api'], writeAllowlist: ['PUT /admin/api/2025-07/themes/1/assets.json'], expiresAt: null, grants: ['shopify-dev'],
+    urlAllowlist: ['https://mm.myshopify.com/admin/api'], writeAllowlist: ['PUT /admin/api/2025-07/themes/1/assets.json'], expiresAt: null, grants: ['web-dev'],
   });
-  assert.deepEqual((await store.getForAgent(rwId, 'shopify-dev')).write_allowlist, ['PUT /admin/api/2025-07/themes/1/assets.json']);
+  assert.deepEqual((await store.getForAgent(rwId, 'web-dev')).write_allowlist, ['PUT /admin/api/2025-07/themes/1/assets.json']);
   const meta = await q<any[]>(ceo.from('client_credentials').select('id,write_allowlist').eq('id', rwId));
   assert.deepEqual(meta[0].write_allowlist, ['PUT /admin/api/2025-07/themes/1/assets.json']);
   const up = await ceo.rpc('vault_update_credential', {
@@ -621,7 +639,7 @@ await step('vault: seal → vault_insert_credential (bytea in) → vault_get_for
     p_url_allowlist: ['https://mm.myshopify.com/admin/api'], p_expires_at: null, p_write_allowlist: [],
   });
   assert.equal(up.error, null, up.error?.message);
-  assert.deepEqual((await store.getForAgent(rwId, 'shopify-dev')).write_allowlist, []);
+  assert.deepEqual((await store.getForAgent(rwId, 'web-dev')).write_allowlist, []);
 }, { critical: false });
 
 await step('worker logged no swallowed errors during the lifecycle', async () => {

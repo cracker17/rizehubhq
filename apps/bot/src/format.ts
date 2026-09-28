@@ -1,6 +1,6 @@
 // Telegram message text (HTML parse mode). Pure functions; every dynamic string goes through esc().
 import type { SpendSummary } from './budget';
-import type { AgentLite, BotApproval, BotReport, QuickFacts } from './types';
+import type { AgentLite, BotApproval, BotReport, BudgetAlert, QuickFacts } from './types';
 
 export const TG_LIMIT = 4096;
 
@@ -201,6 +201,21 @@ export function formatBudget(s: SpendSummary, monthlyBudget: number, dailyBudget
   else if (monthlyBudget > 0 && s.month >= monthlyBudget * 0.8) lines.push('⚠️ Over 80% of the monthly budget.');
   if (s.topToday.length) lines.push(`Top today: ${s.topToday.map((t) => `${esc(nameOf(names, t.actor))} ${usd(t.usd)}`).join(' · ')}`);
   return lines.join('\n');
+}
+
+/** 80% / 100% daily AI budget alert (budget_alerts row). */
+export function formatBudgetAlert(a: Pick<BudgetAlert, 'alert_day' | 'level' | 'spent_usd' | 'budget_usd'>, dashboardUrl: string): string {
+  const spent = Number(a.spent_usd);
+  const budget = Number(a.budget_usd);
+  const head = a.level >= 100
+    ? `🛑 <b>Daily AI budget reached</b> · ${usd(spent)} of ${usd(budget)} (${esc(a.alert_day)}, Manila)`
+    : `⚠️ <b>${a.level}% of the daily AI budget used</b> · ${usd(spent)} of ${usd(budget)} (${esc(a.alert_day)}, Manila)`;
+  const body = a.level >= 100
+    ? 'No new planning, tasks or QA reviews start until midnight Manila time. Running work finishes. Raise DAILY_AI_BUDGET_USD to continue today.'
+    : 'Work continues; new work stops at 100%.';
+  return `${head}
+${body}
+${dashboardUrl}/agents`;
 }
 
 export function formatStatus(agents: AgentLite[], paused: boolean): string {

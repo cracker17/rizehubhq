@@ -160,6 +160,10 @@ export interface HqDb {
   monthSpendUsd(): Promise<number>;
   /** One agent's spend (usage.* rows) since an ISO instant. */
   agentSpendSinceUsd(agentId: string, sinceIso: string): Promise<number>;
+  /** Everyone's spend (usage.* rows: tasks, planning, QA, reports, chat) since an ISO instant. */
+  spendSinceUsd(sinceIso: string): Promise<number>;
+  /** Stores the 80% / 100% daily-budget alert for the bot (once per day and level). True when newly recorded. */
+  recordBudgetAlert(day: string, level: number, spentUsd: number, budgetUsd: number): Promise<boolean>;
   // reports + settings (M7)
   reportFacts(from: string, days: number): Promise<DayFacts>;
   /** Returns the new id, or null when that (author, date, kind) already exists and overwrite is false. */
@@ -265,6 +269,10 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
     },
     monthSpendUsd: () => sumUsage(manilaMonthStartIso()),
     agentSpendSinceUsd: (agentId, sinceIso) => sumUsage(sinceIso, agentId),
+    spendSinceUsd: (sinceIso) => sumUsage(sinceIso),
+    recordBudgetAlert: async (day, level, spentUsd, budgetUsd) => Boolean(await rpc('record_budget_alert', {
+      p_day: day, p_level: level, p_spent: Math.round(spentUsd * 10_000) / 10_000, p_budget: budgetUsd,
+    })),
 
     reportFacts: (from, days) => rpc<DayFacts>('report_facts', { p_from: from, p_days: days }),
     saveReport: async (r, overwrite = false) => (await rpc<string | null>('save_report', {

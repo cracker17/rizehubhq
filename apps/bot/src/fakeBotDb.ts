@@ -1,11 +1,11 @@
 // In-memory BotDb for tests (mirrors decide_approval's pending re-check).
 import { randomUUID } from 'node:crypto';
 import type { BotDb, NewRequest } from './db';
-import type { AgentLite, BotApproval, BotReport, Decision, QuickFacts, SpendRow } from './types';
+import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow } from './types';
 
 export function approval(p: Partial<BotApproval> = {}): BotApproval {
   return {
-    id: randomUUID(), kind: 'deliverable', request_id: null, task_id: null, agent_id: 'seo-1', title: 'Landing copy', summary: '540 words · QA 92',
+    id: randomUUID(), kind: 'deliverable', request_id: null, task_id: null, agent_id: 'writer', title: 'Landing copy', summary: '540 words · QA 92',
     payload: { qa: { score: 92 }, output: { summary: '540 words, keyword in H1, 3 CTAs' } }, preview_url: null, status: 'pending', ceo_note: null,
     decided_at: null, decided_via: null, telegram_message_id: null, created_at: '2026-09-28T01:00:00Z',
     requests: { priority: 'normal', title: 'Bundle', due_date: null, clients: { name: 'Madam Muse' } }, ...p,
@@ -15,6 +15,7 @@ export function approval(p: Partial<BotApproval> = {}): BotApproval {
 export class FakeBotDb implements BotDb {
   approvals: BotApproval[] = [];
   reports: BotReport[] = [];
+  budgetAlerts: BudgetAlert[] = [];
   settings: Record<string, unknown> = { timezone: 'Asia/Manila' };
   requests: NewRequest[] = [];
   decisions: { id: string; decision: Decision; note: string | null }[] = [];
@@ -46,9 +47,11 @@ export class FakeBotDb implements BotDb {
   }
   async unsentReports(sinceIso: string) { return this.reports.filter((r) => r.telegram_sent_at === null && r.created_at >= sinceIso && r.kind !== 'standup'); }
   async markReportSent(id: string) { const r = this.reports.find((x) => x.id === id); if (r && !r.telegram_sent_at) r.telegram_sent_at = this.now().toISOString(); }
+  async unsentBudgetAlerts() { return this.budgetAlerts.filter((a) => a.telegram_sent_at === null).sort((a, b) => a.alert_day.localeCompare(b.alert_day) || a.level - b.level); }
+  async markBudgetAlertSent(id: string) { const a = this.budgetAlerts.find((x) => x.id === id); if (a && !a.telegram_sent_at) a.telegram_sent_at = this.now().toISOString(); }
   async latestReport(kind: BotReport['kind'], date: string) { return this.reports.find((r) => r.kind === kind && r.report_date === date) ?? null; }
   async reportFacts(): Promise<QuickFacts> { return { spend_usd: 0, qa: { reviews: 0, passed: 0 }, done: [], in_progress: [], blocked: [], approvals_waiting: [] }; }
   async spendRows(): Promise<SpendRow[]> { return []; }
-  async agents(): Promise<AgentLite[]> { return [{ id: 'seo-1', name: 'SEO Writer 1', status: 'working' }]; }
+  async agents(): Promise<AgentLite[]> { return [{ id: 'writer', name: 'Content Writer', status: 'working' }]; }
   async createRequest(r: NewRequest) { this.requests.push(r); return { id: randomUUID(), clientFound: true }; }
 }

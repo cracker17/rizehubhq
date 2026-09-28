@@ -47,6 +47,10 @@ The office opens in **Isometric**. A toggle in the toolbar switches to `Top-down
 │  Success     │  (mic, acoustic foam)       │ sofas    │ foosball│        │
 └──────────────┴─────────────────────────────┴──────────┴─────────┴────────┘
 ```
+Six agents sit in this office (`agents/roster.yaml`); their desk slots (`agents.desk.id`): `coo` → `board-head`,
+`web-dev` → `dev-1`, `designer` → `design-1`, `writer` → `sales-1`, `sales` → `sales-2`, `qa-lead` → `qa-1`. The room plan
+above predates the six-agent roster; rooms without an agent are scenery.
+
 Rooms are Tiled object layers with a `room` property; each has a sign like Gather ("DEV TEAM", "QA LAB"…).
 
 `map.json` (logical, shared by both views):
@@ -54,7 +58,7 @@ Rooms are Tiled object layers with a `room` property; each has a sign like Gathe
 {
   "grid": { "cols": 64, "rows": 40 },
   "rooms": { "dev": {"x":14,"y":0,"w":22,"h":12}, "qa_lab": {"x":36,"y":0,"w":12,"h":12}, "...": {} },
-  "desks": { "shopify-dev": {"x":16,"y":4,"face":"up"}, "qa-lead": {"x":40,"y":5,"face":"up"}, "...": {} },
+  "desks": { "web-dev": {"x":16,"y":4,"face":"up"}, "qa-lead": {"x":40,"y":5,"face":"up"}, "...": {} },
   "spots": {
     "coffee":      [{"x":30,"y":30,"pose":"hold_mug"}, {"x":32,"y":31,"pose":"sit_sofa"}],
     "lounge_sofa": [{"x":55,"y":33,"pose":"sit_sofa"}],
@@ -73,7 +77,7 @@ Rooms are Tiled object layers with a `room` property; each has a sign like Gathe
 |---|---|---|---|
 | `working` | Own desk | Sitting, typing; monitor glows with a mini thumbnail of their POV | Green dot · name · short task label on hover |
 | `working` + task in QA | Own desk | Leaning back, sipping coffee at desk | Hourglass "Waiting for QA" |
-| QA Lead reviewing | QA Lab bench | Inspecting a big screen | Green dot · "Reviewing: Madam Muse bundle page" |
+| QA reviewing | QA Lab bench | Inspecting a big screen | Green dot · "Reviewing: Madam Muse bundle page" |
 | Planning (request in `planning`/`plan_review`) | **Boardroom**: COO + every agent named in the plan walk in | Sitting around the table, COO at the screen | Purple "Meeting: Madam Muse launch" label on the room |
 | `waiting` (needs you) | Own desk | Standing, hand raised | Purple ✋ pulse; click = open the approval |
 | `blocked` | Own desk | Head in hands | Red ⚠ + reason on hover |
@@ -90,13 +94,11 @@ Every character is always doing something natural, like a real person at work. E
 
 | Agent | Main working loop | Micro-actions (random) |
 |---|---|---|
-| Dev agents | Typing fast, eyes on monitor, code scrolling on screen | Lean in to read, rub chin, sip coffee, glance at second monitor, crack knuckles, lean back thinking |
-| SEO writers, Social, EA, Pipeline, Job Scout, Client Success | Typing in bursts, reading | Scroll with mouse, nod, take a note on paper, stretch arms, sip drink |
-| UI/UX & Graphic designers | Drawing on a pen tablet, zooming the artboard | Tilt head at the screen, hold up colour swatch, sketch on paper |
-| Video Editor | Scrubbing a timeline with jog wheel/mouse, headphones on | Replay a clip (nods to rhythm), lean back to watch, drag clips |
-| Sound & Voice Specialist | In the vocal booth: speaking into the mic with hand gestures, or at the mixer adjusting faders | Adjust headphones, lift a hand to listen closely, check waveform |
+| Web Developer | Typing fast, eyes on monitor, code scrolling on screen | Lean in to read, rub chin, sip coffee, glance at second monitor, crack knuckles, lean back thinking |
+| Content Writer, Sales Agent | Typing in bursts, reading | Scroll with mouse, nod, take a note on paper, stretch arms, sip drink |
+| Graphic Designer | Drawing on a pen tablet, zooming the artboard | Tilt head at the screen, hold up colour swatch, sketch on paper |
 | COO | At the whiteboard writing/pointing, or at desk on a call | Walk to a colleague's desk and back (when planning), check tablet |
-| QA Lead | Leaning into the screen with the magnifier, clicking through pages | Tick a checklist, compare phone vs desktop, rub eyes, thumbs-up (on pass) |
+| QA | Leaning into the screen with the magnifier, clicking through pages | Tick a checklist, compare phone vs desktop, rub eyes, thumbs-up (on pass) |
 
 **Idle: activity loops**
 
@@ -169,20 +171,11 @@ One consistent character style (semi-realistic, friendly office workers), each r
 | Agent | Look |
 |---|---|
 | COO | Blazer, tablet in hand |
-| EA & Report Desk | Headset, folders |
-| Client Success | Lanyard badge, welcoming smile |
-| Pipeline Desk | Rolled-up sleeves, clipboard |
-| Social Prospecting | Binoculars on desk, cap |
-| Social + Inbound | Phone in hand |
-| Job Scout | Backpack, map pins |
-| Shopify / Webflow / WordPress / Full-Stack | Headphones; green / indigo / navy / hoodie outfits |
-| UI/UX ×2 | Beret, stylus |
-| Graphic ×2 | Paint-splash apron |
-| Social Media ×2 | Trendy jacket, ring light on desk |
-| SEO Writer ×2 | Glasses, stack of books |
-| QA Lead | Lab coat, magnifier |
-| Video Editor | Beanie, clapperboard on desk; works in the edit bay |
-| Sound & Voice Specialist | Big studio headphones; records in the vocal booth (mic + pop filter) |
+| Sales Agent | Rolled-up sleeves, clipboard |
+| Web Developer | Headphones, green outfit |
+| Graphic Designer | Beret, stylus |
+| Content Writer | Glasses, stack of books |
+| QA | Lab coat, magnifier |
 | You (CEO) | Your likeness: short dark-brown textured quiff, light stubble, small stud earring, black ribbed turtleneck, charcoal trousers, white sneakers (concept: Magnific "CEO character sheet") |
 
 **Animations per character:** see §4b for the full clip list (main loops, micro-actions and transitions), plus role-specific loops.

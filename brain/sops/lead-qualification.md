@@ -1,6 +1,6 @@
-# SOP: lead-qualification (Social + Inbound)
+# SOP: lead-qualification (Sales Agent)
 
-Goal: decide quickly and honestly whether an inbound contact is worth a proposal, and hand Pipeline Desk everything it needs.
+Goal: decide quickly and honestly whether an inbound contact is worth a proposal, and hand the proposal step everything it needs.
 
 ## 1. Collect evidence (no assumptions)
 - Thread/enquiry text, form fields, their site (`web_fetch`), platform fingerprint, mobile `pagespeed` if relevant to the ask.

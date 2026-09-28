@@ -1,6 +1,6 @@
 # SOP: webflow-page
 
-Owner: webflow-dev. Output: a new or rebuilt Webflow page (static or CMS template) built in the Designer with Client-First structure, tested on staging, NOT published to the custom domain.
+Owner: web-dev. Output: a new or rebuilt Webflow page (static or CMS template) built in the Designer with Client-First structure, tested on staging, NOT published to the custom domain.
 
 ## Inputs to confirm
 Site, page name/slug, design (Figma frame or reference), approved copy, assets (licensed), CTA destinations, form behaviour (who receives submissions), SEO title/description/OG image. Missing copy, form recipient or CTA URL → `ask_ceo`.

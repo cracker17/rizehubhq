@@ -1,4 +1,4 @@
-# Application style (Job Scout writes every application to this)
+# Application style (the Sales Agent writes every application to this)
 
 > Starter template. The CEO adds winning examples at the bottom. Portfolio links, resume links, experience claims and the signature block come ONLY from `brain/career/portfolio.md`.
 

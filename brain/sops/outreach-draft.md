@@ -1,4 +1,4 @@
-# SOP: outreach-draft (Social Prospecting)
+# SOP: outreach-draft (Sales Agent)
 
 Goal: one personalised first message per lead, built on ONE verified finding, ready for the CEO to approve (email) or send himself (DM).
 

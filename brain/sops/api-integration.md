@@ -1,6 +1,6 @@
 # SOP: api-integration
 
-Owner: fullstack-dev. Output: a reliable integration between a client system and a third-party API (e.g. Shopify, Halaxy, HubSpot, Stripe in test mode, Google APIs, RizeHub Agent API), delivered as a tested PR using sandbox credentials. Nothing runs against production data until the CEO approves.
+Owner: web-dev. Output: a reliable integration between a client system and a third-party API (e.g. Shopify, Halaxy, HubSpot, Stripe in test mode, Google APIs, RizeHub Agent API), delivered as a tested PR using sandbox credentials. Nothing runs against production data until the CEO approves.
 
 ## Inputs to confirm
 Both systems, direction of data flow, trigger (webhook, schedule, user action), fields and mapping, volume, auth method, sandbox/test account availability, personal data involved and where it's stored. No sandbox → `ask_ceo` (don't test on production). Unclear API behaviour → read official docs (`web_fetch`), never guess.

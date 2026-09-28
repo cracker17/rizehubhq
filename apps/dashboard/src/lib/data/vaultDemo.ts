@@ -49,47 +49,47 @@ function seed(now = Date.now()): DemoState {
       label: 'Madam Muse · Shopify collaborator', login_url: 'https://madammuse.myshopify.com/admin', username: 'team@rizehub.ph',
       twofa_method: 'collaborator', scope_notes: 'Theme edits on UNPUBLISHED themes only. Never touch orders, customers or payments.',
       url_allowlist: ['https://madammuse.myshopify.com/admin/themes', 'https://madammuse.myshopify.com/admin/online_store'],
-      last_used_at: iso(-2 * HOUR), last_used_by: 'shopify-dev', grants: ['qa-lead', 'shopify-dev'],
+      last_used_at: iso(-2 * HOUR), last_used_by: 'web-dev', grants: ['qa-lead', 'web-dev'],
     }),
     cred('cr-mm-api', 'c-mm', {
       label: 'Madam Muse · Admin API (custom app)', secret_type: 'api_token', username: null,
       scope_notes: 'read_products, read_themes, write_themes. header: X-Shopify-Access-Token',
-      url_allowlist: ['https://madammuse.myshopify.com/admin/api'], last_used_at: iso(-35 * 60_000), last_used_by: 'shopify-dev',
+      url_allowlist: ['https://madammuse.myshopify.com/admin/api'], last_used_at: iso(-35 * 60_000), last_used_by: 'web-dev',
       write_allowlist: ['PUT /admin/api/2025-07/themes/148213/assets.json'],
-      grants: ['shopify-dev'],
+      grants: ['web-dev'],
     }),
     cred('cr-mm-gh', 'c-mm', {
       platform: 'github', label: 'Madam Muse · theme repo (fine-grained PAT)', secret_type: 'api_token',
       scope_notes: 'Contents + Pull requests on madammuse-theme only. Agents push to agent/<task-id> branches.',
       url_allowlist: ['https://api.github.com/repos/rizehub/madammuse-theme'], expires_at: iso(5 * DAY),
-      last_used_at: iso(-26 * HOUR), last_used_by: 'shopify-dev', grants: ['fullstack-dev', 'shopify-dev'],
+      last_used_at: iso(-26 * HOUR), last_used_by: 'web-dev', grants: ['web-dev'],
     }),
     cred('cr-vi-wp', 'c-vi', {
       platform: 'wordpress', label: 'Vinyl Icons · WordPress (app password)', secret_type: 'app_password',
       login_url: 'https://www.vinylicons.com/wp-login.php', username: 'rizehub-agent', status: 'check_needed', failed_login_count: 2,
       scope_notes: 'Editor role on staging first. Drafts only.', url_allowlist: ['https://www.vinylicons.com/wp-json/wp/v2'],
       write_allowlist: ['POST /wp-json/wp/v2/posts'],
-      last_used_at: iso(-3 * DAY), last_used_by: 'wordpress-dev', grants: ['seo-1', 'wordpress-dev'],
+      last_used_at: iso(-3 * DAY), last_used_by: 'web-dev', grants: ['web-dev', 'writer'],
     }),
     cred('cr-vi-ga4', 'c-vi', {
       platform: 'ga4', label: 'Vinyl Icons · GA4 + Search Console (read)', secret_type: 'api_token',
       scope_notes: 'Read-only reporting.', url_allowlist: ['https://analyticsdata.googleapis.com/v1beta', 'https://searchconsole.googleapis.com'],
-      last_used_at: iso(-20 * HOUR), last_used_by: 'ea', grants: ['ea', 'seo-1', 'seo-2'],
+      last_used_at: iso(-20 * HOUR), last_used_by: 'coo', grants: ['coo', 'writer'],
     }),
     cred('cr-lv-wf', 'c-lv', {
       platform: 'webflow', label: 'LvlUp · Webflow site token', secret_type: 'api_token',
       scope_notes: 'CMS read/write as drafts; pages read. Publishing needs approval.', url_allowlist: ['https://api.webflow.com/v2/sites', 'https://api.webflow.com/v2/collections'],
       write_allowlist: ['POST /v2/collections/64f1e0a9c3b2d10012ab34cd/items', 'PATCH /v2/collections/64f1e0a9c3b2d10012ab34cd/items'],
-      expires_at: iso(80 * DAY), last_used_at: iso(-5 * HOUR), last_used_by: 'webflow-dev', grants: ['webflow-dev'],
+      expires_at: iso(80 * DAY), last_used_at: iso(-5 * HOUR), last_used_by: 'web-dev', grants: ['web-dev'],
     }),
     cred('cr-sb-shop', 'c-sb', {
       label: 'Sagebeet · Shopify staff login', login_url: 'https://sagebeet.myshopify.com/admin', username: 'ops@sagebeet.example',
-      status: 'revoked', revoked_at: iso(-12 * DAY), scope_notes: 'Replaced by collaborator access.', last_used_at: iso(-30 * DAY), last_used_by: 'shopify-dev',
+      status: 'revoked', revoked_at: iso(-12 * DAY), scope_notes: 'Replaced by collaborator access.', last_used_at: iso(-30 * DAY), last_used_by: 'web-dev',
     }),
     cred('cr-mvs-halaxy', 'c-mvs', {
       platform: 'halaxy', label: 'MVS Psychology · Halaxy API', secret_type: 'api_token', created_by: 'client_link',
       scope_notes: 'Appointments read + create only. No clinical notes.', url_allowlist: ['https://api.halaxy.example/v1/appointments'],
-      last_used_at: iso(-9 * HOUR), last_used_by: 'fullstack-dev', grants: ['fullstack-dev'], created_at: iso(-4 * DAY),
+      last_used_at: iso(-9 * HOUR), last_used_by: 'web-dev', grants: ['web-dev'], created_at: iso(-4 * DAY),
     }),
   ];
 
@@ -98,21 +98,21 @@ function seed(now = Date.now()): DemoState {
   const L = (credential_id: string, agent_id: string | null, action: string, success: boolean, agoMs: number, detail: Record<string, unknown> = {}) =>
     log.push({ id: ++logSeq, credential_id, agent_id, action, success, detail, created_at: iso(-agoMs) });
   L('cr-mm-login', 'ceo', 'store', true, 20 * DAY);
-  L('cr-mm-login', 'shopify-dev', 'login', true, 26 * HOUR, { host: 'madammuse.myshopify.com' });
+  L('cr-mm-login', 'web-dev', 'login', true, 26 * HOUR, { host: 'madammuse.myshopify.com' });
   L('cr-mm-login', 'qa-lead', 'login', true, 22 * HOUR, { host: 'madammuse.myshopify.com' });
-  L('cr-mm-login', 'shopify-dev', 'login', true, 2 * HOUR, { host: 'madammuse.myshopify.com' });
-  L('cr-mm-api', 'shopify-dev', 'api_call', true, 3 * HOUR, { method: 'GET', host: 'madammuse.myshopify.com', path: '/admin/api/2025-07/themes.json', status: 200 });
-  L('cr-mm-api', 'shopify-dev', 'api_call', true, 35 * 60_000, { method: 'PUT', host: 'madammuse.myshopify.com', path: '/admin/api/2025-07/themes/1402/assets.json', status: 200 });
-  L('cr-mm-api', 'seo-1', 'denied', false, 5 * HOUR, { tool: 'vault_api', reason: 'not granted' });
-  L('cr-mm-gh', 'shopify-dev', 'api_call', true, 26 * HOUR, { method: 'POST', host: 'api.github.com', path: '/repos/rizehub/madammuse-theme/pulls', status: 201 });
-  L('cr-vi-wp', 'wordpress-dev', 'failed_login', false, 3 * DAY + HOUR, { host: 'www.vinylicons.com' });
-  L('cr-vi-wp', 'wordpress-dev', 'failed_login', false, 3 * DAY, { host: 'www.vinylicons.com' });
-  L('cr-vi-ga4', 'ea', 'api_call', true, 20 * HOUR, { method: 'POST', host: 'analyticsdata.googleapis.com', path: '/v1beta/properties/000:runReport', status: 200 });
-  L('cr-lv-wf', 'webflow-dev', 'api_call', true, 5 * HOUR, { method: 'PATCH', host: 'api.webflow.com', path: '/v2/collections/…/items', status: 200 });
+  L('cr-mm-login', 'web-dev', 'login', true, 2 * HOUR, { host: 'madammuse.myshopify.com' });
+  L('cr-mm-api', 'web-dev', 'api_call', true, 3 * HOUR, { method: 'GET', host: 'madammuse.myshopify.com', path: '/admin/api/2025-07/themes.json', status: 200 });
+  L('cr-mm-api', 'web-dev', 'api_call', true, 35 * 60_000, { method: 'PUT', host: 'madammuse.myshopify.com', path: '/admin/api/2025-07/themes/1402/assets.json', status: 200 });
+  L('cr-mm-api', 'writer', 'denied', false, 5 * HOUR, { tool: 'vault_api', reason: 'not granted' });
+  L('cr-mm-gh', 'web-dev', 'api_call', true, 26 * HOUR, { method: 'POST', host: 'api.github.com', path: '/repos/rizehub/madammuse-theme/pulls', status: 201 });
+  L('cr-vi-wp', 'web-dev', 'failed_login', false, 3 * DAY + HOUR, { host: 'www.vinylicons.com' });
+  L('cr-vi-wp', 'web-dev', 'failed_login', false, 3 * DAY, { host: 'www.vinylicons.com' });
+  L('cr-vi-ga4', 'coo', 'api_call', true, 20 * HOUR, { method: 'POST', host: 'analyticsdata.googleapis.com', path: '/v1beta/properties/000:runReport', status: 200 });
+  L('cr-lv-wf', 'web-dev', 'api_call', true, 5 * HOUR, { method: 'PATCH', host: 'api.webflow.com', path: '/v2/collections/…/items', status: 200 });
   L('cr-sb-shop', 'ceo', 'revoke', true, 12 * DAY, { reason: 'Replaced by collaborator access' });
   L('cr-mm-login', 'ceo', 'reveal', true, 6 * DAY, { via: 'dashboard' });
   L('cr-mvs-halaxy', 'client', 'store', true, 4 * DAY);
-  L('cr-mvs-halaxy', 'fullstack-dev', 'api_call', true, 9 * HOUR, { method: 'GET', host: 'api.halaxy.example', path: '/v1/appointments', status: 200 });
+  L('cr-mvs-halaxy', 'web-dev', 'api_call', true, 9 * HOUR, { method: 'GET', host: 'api.halaxy.example', path: '/v1/appointments', status: 200 });
 
   const links: DemoState['links'] = [
     { id: 'ar-bc', client_id: 'c-bc', platforms: ['shopify', 'github'], expires_at: iso(48 * HOUR), used_at: null, created_at: iso(-24 * HOUR),
@@ -197,8 +197,8 @@ export function demoVault() {
         const tasks = sn.tasks.filter((t) => t.agent_id === a.id);
         const reviews = a.id === 'coo' || a.id === 'qa-lead' ? 0 : 3 + (h % 9);
         return {
-          id: a.id, name: a.name, department: a.department, model_role: a.id === 'coo' ? 'lead' : a.id === 'qa-lead' ? 'qa' : a.id === 'ea' ? 'reports' : a.department === 'dev' ? 'dev' : 'specialist',
-          model_override: a.id === 'shopify-dev' ? 'anthropic:claude-sonnet-5' : null, status: a.status, enabled: a.enabled,
+          id: a.id, name: a.name, department: a.department, model_role: a.model_role,
+          model_override: a.id === 'web-dev' ? 'anthropic:claude-sonnet-5' : null, status: a.status, enabled: a.enabled,
           color: a.avatar?.color ?? '#6D4AFF', daily_budget_usd: a.department === 'dev' ? 5 : 3,
           stats: {
             tasksToday: tasks.length + (h % 3), qaReviews: reviews, qaPass: reviews ? 70 + (h % 31) : null,

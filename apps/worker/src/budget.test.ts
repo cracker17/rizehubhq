@@ -2,7 +2,7 @@
 // resets on the Manila month change and is refreshed from the DB.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DailyBudgetGuard, isOverDaily, manilaDay, manilaDayStartIso, manilaMonth, manilaMonthStartIso } from './budget';
+import { DailyBudgetGuard, GlobalDailyBudget, isOverDaily, manilaDay, manilaDayStartIso, manilaMonth, manilaMonthStartIso, resolveDailyBudget } from './budget';
 import { FakeHqDb } from './fakeHqDb';
 import { WorkerLoop } from './loop';
 import { makeDeps, mockModel, toolCalls } from './testing';
@@ -32,27 +32,27 @@ function usageRow(actor: string, cost: number, at: string) {
 }
 
 test('DailyBudgetGuard counts only today (Manila) and only this agent', async () => {
-  const db = new FakeHqDb(['shopify-dev', 'seo-writer']);
-  db.agents.get('shopify-dev')!.daily_budget_usd = '1.50';
+  const db = new FakeHqDb(['web-dev', 'writer']);
+  db.agents.get('web-dev')!.daily_budget_usd = '1.50';
   db.activity.push(
-    usageRow('shopify-dev', 1.0, '2026-09-27T15:59:00.000Z'), // yesterday in Manila (23:59)
-    usageRow('shopify-dev', 1.0, '2026-09-27T16:00:00.000Z'), // today 00:00 Manila
-    usageRow('seo-writer', 5.0, '2026-09-28T01:00:00.000Z'),
+    usageRow('web-dev', 1.0, '2026-09-27T15:59:00.000Z'), // yesterday in Manila (23:59)
+    usageRow('web-dev', 1.0, '2026-09-27T16:00:00.000Z'), // today 00:00 Manila
+    usageRow('writer', 5.0, '2026-09-28T01:00:00.000Z'),
   );
   const g = new DailyBudgetGuard(db, { now: () => new Date('2026-09-28T02:00:00Z') });
-  assert.deepEqual(await g.check('shopify-dev'), { over: false, spentUsd: 1, budgetUsd: 1.5, day: '2026-09-28' });
-  db.activity.push(usageRow('shopify-dev', 0.5, '2026-09-28T01:30:00.000Z'));
-  assert.equal((await g.check('shopify-dev')).over, false, 'cached for a short while');
-  g.invalidate('shopify-dev');
-  assert.equal((await g.check('shopify-dev')).over, true);
+  assert.deepEqual(await g.check('web-dev'), { over: false, spentUsd: 1, budgetUsd: 1.5, day: '2026-09-28' });
+  db.activity.push(usageRow('web-dev', 0.5, '2026-09-28T01:30:00.000Z'));
+  assert.equal((await g.check('web-dev')).over, false, 'cached for a short while');
+  g.invalidate('web-dev');
+  assert.equal((await g.check('web-dev')).over, true);
 });
 
 test('loop: an over-budget agent\'s task is re-queued with a note and does not block other agents', async () => {
-  const db = new FakeHqDb(['shopify-dev', 'seo-writer']);
-  db.agents.get('shopify-dev')!.daily_budget_usd = 1;
-  db.activity.push(usageRow('shopify-dev', 1.25, '2026-09-28T01:00:00.000Z'));
-  const blocked = db.addTask({ agent_id: 'shopify-dev', status: 'queued', title: 'Hero section' });
-  const other = db.addTask({ agent_id: 'seo-writer', status: 'queued', title: 'Blog outline' });
+  const db = new FakeHqDb(['web-dev', 'writer']);
+  db.agents.get('web-dev')!.daily_budget_usd = 1;
+  db.activity.push(usageRow('web-dev', 1.25, '2026-09-28T01:00:00.000Z'));
+  const blocked = db.addTask({ agent_id: 'web-dev', status: 'queued', title: 'Hero section' });
+  const other = db.addTask({ agent_id: 'writer', status: 'queued', title: 'Blog outline' });
   const deps = makeDeps({ db, model: mockModel([toolCalls([{ name: 'submit_output', input: { summary: 'done', content: 'x' } }])]) });
   const loop = new WorkerLoop(deps, { pollIntervalMs: 10, maxParallelTasks: 2 });
   await loop.tick();
@@ -61,9 +61,9 @@ test('loop: an over-budget agent\'s task is re-queued with a note and does not b
   const requeues = db.callsOf('requeueTask');
   assert.equal(requeues.length, 1);
   assert.equal(requeues[0]!.args[0], blocked.id);
-  assert.match(String(requeues[0]!.args[1]), /Daily budget reached for shopify-dev: \$1\.25 spent of \$1\.00 today \(Asia\/Manila 2026-09-28\)/);
+  assert.match(String(requeues[0]!.args[1]), /Daily budget reached for web-dev: \$1\.25 spent of \$1\.00 today \(Asia\/Manila 2026-09-28\)/);
   assert.equal(db.tasks.get(blocked.id)!.status, 'queued');
-  assert.ok(deps.logs.some((l) => l.includes('seo-writer claimed "Blog outline"')), 'the other agent\'s task started');
+  assert.ok(deps.logs.some((l) => l.includes('writer claimed "Blog outline"')), 'the other agent\'s task started');
   assert.notEqual(db.tasks.get(other.id)!.status, 'queued');
   assert.ok(deps.logs.some((l) => /Daily budget reached/.test(l)));
 
@@ -110,4 +110,62 @@ test('ModelPicker: month-to-date spend resets on the Manila month change and is 
   now = new Date(now.getTime() + 61_000);
   await assert.rejects(picker.pick('dev'));
   assert.equal(picker.spentThisMonthUsd, 12);
+});
+
+// ---------- DAILY_AI_BUDGET_USD: global cap (all agents + planning + QA) with 80% / 100% Telegram alerts ----------
+const NOW = () => new Date('2026-09-28T02:00:00Z'); // 10:00 Manila
+
+test('resolveDailyBudget: env wins, then settings.daily_budget_usd, else no cap', () => {
+  assert.equal(resolveDailyBudget(12, { daily_budget_usd: '10' }), 12);
+  assert.equal(resolveDailyBudget(null, { daily_budget_usd: '10' }), 10);
+  assert.equal(resolveDailyBudget(undefined, {}), null);
+  assert.equal(resolveDailyBudget(Number.NaN, { daily_budget_usd: 'abc' }), null);
+  assert.equal(resolveDailyBudget(0, {}), 0);
+});
+
+test('GlobalDailyBudget: counts every actor today (Manila), alerts once at 80% and once at 100%', async () => {
+  const db = new FakeHqDb(['coo', 'web-dev', 'qa-lead']);
+  db.activity.push(
+    usageRow('web-dev', 5, '2026-09-27T15:00:00.000Z'), // yesterday in Manila: ignored
+    usageRow('web-dev', 4, '2026-09-28T01:00:00.000Z'),
+    { ...usageRow('coo', 2, '2026-09-28T01:10:00.000Z'), action: 'usage.plan' },
+    { ...usageRow('qa-lead', 2.5, '2026-09-28T01:20:00.000Z'), action: 'usage.qa' },
+  );
+  const g = new GlobalDailyBudget(db, { budgetUsd: 10, now: NOW, cacheMs: 0 });
+  assert.deepEqual(await g.check(), { over: false, spentUsd: 8.5, budgetUsd: 10, day: '2026-09-28', pct: 85 });
+  assert.deepEqual(db.budgetAlerts.map((a) => a.level), [80]);
+  await g.check();
+  assert.equal(db.callsOf('recordBudgetAlert').length, 1, 'no second 80% alert the same day');
+  db.activity.push(usageRow('writer', 1.5, '2026-09-28T01:30:00.000Z'));
+  const c = await g.check();
+  assert.equal(c.over, true);
+  assert.equal(c.spentUsd, 10);
+  assert.deepEqual(db.budgetAlerts.map((a) => [a.level, a.spentUsd, a.budgetUsd]), [[80, 8.5, 10], [100, 10, 10]]);
+  // no cap configured → never over, no spend query
+  const none = new GlobalDailyBudget(db, { now: NOW });
+  assert.deepEqual(await none.check(), { over: false, spentUsd: 0, budgetUsd: null, day: '2026-09-28', pct: null });
+});
+
+test('loop: daily AI budget reached → no planning, tasks or QA are claimed (logged once); running work is untouched', async () => {
+  const db = new FakeHqDb(['coo', 'web-dev', 'writer', 'qa-lead']);
+  db.activity.push(usageRow('web-dev', 10, '2026-09-28T01:00:00.000Z'));
+  db.addRequest({ raw_text: 'Plan something' });
+  const queued = db.addTask({ agent_id: 'writer', status: 'queued', title: 'Blog outline' });
+  const deps = makeDeps({ db, model: mockModel([]) });
+  const loop = new WorkerLoop(deps, { pollIntervalMs: 10, maxParallelTasks: 2, dailyBudgetUsd: 10 });
+  await loop.tick();
+  await loop.tick();
+  assert.equal(db.callsOf('claimNextTask').length, 0);
+  assert.equal(db.callsOf('claimRequestForPlanning').length, 0);
+  assert.equal(db.callsOf('claimQaReview').length, 0);
+  assert.equal(db.tasks.get(queued.id)!.status, 'queued');
+  assert.equal(deps.logs.filter((l) => l.includes('Daily AI budget reached: $10.00 spent of $10.00 today (Asia/Manila 2026-09-28)')).length, 1);
+  assert.deepEqual(db.budgetAlerts.map((a) => a.level), [80, 100]);
+
+  // settings.daily_budget_usd is used when DAILY_AI_BUDGET_USD is not set; raising it lets work start again
+  db.settings.daily_budget_usd = 50;
+  const loop2 = new WorkerLoop(deps, { pollIntervalMs: 10, maxParallelTasks: 2 });
+  await loop2.tick();
+  assert.ok(db.callsOf('claimNextTask').length > 0);
+  await Promise.allSettled([...loop2.running.values()]);
 });

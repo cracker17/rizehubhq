@@ -1,6 +1,6 @@
 # SOP: ui-mockup
 
-Owner: uiux-1 / uiux-2. Output: high-fidelity, responsive HTML/CSS mockup (optionally mirrored in Figma by the CEO) plus a handoff spec.
+Owner: designer. Output: high-fidelity, responsive HTML/CSS mockup (optionally mirrored in Figma by the CEO) plus a handoff spec.
 
 ## 1. Inputs
 - Approved wireframe (dependency task) or brief with layout decided.

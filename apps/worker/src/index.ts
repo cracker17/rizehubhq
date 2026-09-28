@@ -8,7 +8,8 @@ import { createSupabaseHqDb } from './hqdb';
 import { createHttpServer } from './http';
 import { WorkerLoop } from './loop';
 import { listRoleIds, loadRole } from './roles';
-import { loadModelsConfig } from './models/router';
+import { loadModelsConfig, MODEL_PROFILES, parseCandidate, roleEnvVar } from './models/router';
+import { MODEL_ROLES } from '@rizehubhq/shared';
 import { ModelPicker } from './models/usage';
 import { answerChat } from './chat';
 import type { WorkerDeps } from './deps';
@@ -29,6 +30,13 @@ async function main() {
   const roles = listRoleIds().map((id) => loadRole(id));
   const models = loadModelsConfig();
   const profile = config.modelProfile ?? models.active_profile;
+  if (!(MODEL_PROFILES as readonly string[]).includes(profile) || !models.profiles[profile]) {
+    throw new Error(`MODEL_PROFILE "${profile}" is not one of ${MODEL_PROFILES.join(' | ')} (or missing from config/models.yaml)`);
+  }
+  for (const role of MODEL_ROLES) { // MODEL_ID_<ROLE> overrides must be provider:model, fail fast on typos
+    const spec = workerEnv()[roleEnvVar(role)];
+    if (spec) parseCandidate(spec.trim());
+  }
   const db = createSupabaseHqDb(createServiceClient());
   const picker = new ModelPicker({
     cfg: models, profile, env: workerEnv(), monthlyBudgetUsd: config.monthlyBudgetUsd,
@@ -41,10 +49,12 @@ async function main() {
     onProviderQuota: (p) => picker.markExhausted(p),
   };
   console.log(`[worker] ${roles.length} agents · profile "${profile}" · budget $${config.monthlyBudgetUsd}/month`
+    + `${config.dailyAiBudgetUsd !== null ? ` · $${config.dailyAiBudgetUsd}/day` : ''}`
     + ` · spent $${picker.spentThisMonthUsd.toFixed(2)} · parallel ${config.maxParallelTasks} · QA ≥ ${config.qaThreshold}`);
 
   const loop = new WorkerLoop(deps, {
     pollIntervalMs: config.pollIntervalMs, maxParallelTasks: config.maxParallelTasks, reportsEveryMs: config.reportsEveryMs,
+    dailyBudgetUsd: config.dailyAiBudgetUsd,
   });
   loop.start();
 

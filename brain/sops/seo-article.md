@@ -1,6 +1,6 @@
 # SOP: seo-article
 
-Owner: seo-1 (buying guides, product-led content) or seo-2 (service, local, long-form). Output: a publish-ready article draft in markdown with meta, schema and internal link plan. We never publish.
+Owner: writer. Output: a publish-ready article draft in markdown with meta, schema and internal link plan. We never publish.
 
 ## Inputs to confirm
 Primary keyword, market, audience, target URL/slug, word-count target, CTA destination, internal pages to link, author/reviewer (only if supplied), client English variant. Missing primary keyword → run a mini keyword check and state your choice; missing product/service facts → `ask_ceo`.

@@ -1,6 +1,6 @@
 # SOP: content-calendar
 
-Owner: social-1 (e-commerce/DTC) or social-2 (B2B, services, personal brands). Output: a calendar file the CEO can approve and the client can execute. We never schedule or post.
+Owner: writer. Output: a calendar file the CEO can approve and the client can execute. We never schedule or post.
 
 ## Inputs to confirm
 Client, platforms, period (dates), cadence per platform, goal (awareness, traffic, sales, leads), offers/launches with exact terms and dates, handles, links, time zone, existing content or assets. Missing offer terms, dates or links → `ask_ceo`. Everything else missing → `[PLACEHOLDER: ...]`.
@@ -19,7 +19,7 @@ Client, platforms, period (dates), cadence per platform, goal (awareness, traffi
 ## Calendar template (CSV or markdown table)
 | Date | Day | Time (TZ) | Platform | Format | Pillar | Topic | Hook | CTA | Asset needed | Owner | Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-10-06 | Mon | 11:00 ET | IG Reel | 20s demo | Product | 3 ways to style the bundle | "One bundle, three outfits, zero stress." | Shop link in bio | Model video, 3 looks | Video Editor | Draft |
+| 2026-10-06 | Mon | 11:00 ET | IG Reel | 20s demo | Product | 3 ways to style the bundle | "One bundle, three outfits, zero stress." | Shop link in bio | Model video, 3 looks | Client team | Draft |
 
 Status values: Draft, Needs asset, Ready for CEO. Asset needs become separate tasks (graphic, video) for the COO.
 

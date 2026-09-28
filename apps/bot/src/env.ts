@@ -8,6 +8,8 @@ export interface BotConfig {
   supabaseUrl: string;
   serviceKey: string;
   monthlyBudgetUsd: number | null;
+  /** DAILY_AI_BUDGET_USD (same value the worker enforces); null → settings.daily_budget_usd. */
+  dailyBudgetUsd: number | null;
   pollMs: number;
 }
 
@@ -22,6 +24,7 @@ export function loadBotConfig(env: Record<string, string | undefined>): BotConfi
   if (allowedList.length === 0) throw new Error('TELEGRAM_ALLOWED_USER_IDS is required (your numeric Telegram id)');
   const notify = Number(env.TELEGRAM_NOTIFY_CHAT_ID);
   const budget = env.MONTHLY_BUDGET_USD;
+  const daily = env.DAILY_AI_BUDGET_USD;
   return {
     token,
     allowed: new Set(allowedList),
@@ -30,6 +33,7 @@ export function loadBotConfig(env: Record<string, string | undefined>): BotConfi
     supabaseUrl: env.SUPABASE_URL ?? '',
     serviceKey: env.SUPABASE_SERVICE_ROLE_KEY ?? '',
     monthlyBudgetUsd: budget === undefined || budget === '' || Number.isNaN(Number(budget)) ? null : Number(budget),
+    dailyBudgetUsd: daily === undefined || daily === '' || Number.isNaN(Number(daily)) ? null : Number(daily),
     pollMs: Math.max(1000, Number(env.BOT_POLL_MS) || 5000),
   };
 }

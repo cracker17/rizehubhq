@@ -1,4 +1,4 @@
-# SOP: proposal (Pipeline Desk)
+# SOP: proposal (Sales Agent)
 
 Goal: a RizeHub-branded proposal the CEO can approve and send without edits, priced only from `brain/company/pricing.md`.
 

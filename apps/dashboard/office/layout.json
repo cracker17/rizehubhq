@@ -1,0 +1,1446 @@
+{
+ "version": 1,
+ "notes": "RizeHub HQ office layout, in pixels of assets/office/reference-office.png (1337x749). The background (public/office/office-bg.webp) is the same picture at 2x with people and baked-in text removed. Seats are where a character's feet touch the floor; face is the iso direction they look: up = up-right, right = down-right, down = down-left, left = up-left. A new agent gets a desk by adding `desk: { id: <seat id> }` to its agents row (or an entry under `assignments`). Walking uses the `graph` (nodes + edges); every seat and spot joins the graph at its `via` node.",
+ "image": {
+  "src": "/office/office-bg.webp",
+  "width": 1337,
+  "height": 749,
+  "scale": 2
+ },
+ "grid": {
+  "u": [
+   40.5,
+   23.9
+  ],
+  "v": [
+   -37.8,
+   28.0
+  ],
+  "origin": [
+   668,
+   0
+  ]
+ },
+ "assignments": {
+  "web-dev": "dev-1",
+  "designer": "design-1",
+  "writer": "sales-1",
+  "sales": "sales-2",
+  "qa-lead": "qa-1",
+  "coo": "board-head"
+ },
+ "rooms": [
+  {
+   "id": "dev",
+   "name": "Dev Team",
+   "label": [
+    303,
+    150
+   ]
+  },
+  {
+   "id": "design",
+   "name": "Design Studio",
+   "label": [
+    502,
+    82
+   ]
+  },
+  {
+   "id": "growth",
+   "name": "Growth & Sales",
+   "label": [
+    800,
+    40
+   ]
+  },
+  {
+   "id": "qa_lab",
+   "name": "QA Lab",
+   "label": [
+    733,
+    270
+   ]
+  },
+  {
+   "id": "boardroom",
+   "name": "Boardroom",
+   "label": [
+    1105,
+    238
+   ]
+  },
+  {
+   "id": "coffee",
+   "name": "Coffee Corner",
+   "label": [
+    674,
+    410
+   ]
+  },
+  {
+   "id": "lounge",
+   "name": "Lounge",
+   "label": [
+    385,
+    402
+   ]
+  },
+  {
+   "id": "game",
+   "name": "Game Hall",
+   "label": [
+    958,
+    604
+   ]
+  },
+  {
+   "id": "lobby",
+   "name": "Reception",
+   "label": [
+    56,
+    612
+   ]
+  },
+  {
+   "id": "ceo",
+   "name": "CEO Office",
+   "label": [
+    1262,
+    520
+   ]
+  }
+ ],
+ "doormat": {
+  "text": "RizeHub HQ",
+  "center": [
+   231,
+   695
+  ],
+  "angle": 30.5,
+  "skewY": -7
+ },
+ "desks": [
+  {
+   "id": "dev-1",
+   "room": "dev",
+   "at": [
+    328,
+    345
+   ],
+   "face": "up",
+   "kind": "dual",
+   "via": "dev-a",
+   "screens": [
+    [
+     [
+      272,
+      248
+     ],
+     [
+      300,
+      236
+     ],
+     [
+      300,
+      282
+     ],
+     [
+      272,
+      296
+     ]
+    ],
+    [
+     [
+      302,
+      236
+     ],
+     [
+      326,
+      225
+     ],
+     [
+      326,
+      268
+     ],
+     [
+      302,
+      280
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "dev-2",
+   "room": "dev",
+   "at": [
+    188,
+    272
+   ],
+   "face": "up",
+   "kind": "dual",
+   "via": "dev-b",
+   "screens": [
+    [
+     [
+      192,
+      175
+     ],
+     [
+      218,
+      187
+     ],
+     [
+      218,
+      225
+     ],
+     [
+      192,
+      213
+     ]
+    ],
+    [
+     [
+      222,
+      187
+     ],
+     [
+      245,
+      197
+     ],
+     [
+      245,
+      236
+     ],
+     [
+      222,
+      226
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "dev-3",
+   "room": "dev",
+   "at": [
+    103,
+    330
+   ],
+   "face": "up",
+   "kind": "dual",
+   "via": "dev-c",
+   "screens": [
+    [
+     [
+      100,
+      225
+     ],
+     [
+      127,
+      236
+     ],
+     [
+      127,
+      277
+     ],
+     [
+      100,
+      266
+     ]
+    ],
+    [
+     [
+      130,
+      237
+     ],
+     [
+      157,
+      249
+     ],
+     [
+      157,
+      289
+     ],
+     [
+      130,
+      278
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "dev-4",
+   "room": "dev",
+   "at": [
+    243,
+    390
+   ],
+   "face": "up",
+   "kind": "dual",
+   "via": "dev-d",
+   "screens": [
+    [
+     [
+      182,
+      318
+     ],
+     [
+      207,
+      306
+     ],
+     [
+      207,
+      347
+     ],
+     [
+      182,
+      359
+     ]
+    ],
+    [
+     [
+      210,
+      305
+     ],
+     [
+      236,
+      294
+     ],
+     [
+      236,
+      335
+     ],
+     [
+      210,
+      347
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "design-1",
+   "room": "design",
+   "at": [
+    399,
+    160
+   ],
+   "face": "left",
+   "kind": "designer",
+   "via": "des-a",
+   "screens": [
+    [
+     [
+      331,
+      98
+     ],
+     [
+      365,
+      84
+     ],
+     [
+      384,
+      103
+     ],
+     [
+      350,
+      118
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "design-2",
+   "room": "design",
+   "at": [
+    502,
+    203
+   ],
+   "face": "left",
+   "kind": "designer",
+   "via": "des-b",
+   "screens": [
+    [
+     [
+      448,
+      145
+     ],
+     [
+      482,
+      130
+     ],
+     [
+      498,
+      150
+     ],
+     [
+      465,
+      165
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "sales-1",
+   "room": "growth",
+   "at": [
+    876,
+    168
+   ],
+   "face": "up",
+   "kind": "standard",
+   "via": "gs-a",
+   "screens": [
+    [
+     [
+      887,
+      72
+     ],
+     [
+      921,
+      84
+     ],
+     [
+      921,
+      120
+     ],
+     [
+      887,
+      108
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "sales-2",
+   "room": "growth",
+   "at": [
+    956,
+    202
+   ],
+   "face": "up",
+   "kind": "standard",
+   "via": "gs-b",
+   "screens": [
+    [
+     [
+      977,
+      110
+     ],
+     [
+      1006,
+      122
+     ],
+     [
+      1006,
+      158
+     ],
+     [
+      977,
+      146
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "sales-3",
+   "room": "growth",
+   "at": [
+    790,
+    240
+   ],
+   "face": "up",
+   "kind": "standard",
+   "via": "gs-a",
+   "screens": [
+    [
+     [
+      782,
+      150
+     ],
+     [
+      807,
+      162
+     ],
+     [
+      807,
+      197
+     ],
+     [
+      782,
+      185
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "sales-4",
+   "room": "growth",
+   "at": [
+    880,
+    282
+   ],
+   "face": "up",
+   "kind": "standard",
+   "via": "gs-a",
+   "screens": [
+    [
+     [
+      866,
+      191
+     ],
+     [
+      893,
+      203
+     ],
+     [
+      893,
+      238
+     ],
+     [
+      866,
+      226
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "qa-1",
+   "room": "qa_lab",
+   "at": [
+    684,
+    370
+   ],
+   "face": "up",
+   "kind": "qa",
+   "via": "qa-a",
+   "screens": [
+    [
+     [
+      700,
+      273
+     ],
+     [
+      731,
+      285
+     ],
+     [
+      731,
+      315
+     ],
+     [
+      700,
+      303
+     ]
+    ],
+    [
+     [
+      733,
+      286
+     ],
+     [
+      761,
+      297
+     ],
+     [
+      761,
+      330
+     ],
+     [
+      733,
+      318
+     ]
+    ],
+    [
+     [
+      764,
+      298
+     ],
+     [
+      812,
+      316
+     ],
+     [
+      812,
+      354
+     ],
+     [
+      764,
+      336
+     ]
+    ]
+   ]
+  },
+  {
+   "id": "qa-2",
+   "room": "qa_lab",
+   "at": [
+    746,
+    393
+   ],
+   "face": "up",
+   "kind": "qa",
+   "via": "qa-b",
+   "screens": []
+  },
+  {
+   "id": "board-head",
+   "room": "boardroom",
+   "at": [
+    1042,
+    368
+   ],
+   "face": "up",
+   "kind": "board",
+   "via": "br-a",
+   "screens": []
+  },
+  {
+   "id": "ceo",
+   "room": "ceo",
+   "at": [
+    1257,
+    684
+   ],
+   "face": "left",
+   "kind": "ceo",
+   "via": "ceo-a",
+   "screens": [
+    [
+     [
+      1220,
+      567
+     ],
+     [
+      1251,
+      553
+     ],
+     [
+      1251,
+      603
+     ],
+     [
+      1220,
+      617
+     ]
+    ]
+   ]
+  }
+ ],
+ "spots": [
+  {
+   "id": "coffee-1",
+   "kind": "coffee",
+   "at": [
+    585,
+    524
+   ],
+   "face": "left",
+   "pose": "stand",
+   "room": "coffee",
+   "via": "cof-a"
+  },
+  {
+   "id": "coffee-2",
+   "kind": "coffee",
+   "at": [
+    626,
+    502
+   ],
+   "face": "left",
+   "pose": "stand",
+   "room": "coffee",
+   "via": "cof-a"
+  },
+  {
+   "id": "coffee-3",
+   "kind": "coffee",
+   "at": [
+    542,
+    548
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "coffee",
+   "via": "cof-b"
+  },
+  {
+   "id": "coffee-4",
+   "kind": "coffee",
+   "at": [
+    470,
+    562
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "lounge",
+   "via": "lng-c"
+  },
+  {
+   "id": "chat-l-a",
+   "kind": "chat",
+   "at": [
+    608,
+    585
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "coffee",
+   "pair": "cl",
+   "via": "cof-b"
+  },
+  {
+   "id": "chat-l-b",
+   "kind": "chat",
+   "at": [
+    664,
+    578
+   ],
+   "face": "down",
+   "pose": "stand",
+   "room": "coffee",
+   "pair": "cl",
+   "via": "cof-c"
+  },
+  {
+   "id": "chat-f-a",
+   "kind": "chat",
+   "at": [
+    742,
+    598
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "lounge",
+   "pair": "cf",
+   "via": "fire-a"
+  },
+  {
+   "id": "chat-f-b",
+   "kind": "chat",
+   "at": [
+    790,
+    590
+   ],
+   "face": "down",
+   "pose": "stand",
+   "room": "lounge",
+   "pair": "cf",
+   "via": "fire-a"
+  },
+  {
+   "id": "sofa-1",
+   "kind": "lounge_sofa",
+   "at": [
+    702,
+    680
+   ],
+   "face": "up",
+   "pose": "sit",
+   "room": "lounge",
+   "via": "lng-a"
+  },
+  {
+   "id": "sofa-2",
+   "kind": "lounge_sofa",
+   "at": [
+    640,
+    660
+   ],
+   "face": "up",
+   "pose": "sit",
+   "room": "lounge",
+   "via": "lng-a"
+  },
+  {
+   "id": "sofa-3",
+   "kind": "lounge_sofa",
+   "at": [
+    352,
+    505
+   ],
+   "face": "down",
+   "pose": "sit",
+   "room": "lounge",
+   "via": "lng-b"
+  },
+  {
+   "id": "sofa-4",
+   "kind": "lounge_sofa",
+   "at": [
+    405,
+    526
+   ],
+   "face": "down",
+   "pose": "sit",
+   "room": "lounge",
+   "via": "lng-b"
+  },
+  {
+   "id": "pp-a",
+   "kind": "ping_pong",
+   "at": [
+    1000,
+    605
+   ],
+   "face": "down",
+   "pose": "stand",
+   "room": "game",
+   "pair": "pp",
+   "via": "gm-a"
+  },
+  {
+   "id": "pp-b",
+   "kind": "ping_pong",
+   "at": [
+    848,
+    722
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "game",
+   "pair": "pp",
+   "via": "gm-c"
+  },
+  {
+   "id": "fb-a",
+   "kind": "foosball",
+   "at": [
+    1012,
+    545
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "game",
+   "pair": "fb",
+   "via": "gm-b"
+  },
+  {
+   "id": "fb-b",
+   "kind": "foosball",
+   "at": [
+    1070,
+    527
+   ],
+   "face": "left",
+   "pose": "stand",
+   "room": "game",
+   "pair": "fb",
+   "via": "gm-b"
+  },
+  {
+   "id": "arcade-1",
+   "kind": "lobby",
+   "at": [
+    1115,
+    612
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "game",
+   "via": "gm-d"
+  },
+  {
+   "id": "lobby-1",
+   "kind": "lobby",
+   "at": [
+    318,
+    612
+   ],
+   "face": "down",
+   "pose": "stand",
+   "room": "lobby",
+   "via": "lob-a"
+  },
+  {
+   "id": "lobby-2",
+   "kind": "lobby",
+   "at": [
+    520,
+    640
+   ],
+   "face": "left",
+   "pose": "stand",
+   "room": "lobby",
+   "via": "lob-b"
+  },
+  {
+   "id": "lobby-3",
+   "kind": "lobby",
+   "at": [
+    445,
+    565
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "lounge",
+   "via": "lng-c"
+  },
+  {
+   "id": "board-1",
+   "kind": "boardroom",
+   "at": [
+    1088,
+    316
+   ],
+   "face": "right",
+   "pose": "sit",
+   "room": "boardroom",
+   "via": "br-b"
+  },
+  {
+   "id": "board-2",
+   "kind": "boardroom",
+   "at": [
+    1132,
+    290
+   ],
+   "face": "right",
+   "pose": "sit",
+   "room": "boardroom",
+   "via": "br-b"
+  },
+  {
+   "id": "board-3",
+   "kind": "boardroom",
+   "at": [
+    1166,
+    426
+   ],
+   "face": "left",
+   "pose": "sit",
+   "room": "boardroom",
+   "via": "br-c"
+  },
+  {
+   "id": "board-4",
+   "kind": "boardroom",
+   "at": [
+    1214,
+    394
+   ],
+   "face": "left",
+   "pose": "sit",
+   "room": "boardroom",
+   "via": "br-c"
+  },
+  {
+   "id": "board-head",
+   "kind": "boardroom_head",
+   "at": [
+    1042,
+    368
+   ],
+   "face": "up",
+   "pose": "stand",
+   "room": "boardroom",
+   "via": "br-a"
+  },
+  {
+   "id": "ceo-chair",
+   "kind": "ceo",
+   "at": [
+    1257,
+    684
+   ],
+   "face": "left",
+   "pose": "sit",
+   "room": "ceo",
+   "via": "ceo-a"
+  }
+ ],
+ "visits": {
+  "dev-1": [
+   372,
+   330
+  ],
+  "dev-2": [
+   252,
+   262
+  ],
+  "dev-3": [
+   158,
+   318
+  ],
+  "dev-4": [
+   300,
+   380
+  ],
+  "design-1": [
+   440,
+   176
+  ],
+  "design-2": [
+   540,
+   222
+  ],
+  "sales-1": [
+   916,
+   186
+  ],
+  "sales-2": [
+   985,
+   225
+  ],
+  "sales-3": [
+   815,
+   255
+  ],
+  "sales-4": [
+   905,
+   290
+  ],
+  "qa-1": [
+   718,
+   392
+  ],
+  "qa-2": [
+   780,
+   410
+  ]
+ },
+ "entrance": [
+  230,
+  668
+ ],
+ "graph": {
+  "nodes": {
+   "dev-a": [
+    372,
+    338
+   ],
+   "dev-b": [
+    262,
+    280
+   ],
+   "dev-c": [
+    165,
+    335
+   ],
+   "dev-d": [
+    300,
+    392
+   ],
+   "dev-door": [
+    420,
+    334
+   ],
+   "hall-dev": [
+    470,
+    372
+   ],
+   "des-door": [
+    506,
+    336
+   ],
+   "des-c": [
+    540,
+    280
+   ],
+   "des-b": [
+    540,
+    222
+   ],
+   "des-a": [
+    440,
+    180
+   ],
+   "hall-1": [
+    490,
+    420
+   ],
+   "qa-door": [
+    838,
+    418
+   ],
+   "qa-a": [
+    718,
+    392
+   ],
+   "qa-b": [
+    785,
+    408
+   ],
+   "br-door": [
+    910,
+    396
+   ],
+   "br-a": [
+    985,
+    366
+   ],
+   "br-b": [
+    1050,
+    305
+   ],
+   "br-c": [
+    1100,
+    420
+   ],
+   "gs-door": [
+    975,
+    280
+   ],
+   "gs-b": [
+    990,
+    228
+   ],
+   "gs-a": [
+    915,
+    190
+   ],
+   "gm-door": [
+    915,
+    512
+   ],
+   "gm-a": [
+    1015,
+    600
+   ],
+   "gm-b": [
+    1030,
+    560
+   ],
+   "gm-c": [
+    830,
+    715
+   ],
+   "gm-d": [
+    1125,
+    628
+   ],
+   "gm-e": [
+    950,
+    560
+   ],
+   "ceo-door": [
+    1150,
+    662
+   ],
+   "ceo-a": [
+    1210,
+    690
+   ],
+   "cof-a": [
+    600,
+    545
+   ],
+   "cof-b": [
+    540,
+    578
+   ],
+   "cof-c": [
+    680,
+    562
+   ],
+   "fire-a": [
+    760,
+    612
+   ],
+   "lng-a": [
+    690,
+    630
+   ],
+   "lng-b": [
+    380,
+    555
+   ],
+   "lng-c": [
+    460,
+    585
+   ],
+   "lob-a": [
+    330,
+    630
+   ],
+   "lob-b": [
+    500,
+    620
+   ],
+   "lob-door": [
+    260,
+    660
+   ],
+   "fire-b": [
+    835,
+    602
+   ],
+   "pass": [
+    862,
+    560
+   ],
+   "corr-a": [
+    872,
+    478
+   ],
+   "corr-b": [
+    905,
+    432
+   ],
+   "gm-f": [
+    880,
+    610
+   ],
+   "gm-g": [
+    825,
+    665
+   ]
+  },
+  "edges": [
+   [
+    "dev-a",
+    "dev-door"
+   ],
+   [
+    "dev-b",
+    "dev-a"
+   ],
+   [
+    "dev-c",
+    "dev-b"
+   ],
+   [
+    "dev-d",
+    "dev-a"
+   ],
+   [
+    "dev-c",
+    "dev-d"
+   ],
+   [
+    "dev-door",
+    "hall-dev"
+   ],
+   [
+    "hall-dev",
+    "hall-1"
+   ],
+   [
+    "hall-dev",
+    "des-door"
+   ],
+   [
+    "des-door",
+    "hall-1"
+   ],
+   [
+    "des-door",
+    "des-c"
+   ],
+   [
+    "des-c",
+    "des-b"
+   ],
+   [
+    "des-b",
+    "des-a"
+   ],
+   [
+    "hall-1",
+    "cof-b"
+   ],
+   [
+    "hall-1",
+    "lng-c"
+   ],
+   [
+    "cof-a",
+    "cof-b"
+   ],
+   [
+    "cof-a",
+    "cof-c"
+   ],
+   [
+    "cof-b",
+    "cof-c"
+   ],
+   [
+    "cof-c",
+    "lng-a"
+   ],
+   [
+    "cof-c",
+    "fire-a"
+   ],
+   [
+    "lng-a",
+    "fire-a"
+   ],
+   [
+    "fire-a",
+    "fire-b"
+   ],
+   [
+    "fire-b",
+    "pass"
+   ],
+   [
+    "pass",
+    "corr-a"
+   ],
+   [
+    "corr-a",
+    "corr-b"
+   ],
+   [
+    "corr-b",
+    "qa-door"
+   ],
+   [
+    "qa-door",
+    "qa-b"
+   ],
+   [
+    "qa-b",
+    "qa-a"
+   ],
+   [
+    "corr-b",
+    "br-door"
+   ],
+   [
+    "br-door",
+    "br-a"
+   ],
+   [
+    "br-a",
+    "br-b"
+   ],
+   [
+    "br-a",
+    "br-c"
+   ],
+   [
+    "br-a",
+    "gs-door"
+   ],
+   [
+    "gs-door",
+    "gs-b"
+   ],
+   [
+    "gs-b",
+    "gs-a"
+   ],
+   [
+    "corr-a",
+    "gm-door"
+   ],
+   [
+    "gm-door",
+    "gm-e"
+   ],
+   [
+    "gm-e",
+    "gm-b"
+   ],
+   [
+    "gm-e",
+    "gm-a"
+   ],
+   [
+    "gm-a",
+    "gm-d"
+   ],
+   [
+    "gm-b",
+    "gm-d"
+   ],
+   [
+    "gm-e",
+    "gm-f"
+   ],
+   [
+    "gm-f",
+    "gm-g"
+   ],
+   [
+    "gm-g",
+    "gm-c"
+   ],
+   [
+    "gm-d",
+    "ceo-door"
+   ],
+   [
+    "ceo-door",
+    "ceo-a"
+   ],
+   [
+    "lng-c",
+    "lng-b"
+   ],
+   [
+    "cof-b",
+    "lng-c"
+   ],
+   [
+    "lng-c",
+    "lob-b"
+   ],
+   [
+    "lob-b",
+    "lob-a"
+   ],
+   [
+    "lob-a",
+    "lob-door"
+   ],
+   [
+    "lng-b",
+    "lob-a"
+   ],
+   [
+    "lob-b",
+    "cof-b"
+   ]
+  ]
+ },
+ "occluders": [],
+ "wallScreens": [
+  {
+   "id": "pipeline",
+   "room": "growth",
+   "quad": [
+    [
+     966,
+     69
+    ],
+    [
+     1036,
+     98
+    ],
+    [
+     1033,
+     125
+    ],
+    [
+     965,
+     100
+    ]
+   ]
+  },
+  {
+   "id": "board-tv",
+   "room": "boardroom",
+   "quad": [
+    [
+     1186,
+     141
+    ],
+    [
+     1304,
+     198
+    ],
+    [
+     1302,
+     273
+    ],
+    [
+     1185,
+     214
+    ]
+   ]
+  }
+ ]
+}

@@ -1,7 +1,7 @@
 // Outbound notifier (docs/08 "Notifications"): polls Supabase (no realtime needed) and pushes
 // new approvals (with buttons), reports, and dashboard decisions (edits the Telegram message).
 import type { BotDb } from './db';
-import { formatApproval, formatReport, isQuestion } from './format';
+import { formatApproval, formatBudgetAlert, formatReport, isQuestion } from './format';
 import { approvalKeyboard, decidedKeyboard, type InlineMarkup } from './keyboard';
 import { inQuietHours, parseQuietHours, shouldSendApproval } from './quiet';
 import type { BotApproval } from './types';
@@ -22,7 +22,7 @@ export interface NotifierDeps {
 }
 
 export interface NotifierState { lastDecisionSync: string }
-export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean }
+export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean; budgetAlerts: number }
 
 export const REPORT_LOOKBACK_MS = 36 * 3600_000;
 
@@ -45,7 +45,7 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
   const settings = await deps.db.getSettings();
   const tz = tzOf(settings);
   const quiet = inQuietHours(now, parseQuietHours(settings.quiet_hours), tz);
-  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet };
+  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet, budgetAlerts: 0 };
   const names = deps.names();
 
   // 1. new approvals → one message each (sent once: telegram_message_id is stored)
@@ -76,7 +76,22 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
     }
   }
 
-  // 3. decided in the dashboard → update the Telegram message so it is never actioned twice
+  // 3. daily AI budget alerts (80% held in quiet hours; 100% always goes out). Once per day and level: the worker
+  //    writes each row once, the bot marks it sent. An 80% alert superseded by that day's 100% is marked, not sent.
+  const alerts = await deps.db.unsentBudgetAlerts();
+  for (const a of alerts) {
+    const superseded = a.level < 100 && alerts.some((b) => b.alert_day === a.alert_day && b.level >= 100);
+    if (quiet && a.level < 100 && !superseded) continue;
+    try {
+      if (!superseded) { await deps.sender.send(deps.chatId, formatBudgetAlert(a, deps.dashboardUrl)); r.budgetAlerts++; }
+      await deps.db.markBudgetAlertSent(a.id);
+    } catch (e) {
+      r.errors++;
+      log(`[bot] could not send budget alert ${a.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 4. decided in the dashboard → update the Telegram message so it is never actioned twice
   for (const ap of await deps.db.decidedSince(state.lastDecisionSync)) {
     if (ap.decided_at && ap.decided_at > state.lastDecisionSync) state.lastDecisionSync = ap.decided_at;
     if (ap.decided_via === 'telegram' || !ap.telegram_message_id) continue; // telegram decisions are edited on the spot

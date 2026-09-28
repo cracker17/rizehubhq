@@ -18,27 +18,27 @@ function dbWithFacts() {
 
 test('digest job: a standup per active agent + digest; model rephrases, facts stay exact', async () => {
   const db = dbWithFacts();
-  // 4 active agents (coo, qa-lead, seo-1, uiux-1) → 4 standup calls, then the headline
+  // 4 active agents (coo, designer, qa-lead, writer) → 4 standup calls, then the headline
   const model = mockModel([
     jsonResponse({ done: ['I planned the Vinyl Icons SEO report and sent it to you'], next: [], blockers: ['The Vinyl Icons SEO report plan needs your OK'] }),
+    jsonResponse({ done: [], next: ['Keep going on the bundle wireframe'], blockers: ['Ad set B is stuck until the brand fonts arrive'] }),
     jsonResponse({ done: ['Reviewed 2 deliverables, 1 passed and 1 went back'], next: ['Review the 1 deliverable waiting'], blockers: [] }),
     jsonResponse({ done: ['Finished the Madam Muse bundle copy, you approved it', 'Sent Meta descriptions to QA twice', 'EXTRA'], next: ['x'], blockers: [] }),
-    jsonResponse({ done: [], next: ['Keep going on the bundle wireframe'], blockers: [] }),
     textResponse('One task shipped, two in progress and three items need you; $0.42 spent.'),
   ]);
   const deps = makeDeps({ db, model });
   const r = await runReportJob(DIGEST, deps);
 
   const standups = db.reports.filter((x) => x.kind === 'standup');
-  assert.deepEqual(standups.map((s) => s.agentId).sort(), ['coo', 'qa-lead', 'seo-1', 'uiux-1']);
+  assert.deepEqual(standups.map((s) => s.agentId).sort(), ['coo', 'designer', 'qa-lead', 'writer']);
   assert.equal(r.standups, 4);
-  // seo-1's rewrite added an item → rejected, template kept
-  const seo = standups.find((s) => s.agentId === 'seo-1')!;
+  // the writer's rewrite added an item → rejected, template kept
+  const seo = standups.find((s) => s.agentId === 'writer')!;
   assert.deepEqual(seo.done, ['Finished “Bundle landing copy” (Madam Muse), approved by you', 'Submitted “Meta descriptions” for QA (2 rounds)']);
-  assert.equal(standups.find((s) => s.agentId === 'uiux-1')!.next?.[0], 'Keep going on the bundle wireframe');
+  assert.equal(standups.find((s) => s.agentId === 'designer')!.next?.[0], 'Keep going on the bundle wireframe');
 
   const digest = db.reports.find((x) => x.kind === 'daily_digest')!;
-  assert.equal(digest.agentId, 'ea');
+  assert.equal(digest.agentId, 'coo');
   const data = digest.data as { headline: string; counts: { done: number }; spend_usd: number; qa: { pass_rate: number } };
   assert.equal(data.headline, 'One task shipped, two in progress and three items need you; $0.42 spent.');
   assert.equal(data.counts.done, 1);
@@ -47,7 +47,7 @@ test('digest job: a standup per active agent + digest; model rephrases, facts st
   assert.match(digest.bodyMd, /## Approvals waiting \(2\)/);
   assert.equal(r.modelCalls, 5);
   assert.equal(db.usage.filter((u) => u.kind === 'report').length, 5);
-  assert.ok(db.usage.every((u) => u.actor === 'ea'));
+  assert.ok(db.usage.every((u) => u.actor === 'coo'));
 });
 
 test('no model available (quota / no key) → templates, report still written', async () => {
@@ -89,15 +89,15 @@ test('runDueReports: Monday 18:30 writes yesterday (catch-up), morning brief win
 
 test('runDueReports: standups already written for that day are not regenerated', async () => {
   const db = dbWithFacts();
-  await db.saveReport({ agentId: 'seo-1', date: '2026-09-28', kind: 'standup', bodyMd: 'mine', costUsd: 0 });
-  await db.saveReport({ agentId: 'ea', date: '2026-09-27', kind: 'daily_digest', bodyMd: 'y', costUsd: 0 });
+  await db.saveReport({ agentId: 'writer', date: '2026-09-28', kind: 'standup', bodyMd: 'mine', costUsd: 0 });
+  await db.saveReport({ agentId: 'coo', date: '2026-09-27', kind: 'daily_digest', bodyMd: 'y', costUsd: 0 });
   await db.saveReport({ agentId: 'coo', date: '2026-09-28', kind: 'weekly', bodyMd: 'w', costUsd: 0 });
   const model = mockModel([textResponse('ignored')]);
   const deps = { ...makeDeps({ db, model }), pickModel: async () => { throw new QuotaExhaustedError('reports', ['none']); } };
   const res = await runDueReports(deps, new Date('2026-09-28T10:30:00Z'));
   assert.equal(res.length, 1);
   assert.equal(res[0]?.standups, 4);
-  assert.equal(db.reports.find((x) => x.agentId === 'seo-1' && x.kind === 'standup')!.bodyMd, 'mine');
+  assert.equal(db.reports.find((x) => x.agentId === 'writer' && x.kind === 'standup')!.bodyMd, 'mine');
 });
 
 test('morning brief uses yesterday\'s numbers', async () => {
@@ -116,7 +116,7 @@ test('paused setting: loop claims nothing (planning, tasks, QA) until resumed', 
   assert.ok(isPausedSetting(true) && isPausedSetting('true') && !isPausedSetting(false) && !isPausedSetting(undefined));
   const db = new FakeHqDb();
   db.settings = { paused: true };
-  db.addTask({ agent_id: 'seo-1' });
+  db.addTask({ agent_id: 'writer' });
   db.addRequest({ raw_text: 'x' });
   const deps = makeDeps({ db, model: mockModel([]) });
   const loop = new WorkerLoop(deps, { pollIntervalMs: 10, maxParallelTasks: 2, pausedCheckMs: 0 });

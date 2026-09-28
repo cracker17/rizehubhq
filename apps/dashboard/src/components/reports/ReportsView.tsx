@@ -79,7 +79,7 @@ export function ReportsView({ reports, tab }: { reports: ReportsForDate; tab: Re
         <>
           {reports.digest ? <DigestCard report={reports.digest} /> : (
             <Empty title={isToday ? 'Today’s digest isn’t written yet' : 'No digest for this day'}>
-              {isToday ? 'The EA writes the CEO digest at the digest time (18:00 by default) from every agent’s standup. It also lands in Telegram.' : 'The worker was not running that day, or nothing happened.'}
+              {isToday ? 'The COO writes the CEO digest at the digest time (18:00 by default) from every agent’s standup. It also lands in Telegram.' : 'The worker was not running that day, or nothing happened.'}
             </Empty>
           )}
           {reports.morning && <MorningBriefCard report={reports.morning} />}

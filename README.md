@@ -1,6 +1,6 @@
 # RizeHub HQ
 
-The AI virtual office for **RizeHub**: 22 AI employees you command with one message, a QA agent that checks every deliverable, and an isometric office where you watch them work and approve everything.
+The AI virtual office for **RizeHub**: a team of 6 AI agents (COO, Web Developer, Graphic Designer, Content Writer, Sales Agent, QA) you command with one message, a QA agent that checks every deliverable, and an isometric office where you watch them work and approve everything.
 
 Live target: **https://hq.rizehub.ph** (Hostinger VPS, next to the RizeHub app) + a hosted Supabase project (Singapore).
 
@@ -13,8 +13,8 @@ Live target: **https://hq.rizehub.ph** (Hostinger VPS, next to the RizeHub app) 
 | `apps/worker` | The AI team runtime: scheduler, model router (free / hybrid / Claude / OpenAI), agents, tools, QA |
 | `apps/bot` | Telegram bot: `/assign`, `/status`, approvals |
 | `packages/shared` | Shared status enums + schemas (plan, QA verdict) |
-| `agents/` | 22 expert role files + `roster.yaml` (who does which work type) |
-| `brain/` | Company knowledge: SOPs and QA checklists for all 53 work types, playbooks, brand voice, career files, pricing template |
+| `agents/` | 6 role files (coo, web-dev, designer, writer, sales, qa-lead) + `roster.yaml` (who does which work type) |
+| `brain/` | Company knowledge: SOPs and QA checklists for all 44 work types, playbooks, brand voice, career files, pricing template |
 | `config/models.yaml` | Which AI model each role uses, per profile |
 | `supabase/` | Database migrations + seed |
 | `rizehub-agent-api/` | Reference kit for the RizeHub side of the Agent API (OpenAPI, auth middleware, webhook signer) |
@@ -31,7 +31,7 @@ pnpm install
 cp .env.example .env            # fill in keys (free: Gemini, Groq, OpenRouter)
 pnpm check:env                  # tells you what is missing, per service
 supabase start                  # local database (Docker)
-supabase db reset               # applies migrations + seed (22 agents)
+supabase db reset               # applies migrations + seed (6 agents)
 pnpm dev                        # dashboard on http://localhost:3000, worker, bot
 ```
 Then create your login in Supabase Studio (Authentication → Add user) and run
@@ -79,7 +79,7 @@ The exact steps, in order. Full detail: `docs/10-DEPLOY-VPS.md` and `deploy/supa
 6. **Snapshot the VPS** in hPanel.
 7. **Run the setup** on the VPS: `sudo bash deploy/setup-vps.sh --repo git@github.com:<you>/rizehub-hq.git [--with-nginx --email you@example.com]`. Add the deploy key it prints; answer the `.env` prompts (Supabase URL/anon/service keys, bot token, Telegram id, AI keys). Secrets are generated for you. **Save `VAULT_MASTER_KEY` in your password manager.** `check-env` must show 0 errors. The script splits `.env` into `.env.dashboard` / `.env.bot` / `.env.worker` (each container gets only its own variables; the dashboard never sees the service-role or vault key) and fixes `brain/` + workspace ownership (`deploy/fix-perms.sh`). After editing `.env` later, run `./deploy/update.sh --force`.
 8. **Proxy + TLS** (if you didn't pass `--with-nginx`): `deploy/nginx/hq.rizehub.ph.conf` + `certbot --nginx -d hq.rizehub.ph`, or your panel's reverse proxy to `127.0.0.1:3100`, or `deploy/Caddyfile`.
-9. **CEO user:** Supabase → Authentication → Add user (auto-confirm) → `insert into ceo_users …` (`deploy/supabase-setup.md` §5). Log in at https://hq.rizehub.ph and you should see 22 agents.
+9. **CEO user:** Supabase → Authentication → Add user (auto-confirm) → `insert into ceo_users …` (`deploy/supabase-setup.md` §5). Log in at https://hq.rizehub.ph and you should see the 6 agents.
 10. **Telegram test:** send `/status` to the production bot. Only your id should get an answer.
 11. **End-to-end:** `/assign Write a 600-word blog post about Shopify speed for Madam Muse` → plan appears in Approvals → approve → the agent works → QA → deliverable in your inbox → approve.
 12. **Backups:** add `SUPABASE_DB_URL` (session pooler) to `.env`, run `./deploy/backup.sh` once, add the cron line.

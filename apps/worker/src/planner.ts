@@ -4,7 +4,8 @@ import { generateObject, NoObjectGeneratedError } from 'ai';
 import { Plan } from '@rizehubhq/shared';
 import type { ClientRow, RequestRow } from './hqdb';
 import { errMsg, log, manilaToday, readRoster, readRosterText, usageDetail, type WorkerDeps } from './deps';
-import { addUsage, costUsd, isQuotaError, type PickedModel } from './models/usage';
+import { addUsage, isQuotaError, normalizeUsage, type PickedModel, type TokenUsage } from './models/usage';
+import { cachedPrompt } from './models/cache';
 
 const PLAYBOOK_RULES: [string, RegExp][] = [
   ['onboarding', /\bonboard/i],
@@ -138,8 +139,9 @@ export async function planNext(deps: WorkerDeps): Promise<PlanOutcome> {
 
 export async function planRequest(req: RequestRow, deps: WorkerDeps): Promise<PlanOutcome> {
   let picked: PickedModel;
-  let usage = {};
+  let usage: TokenUsage = {};
   let calls = 0;
+  let cost = 0;
   try {
     picked = await deps.pickModel('lead', { override: (await deps.db.getAgent('coo'))?.model_override });
   } catch (e) {
@@ -170,15 +172,15 @@ export async function planRequest(req: RequestRow, deps: WorkerDeps): Promise<Pl
 
       let candidate: unknown;
       try {
-        const res = await generateObject({ model: picked.model, schema: Plan, schemaName: 'create_plan', system, prompt: fullPrompt });
-        calls++; usage = addUsage(usage, res.usage); picked.recordCall(res.usage);
+        const res = await generateObject({ model: picked.model, schema: Plan, schemaName: 'create_plan', ...cachedPrompt(picked.provider, system, fullPrompt) });
+        calls++; usage = addUsage(usage, normalizeUsage(picked.provider, res.usage, res.providerMetadata)); cost += picked.recordCall(res.usage, res.providerMetadata);
         candidate = res.object;
         lastText = JSON.stringify(res.object);
       } catch (e) {
         if (isQuotaError(e)) throw e;
         calls++;
         const d = describeGenerationError(e);
-        if (NoObjectGeneratedError.isInstance(e) && e.usage) { usage = addUsage(usage, e.usage); picked.recordCall(e.usage); }
+        if (NoObjectGeneratedError.isInstance(e) && e.usage) { usage = addUsage(usage, normalizeUsage(picked.provider, e.usage)); cost += picked.recordCall(e.usage); }
         lastError = d.error; lastText = d.text;
         log(deps, `[coo] plan attempt ${attempt} invalid: ${lastError}`);
         continue;
@@ -212,11 +214,11 @@ export async function planRequest(req: RequestRow, deps: WorkerDeps): Promise<Pl
     await deps.db.planningFailed(req.id, reason).catch(() => undefined);
     return { status: 'failed', requestId: req.id, reason };
   } finally {
-    const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
+    const u = usage;
     if (calls > 0) {
       await deps.db.recordUsage({
         actor: 'coo', kind: 'plan', requestId: req.id, tokensIn: u.inputTokens ?? 0, tokensOut: u.outputTokens ?? 0,
-        costUsd: costUsd(picked.provider, picked.modelId, u), detail: usageDetail(picked, u, { calls }),
+        costUsd: cost, detail: usageDetail(picked, u, { calls, cost_usd: cost }),
       }).catch((e) => log(deps, '[coo] usage log failed', errMsg(e)));
     }
     await deps.db.finishAgentTurn('coo').catch(() => undefined);

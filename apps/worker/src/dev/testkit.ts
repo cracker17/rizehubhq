@@ -71,7 +71,7 @@ export function fakeVault() {
     const id = randomUUID();
     void store.insertCredential({
       id, clientId: CLIENT, label: `${c.platform} access`, loginUrl: null, username: null, secretType: 'api_token', twofaMethod: 'none',
-      scopeNotes: null, urlAllowlist: [], expiresAt: null, grants: ['shopify-dev', 'webflow-dev', 'wordpress-dev', 'fullstack-dev'],
+      scopeNotes: null, urlAllowlist: [], expiresAt: null, grants: ['web-dev'],
       ...c, sealed: seal(c.secret, kr, id),
     });
     return id;
@@ -80,7 +80,7 @@ export function fakeVault() {
 }
 
 /** Dev tools for a working task of `agent` on the Madam Muse client, with injected fakes. */
-export function devSetup(env: DevEnv, agent = 'shopify-dev', website: string | null = 'https://madammuse.co') {
+export function devSetup(env: DevEnv, agent = 'web-dev', website: string | null = 'https://madammuse.co') {
   const deps = makeDeps({ model: mockModel([]) });
   deps.db.clients.set(CLIENT, { id: CLIENT, name: 'Madam Muse', slug: 'madam-muse', platforms: ['shopify'], website, service_package: null, status: 'active', notes: null });
   const task = deps.db.addTask({ agent_id: agent, client_id: CLIENT, status: 'working', work_type: 'shopify-section' });

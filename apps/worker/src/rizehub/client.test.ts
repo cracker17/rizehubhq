@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { RizehubClient, RizehubError, idempotencyKey, isDryRun } from './client';
 import { MOCK_KEYS, MockRizehub, mockFetch } from './mock';
 
-const ctx = { taskId: 't-123', agentId: 'prospector' };
+const ctx = { taskId: 't-123', agentId: 'sales' };
 
 function recordingFetch(responses: (Response | Error)[]) {
   const calls: { url: string; init: RequestInit }[] = [];
@@ -29,7 +29,7 @@ test('writes send auth, audit headers and Idempotency-Key = taskId:step; dry run
   assert.equal(calls[0]!.init.method, 'POST');
   assert.equal(hdr(calls[0]!.init, 'authorization'), 'Bearer k-leads');
   assert.equal(hdr(calls[0]!.init, 'x-hq-task-id'), 't-123');
-  assert.equal(hdr(calls[0]!.init, 'x-hq-agent-id'), 'prospector');
+  assert.equal(hdr(calls[0]!.init, 'x-hq-agent-id'), 'sales');
   assert.equal(hdr(calls[0]!.init, 'idempotency-key'), 't-123:search-1');
   assert.deepEqual(JSON.parse(String(calls[0]!.init.body)), { platform: 'shopify', limit: 5 });
 

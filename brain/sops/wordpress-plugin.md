@@ -1,6 +1,6 @@
 # SOP: wordpress-plugin
 
-Owner: wordpress-dev. Output: a secure, standards-compliant custom plugin (or mu-plugin) in a Git PR, installed and tested on STAGING only, with a readme and install notes.
+Owner: web-dev. Output: a secure, standards-compliant custom plugin (or mu-plugin) in a Git PR, installed and tested on STAGING only, with a readme and install notes.
 
 ## Inputs to confirm
 Problem the plugin solves, users/roles involved, data it stores, admin UI needed, integrations/APIs, WP/PHP/WooCommerce versions of the site, whether an existing maintained plugin already does it (check first; propose it to the CEO if so, with licence/cost).

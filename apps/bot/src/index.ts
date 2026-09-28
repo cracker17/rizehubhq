@@ -112,7 +112,7 @@ bot.command('resume', async (ctx) => {
 bot.command('budget', async (ctx) => {
   const [rows, settings] = await Promise.all([db.spendRows(new Date(Date.now() - 32 * 86400_000).toISOString()), db.getSettings()]);
   const monthly = cfg.monthlyBudgetUsd ?? (Number(settings.monthly_budget_usd) || 0);
-  const daily = Number(settings.daily_budget_usd) || null;
+  const daily = cfg.dailyBudgetUsd ?? (Number(settings.daily_budget_usd) || null);
   return ctx.reply(formatBudget(summarizeSpend(rows, new Date(), tzOf(settings)), monthly, daily, names), html());
 });
 

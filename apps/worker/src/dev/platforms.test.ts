@@ -46,7 +46,7 @@ function shopifyFake(roles: Record<string, string> = { 1: 'MAIN', 2: 'UNPUBLISHE
 function shop(roles?: Record<string, string>) {
   const fk = shopifyFake(roles);
   const f = fakeEnv({ env: SHOP_ENV, fetch: fk.handler });
-  return { ...f, ...devSetup(f.env, 'shopify-dev'), mutations: fk.mutations };
+  return { ...f, ...devSetup(f.env, 'web-dev'), mutations: fk.mutations };
 }
 
 test('shopify: writes to the MAIN (live) theme are refused before any mutation', async () => {
@@ -148,7 +148,7 @@ test('webflow: CMS items are created/updated as drafts; publish and delete are r
     env: { WEBFLOW_TOKEN_MADAM_MUSE: WF_TOKEN },
     fetch: (c) => json({ id: '64f0c0ffee0000000000ffff', isDraft: JSON.parse(c.body || '{}').isDraft, fieldData: { name: 'A' } }, c.method === 'POST' ? 202 : 200),
   });
-  const s = devSetup(f.env, 'webflow-dev');
+  const s = devSetup(f.env, 'web-dev');
   const out = await run(s.tools, 'webflow_api', { op: 'create_item', collection_id: COLL, field_data: { name: 'A', slug: 'a' } });
   assert.match(out, /"isDraft":true/);
   const post = f.fetchCalls[0]!;
@@ -181,7 +181,7 @@ function wpSetup(posts: Record<number, string> = { 5: 'draft', 6: 'publish' }) {
       return json({ id: Number(m[2] ?? 9), status: b.status ?? posts[Number(m[2])] ?? 'draft', title: { raw: b.title }, echo: c.headers.get('authorization') }, 201);
     },
   });
-  return { ...f, ...devSetup(f.env, 'wordpress-dev'), cred, v };
+  return { ...f, ...devSetup(f.env, 'web-dev'), cred, v };
 }
 
 test('wp: create only as draft/pending; status publish refused before any request; Basic auth with the app password', async () => {

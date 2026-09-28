@@ -40,8 +40,8 @@
 - Google OAuth with `gmail.readonly` + `gmail.compose` (drafts only) + `calendar.readonly`. Sending = approval, executed by worker code.
 
 ### Social platforms & job sites
-- Prospecting and inbound agents **draft only**. You send social messages yourself — automated DMs break platform rules and risk your accounts.
-- Job Scout reads job alerts and public feeds only; it never logs into job sites or submits applications. You apply.
+- The Sales Agent **drafts only** (outreach, DM replies, follow-ups). You send social messages yourself — automated DMs break platform rules and risk your accounts.
+- The Sales Agent (job search) reads job alerts and public feeds only; it never logs into job sites or submits applications. You apply.
 
 ### Outreach & personal data
 - Lead data: business contact info only. Suppression list (opt-outs) stored in RizeHub and checked before every send.
@@ -63,7 +63,7 @@ You add each client's details and access (logins, API tokens, app passwords, hos
 - Sessions are closed and cookies deleted when the task ends.
 
 **Access control**
-- **Grants**: each credential lists which agents may use it (e.g. Madam Muse Shopify login → Shopify Dev + QA Lead only). No grant, no access.
+- **Grants**: each credential lists which agents may use it (e.g. Madam Muse Shopify login → Web Developer + QA only). No grant, no access.
 - **Scope notes** are shown to the agent ("theme edits on unpublished themes only; never touch orders or payments") and enforced by the tool layer where possible (URL allowlist per credential, e.g. only `/admin/themes`).
 - **Risky actions** during a logged-in session (publish, delete, change settings, anything involving payments) still require an approval.
 - **2FA**: prefer adding your team email as a collaborator with its own 2FA. If a login asks for a code, `vault_request_2fa` pings you on Telegram and you reply with the code; the task waits. Storing TOTP seeds is off by default (can be enabled per credential if you accept the risk).

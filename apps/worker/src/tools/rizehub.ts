@@ -259,7 +259,7 @@ export function createRizehubTools(d: RizehubToolDeps): ToolFactory {
     });
 
     // ======================= rizehub_reports =======================
-    const canGenerate = ctx.role.id === 'ea';
+    const canGenerate = ctx.role.id === 'coo'; // the COO owns client reports
     const rizehub_reports = tool({
       description: 'RizeHub report tools. Actions: metrics (workspace_id, from, to), generate (workspace_id, type, from, to → waits for '
         + 'the job), job (job_id), get (report_id), add_notes (report_id, summary, insights, next_steps), publish (report_id, '
@@ -287,7 +287,7 @@ export function createRizehubTools(d: RizehubToolDeps): ToolFactory {
               return out({ ...m, change_pct: Object.fromEntries(keys.map((k) => [k, pct(m.metrics[k], m.previous[k])])) });
             }
             case 'generate': {
-              if (!canGenerate) return 'Only the EA & Report Desk generates reports; you can read metrics/reports and add notes.';
+              if (!canGenerate) return 'Only the COO generates reports; you can read metrics/reports and add notes.';
               if (!i.workspace_id || !i.type || !i.from || !i.to) return 'workspace_id, type, from and to are required.';
               await screen('doc', `Generating ${i.type} report ${i.from}…${i.to}`, 'RizeHub report');
               const acc = await client.generateReport(cc, i.workspace_id, { type: i.type, period: { from: i.from, to: i.to } });
@@ -315,7 +315,7 @@ export function createRizehubTools(d: RizehubToolDeps): ToolFactory {
               return out({ ok: true, report_id: r.id, preview_url: r.preview_url });
             }
             case 'publish': {
-              if (!canGenerate) return 'Only the EA & Report Desk requests report publishing.';
+              if (!canGenerate) return 'Only the COO requests report publishing.';
               if (!i.report_id) return 'report_id is required.';
               const r = await client.getReport(cc, i.report_id);
               const dry = await client.publishReport(cc, i.report_id, { notify_client: i.notify_client === true }, { dryRun: true });

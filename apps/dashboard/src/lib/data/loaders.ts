@@ -24,7 +24,7 @@ function must<T>(res: { data: T | null; error: { message: string } | null }, wha
 // ---- individual loaders (all run as the signed-in CEO; RLS applies) ----
 export async function loadAgents(db: SupabaseClient) {
   return must<AgentRow[]>(await db.from('agents')
-    .select('id,name,department,model_role,status,current_task_id,idle_activity,idle_since,avatar,enabled,updated_at')
+    .select('id,name,department,model_role,status,current_task_id,idle_activity,idle_since,avatar,desk,enabled,updated_at')
     .order('department').order('name'), 'agents');
 }
 

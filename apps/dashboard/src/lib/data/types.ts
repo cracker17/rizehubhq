@@ -24,6 +24,8 @@ export interface AgentRow {
   idle_activity: IdleActivity | null;
   idle_since: string | null;
   avatar: { color?: string; accessory?: string; sprite_set?: string } | null;
+  /** Desk seat in the office layout (apps/dashboard/office/layout.json), e.g. { id: 'dev-1' }. */
+  desk?: { id?: string } | null;
   enabled: boolean;
   updated_at: string;
 }

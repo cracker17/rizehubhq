@@ -26,7 +26,7 @@ const keys: ApiKeyRecord[] = [
   { id: 'k3', label: 'hq-old', keyHash: REVOKED.keyHash, scopes: KEY_GROUP_SCOPES.LEADS, revokedAt: '2026-09-01T00:00:00Z', lastUsedAt: null },
 ];
 const H = (key: string | null, extra: Record<string, string> = {}) => ({
-  ...(key ? { authorization: `Bearer ${key}` } : {}), 'x-hq-task-id': '7d1c0e7e-2f7e-4b53-9a57-1c0b6f1e9a10', 'x-hq-agent-id': 'prospector', ...extra,
+  ...(key ? { authorization: `Bearer ${key}` } : {}), 'x-hq-task-id': '7d1c0e7e-2f7e-4b53-9a57-1c0b6f1e9a10', 'x-hq-agent-id': 'sales', ...extra,
 });
 
 test('keys: generated keys are random, only the sha256 hash is stored', () => {
@@ -43,12 +43,12 @@ test('allowed request: scope ok, HQ ids returned, audit row written, last_used t
   assert.ok(r.ok);
   if (!r.ok) return;
   assert.equal(r.route.scope, 'leads:search');
-  assert.deepEqual(r.hq, { taskId: '7d1c0e7e-2f7e-4b53-9a57-1c0b6f1e9a10', agentId: 'prospector' });
+  assert.deepEqual(r.hq, { taskId: '7d1c0e7e-2f7e-4b53-9a57-1c0b6f1e9a10', agentId: 'sales' });
   assert.equal(r.idempotencyKey, 't1:leads_search');
   assert.equal(r.headers['x-ratelimit-limit'], '100');
   assert.equal(audit[0]!.outcome, 'allowed');
   assert.equal(audit[0]!.keyLabel, 'hq-leads');
-  assert.equal(audit[0]!.hqAgentId, 'prospector');
+  assert.equal(audit[0]!.hqAgentId, 'sales');
   await new Promise((res) => setImmediate(res));
   assert.deepEqual(touched, ['k1']);
 });

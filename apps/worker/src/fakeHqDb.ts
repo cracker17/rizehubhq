@@ -27,7 +27,7 @@ export class FakeHqDb implements HqDb {
   /** Facts returned by reportFacts(); tests set this per window start date. */
   facts = new Map<string, DayFacts>();
 
-  constructor(agentIds: string[] = ['coo', 'seo-1', 'seo-2', 'qa-lead', 'uiux-1', 'graphic-1']) {
+  constructor(agentIds: string[] = ['coo', 'web-dev', 'designer', 'writer', 'sales', 'qa-lead']) {
     for (const id of agentIds) this.addAgent(id);
   }
 
@@ -212,6 +212,17 @@ export class FakeHqDb implements HqDb {
   async agentSpendSinceUsd(agentId: string, sinceIso: string) {
     return this.activity.filter((a) => a.actor === agentId && a.action.startsWith('usage.') && a.created_at >= sinceIso)
       .reduce((s, a) => s + Number(a.cost_usd ?? 0), 0);
+  }
+
+  budgetAlerts: { day: string; level: number; spentUsd: number; budgetUsd: number }[] = [];
+  async spendSinceUsd(sinceIso: string) {
+    return this.activity.filter((a) => a.action.startsWith('usage.') && a.created_at >= sinceIso).reduce((s, a) => s + Number(a.cost_usd ?? 0), 0);
+  }
+  async recordBudgetAlert(day: string, level: number, spentUsd: number, budgetUsd: number) {
+    this.log('recordBudgetAlert', day, level, spentUsd, budgetUsd);
+    if (this.budgetAlerts.some((a) => a.day === day && a.level === level)) return false;
+    this.budgetAlerts.push({ day, level, spentUsd, budgetUsd });
+    return true;
   }
 
   async reportFacts(from: string, days: number) {

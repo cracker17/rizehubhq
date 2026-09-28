@@ -15,30 +15,14 @@ const CLIENTS: ClientRow[] = [
   { id: 'c-mvs', name: 'MVS Psychology', slug: 'mvs-psychology' },
 ];
 
-// [id, name, department, color, status, idle]
-const ROSTER: [string, string, string, string, AgentStatus, IdleActivity?][] = [
-  ['coo', 'COO', 'leadership', '#6D4AFF', 'working'],
-  ['ea', 'EA & Report Desk', 'ops', '#3BA7FF', 'working'],
-  ['client-success', 'Client Success', 'ops', '#38BDF8', 'waiting'],
-  ['pipeline', 'Pipeline Desk', 'growth', '#FFB020', 'working'],
-  ['prospector', 'Social Prospecting', 'growth', '#FF7A59', 'working'],
-  ['inbound', 'Social + Inbound', 'growth', '#FF5FA2', 'idle', 'coffee'],
-  ['job-scout', 'Job Scout', 'growth', '#EAB308', 'working'],
-  ['shopify-dev', 'Shopify Dev', 'dev', '#5FBF4A', 'working'],
-  ['webflow-dev', 'Webflow Dev', 'dev', '#4353FF', 'working'],
-  ['wordpress-dev', 'WordPress Dev', 'dev', '#21759B', 'idle', 'ping_pong'],
-  ['fullstack-dev', 'Full-Stack Dev', 'dev', '#00C2A8', 'working'],
-  ['uiux-1', 'UI/UX Designer 1', 'design', '#A259FF', 'working'],
-  ['uiux-2', 'UI/UX Designer 2', 'design', '#C084FC', 'idle', 'lounge_sofa'],
-  ['graphic-1', 'Graphic Designer 1', 'design', '#F97316', 'working'],
-  ['graphic-2', 'Graphic Designer 2', 'design', '#FB923C', 'blocked'],
-  ['social-1', 'Social Media 1', 'content', '#EC4899', 'working'],
-  ['social-2', 'Social Media 2', 'content', '#F472B6', 'idle', 'ping_pong'],
-  ['seo-1', 'SEO Writer 1', 'content', '#22C55E', 'working'],
-  ['seo-2', 'SEO Writer 2', 'content', '#4ADE80', 'working'],
-  ['video-editor', 'Video Editor', 'multimedia', '#E11D48', 'working'],
-  ['sound-engineer', 'Sound & Voice', 'multimedia', '#7C3AED', 'idle', 'lobby'],
-  ['qa-lead', 'QA Lead', 'qa', '#14B8A6', 'working'],
+// [id, name, department, model_role, color, status, idle]: the six agents in agents/roster.yaml
+const ROSTER: [string, string, string, string, string, AgentStatus, IdleActivity?][] = [
+  ['coo', 'COO', 'leadership', 'lead', '#6D4AFF', 'working'],
+  ['web-dev', 'Web Developer', 'dev', 'dev', '#5FBF4A', 'working'],
+  ['designer', 'Graphic Designer', 'design', 'design', '#A259FF', 'working'],
+  ['writer', 'Content Writer', 'content', 'writer', '#22C55E', 'working'],
+  ['sales', 'Sales Agent', 'growth', 'sales', '#FFB020', 'idle', 'coffee'],
+  ['qa-lead', 'QA', 'qa', 'qa', '#14B8A6', 'working'],
 ];
 
 export function demoSnapshot(now = new Date()): HqSnapshot {
@@ -59,7 +43,7 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
     req('r-bc-onboard', 'Onboard Brisbane Coffee Co', 'Onboard Brisbane Coffee Co on the shopify-growth package', 'in_progress', 'c-bc', { created_at: daysAgo(1, 15) }),
     req('r-leads', 'AU Shopify lead list', 'Find 30 Australian Shopify stores with slow LCP', 'in_progress', null, { created_at: at(9, 40) }),
     req('r-jobs', 'Shopify dev job shortlist', 'Shortlist remote Shopify dev jobs this week', 'in_progress', null, { priority: 'low', source: 'schedule', created_at: at(7) }),
-    req('r-io-reel', 'Collagen Jelly reel', '28s reel for Collagen Jelly launch, 9:16 with captions', 'in_progress', 'c-io', { due_date: dateIn(1), created_at: daysAgo(2) }),
+    req('r-io-reel', 'Collagen Jelly reel script', '28s reel script + cover graphic for the Collagen Jelly launch', 'in_progress', 'c-io', { due_date: dateIn(1), created_at: daysAgo(2) }),
     req('r-mm-copy', 'Madam Muse landing copy', 'Landing copy + meta for the bundle page', 'in_progress', 'c-mm', { created_at: at(8, 45), cost_usd: 0.04 }),
     req('r-blog', 'Blog: Shopify speed checklist', 'Write a blog post about Shopify speed for Madam Muse', 'in_progress', 'c-mm', { created_at: at(10) }),
     req('r-lvlup', 'LvlUp Ecosystem CMS page', 'Build the Ecosystem Initiatives CMS page on Webflow', 'in_progress', 'c-lv', { priority: 'high', created_at: daysAgo(1, 11) }),
@@ -83,57 +67,51 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
     };
   };
   const tasks: TaskRow[] = [
-    task('r-vi-report', 'ea', 'Vinyl Icons September report', 'monthly-report', 'working', { id: 't-ea' }),
-    task('r-vi-report', 'ea', 'Publish September report', 'report-delivery', 'awaiting_ceo', { id: 't-vi-publish' }),
-    task('r-vi-report', 'qa-lead', 'Report data check', 'data-check', 'done', { completed_at: at(9, 15) }),
-    task('r-bc-onboard', 'client-success', 'Create RizeHub workspace', 'client-onboarding', 'awaiting_ceo', { id: 't-bc-ws' }),
-    task('r-bc-onboard', 'client-success', 'Access checklist email', 'client-onboarding', 'pending'),
-    task('r-leads', 'prospector', 'Lead Finder: 30 AU Shopify stores', 'lead-research', 'working', { id: 't-prospect' }),
-    task('r-leads', 'prospector', 'Lead report: 18 AU Shopify stores', 'lead-report', 'awaiting_ceo', { id: 't-lead-report' }),
-    task('r-jobs', 'job-scout', '14 new Shopify dev jobs', 'job-search', 'working', { id: 't-jobs-screen' }),
-    task('r-jobs', 'job-scout', 'Job shortlist (5 drafts)', 'job-applications', 'awaiting_ceo', { id: 't-jobs' }),
-    task('r-io-reel', 'video-editor', 'Collagen Jelly reel v1', 'reel', 'awaiting_ceo', { id: 't-reel1' }),
-    task('r-io-reel', 'video-editor', 'Collagen Jelly reel v2', 'reel', 'working', { id: 't-reel2', revision_count: 1 }),
-    task('r-io-reel', 'sound-engineer', 'Voiceover + mix', 'voiceover', 'done'),
-    task('r-mm-copy', 'seo-1', 'Bundle landing copy', 'landing-copy', 'awaiting_ceo', { id: 't-copy', revision_count: 1, cost_usd: 0.03 }),
-    task('r-mm-copy', 'seo-1', 'Meta titles + descriptions', 'meta', 'working', { id: 't-meta' }),
-    task('r-mm-copy', 'qa-lead', 'Landing copy v2 (Madam Muse)', 'review', 'qa_reviewing', { id: 't-qa' }),
-    task('r-blog', 'seo-2', 'Blog: Shopify speed checklist', 'seo-article', 'working', { id: 't-blog' }),
-    task('r-blog', 'graphic-2', 'Blog header image', 'social-graphics', 'queued'),
-    task('r-lvlup', 'webflow-dev', 'LvlUp Ecosystem CMS page', 'webflow-cms', 'working', { id: 't-lvlup' }),
-    task('r-lvlup', 'uiux-2', 'Ecosystem card design', 'wireframe', 'done'),
-    task('r-lvlup', 'qa-lead', 'Cross-browser check', 'review', 'pending'),
-    task('r-halaxy', 'fullstack-dev', 'Halaxy booking API integration', 'api-integration', 'working', { id: 't-halaxy' }),
-    task('r-halaxy', 'fullstack-dev', 'Booking flow tests', 'tests', 'qa_pending', { revision_count: 2 }),
-    task('r-sb-ads', 'graphic-2', 'Missing brand fonts for Sagebeet', 'ad-creative', 'failed', { id: 't-sb-fail' }),
-    task('r-sb-ads', 'graphic-1', '3 launch ads (1:1, 4:5, 9:16)', 'ad-creative', 'working', { id: 't-ads' }),
-    task('r-oct-cal', 'social-1', 'October content calendar', 'content-calendar', 'working', { id: 't-cal' }),
-    task('r-oct-cal', 'social-2', 'Caption pack (week 1)', 'captions', 'done'),
-    task('r-oct-cal', 'social-2', 'Hashtag research', 'captions', 'done'),
-    task('r-proposal', 'pipeline', 'Proposal: Shopify speed fix', 'proposal', 'working', { id: 't-proposal' }),
-    task('r-mm-bundle', 'uiux-1', 'Bundle page wireframe', 'wireframe', 'working', { id: 't-wire' }),
-    task('r-vi-data', 'ea', 'Pull GSC + GA4 data', 'data-pull', 'done', { completed_at: at(8, 40) }),
-    task('r-vi-data', 'ea', 'Clean data sheet', 'data-pull', 'done', { completed_at: at(9, 5) }),
-    task('r-leads', 'prospector', 'Lead Finder: AU pilot batch', 'lead-research', 'done', { completed_at: at(10) }),
-    task('r-jobs', 'job-scout', 'OnlineJobs.ph scan', 'job-search', 'done', { completed_at: at(7, 30) }),
-    task('r-oct-cal', 'social-1', 'Week 1 posts', 'content-calendar', 'done', { completed_at: at(12, 5) }),
+    task('r-vi-report', 'coo', 'Vinyl Icons September report', 'client-report', 'queued', { id: 't-ea' }),
+    task('r-vi-report', 'coo', 'Publish September report', 'client-report', 'awaiting_ceo', { id: 't-vi-publish' }),
+    task('r-vi-report', 'qa-lead', 'Report data check', 'client-report', 'done', { completed_at: at(9, 15) }),
+    task('r-bc-onboard', 'coo', 'Create RizeHub workspace', 'workspace-setup', 'awaiting_ceo', { id: 't-bc-ws' }),
+    task('r-bc-onboard', 'coo', 'Access checklist email', 'access-checklist', 'pending'),
+    // parked while the RizeHub Lead Finder job runs (the Sales Agent is free meanwhile)
+    task('r-leads', 'sales', 'Lead Finder: 30 AU Shopify stores', 'lead-finder-search', 'pending', { id: 't-prospect' }),
+    task('r-leads', 'sales', 'Lead report: 18 AU Shopify stores', 'lead-report', 'awaiting_ceo', { id: 't-lead-report' }),
+    task('r-jobs', 'sales', '14 new Shopify dev jobs', 'job-search', 'queued', { id: 't-jobs-screen' }),
+    task('r-jobs', 'sales', 'Job shortlist (5 drafts)', 'job-application', 'awaiting_ceo', { id: 't-jobs' }),
+    task('r-io-reel', 'writer', 'Collagen Jelly reel script v1', 'short-video-script', 'awaiting_ceo', { id: 't-reel1' }),
+    task('r-io-reel', 'designer', 'Reel cover + caption frames', 'social-graphic', 'queued', { id: 't-reel2', revision_count: 1 }),
+    task('r-mm-copy', 'writer', 'Bundle landing copy', 'landing-copy', 'awaiting_ceo', { id: 't-copy', revision_count: 1, cost_usd: 0.03 }),
+    task('r-mm-copy', 'writer', 'Meta titles + descriptions', 'meta-tags', 'working', { id: 't-meta' }),
+    task('r-mm-copy', 'qa-lead', 'Landing copy v2 (Madam Muse)', 'landing-copy', 'qa_reviewing', { id: 't-qa' }),
+    task('r-blog', 'writer', 'Blog: Shopify speed checklist', 'seo-article', 'queued', { id: 't-blog' }),
+    task('r-blog', 'designer', 'Blog header image', 'social-graphic', 'queued'),
+    task('r-lvlup', 'web-dev', 'LvlUp Ecosystem CMS page', 'webflow-cms', 'working', { id: 't-lvlup' }),
+    task('r-lvlup', 'designer', 'Ecosystem card design', 'ui-mockup', 'done'),
+    task('r-lvlup', 'qa-lead', 'Cross-browser check', 'webflow-cms', 'pending'),
+    task('r-halaxy', 'web-dev', 'Halaxy booking API integration', 'api-integration', 'queued', { id: 't-halaxy' }),
+    task('r-halaxy', 'web-dev', 'Booking flow tests', 'api-integration', 'qa_pending', { revision_count: 2 }),
+    task('r-sb-ads', 'designer', 'Missing brand fonts for Sagebeet', 'ad-creative', 'failed', { id: 't-sb-fail' }),
+    task('r-sb-ads', 'designer', '3 launch ads (1:1, 4:5, 9:16)', 'ad-creative', 'queued', { id: 't-ads' }),
+    task('r-oct-cal', 'writer', 'October content calendar', 'content-calendar', 'queued', { id: 't-cal' }),
+    task('r-oct-cal', 'writer', 'Caption pack (week 1)', 'social-captions', 'done'),
+    task('r-oct-cal', 'writer', 'Hashtag research', 'social-captions', 'done'),
+    task('r-proposal', 'sales', 'Proposal: Shopify speed fix', 'proposal', 'queued', { id: 't-proposal' }),
+    task('r-mm-bundle', 'designer', 'Bundle page wireframe', 'wireframe', 'working', { id: 't-wire' }),
+    task('r-vi-data', 'coo', 'Pull GSC + GA4 data', 'client-report', 'done', { completed_at: at(8, 40) }),
+    task('r-vi-data', 'coo', 'Clean data sheet', 'client-report', 'done', { completed_at: at(9, 5) }),
+    task('r-leads', 'sales', 'Lead Finder: AU pilot batch', 'lead-finder-search', 'done', { completed_at: at(10) }),
+    task('r-jobs', 'sales', 'OnlineJobs.ph scan', 'job-search', 'done', { completed_at: at(7, 30) }),
+    task('r-oct-cal', 'writer', 'Week 1 posts', 'content-calendar', 'done', { completed_at: at(12, 5) }),
   ];
 
   const workingProgress: Record<string, number> = {
-    ea: 65, prospector: 35, 'job-scout': 70, 'shopify-dev': 60, 'webflow-dev': 25, 'fullstack-dev': 45, 'uiux-1': 80,
-    'graphic-1': 50, 'social-1': 30, 'seo-1': 85, 'seo-2': 20, 'video-editor': 75, 'qa-lead': 50, pipeline: 55, coo: 40,
+    coo: 40, 'web-dev': 25, designer: 80, writer: 85, sales: 35, 'qa-lead': 50,
   };
   const currentTask: Record<string, string> = {
-    ea: 't-ea', prospector: 't-prospect', 'job-scout': 't-jobs-screen', 'webflow-dev': 't-lvlup', 'fullstack-dev': 't-halaxy',
-    'uiux-1': 't-wire', 'graphic-1': 't-ads', 'social-1': 't-cal', 'seo-1': 't-meta', 'seo-2': 't-blog',
-    'video-editor': 't-reel2', 'qa-lead': 't-qa', pipeline: 't-proposal',
+    'web-dev': 't-lvlup', designer: 't-wire', writer: 't-meta', 'qa-lead': 't-qa',
   };
-  // Shopify Dev is building the hero section ahead of plan approval (demo only).
-  tasks.push(task('r-mm-bundle', 'shopify-dev', 'Madam Muse bundle hero section', 'shopify-section', 'working', { id: 't-hero' }));
-  currentTask['shopify-dev'] = 't-hero';
 
-  const agents: AgentRow[] = ROSTER.map(([id, name, department, color, status, idle]) => ({
-    id, name, department, model_role: 'specialist', status, current_task_id: currentTask[id] ?? null,
+  const agents: AgentRow[] = ROSTER.map(([id, name, department, model_role, color, status, idle]) => ({
+    id, name, department, model_role, status, current_task_id: currentTask[id] ?? null,
     idle_activity: idle ?? null, idle_since: idle ? ago(15) : null, avatar: { color }, enabled: true, updated_at: ago(5),
   }));
 
@@ -142,21 +120,12 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
     progress: workingProgress[agent_id] ?? null, updated_at: ago(1),
   });
   const screens: AgentScreenRow[] = [
-    screen('coo', 'doc', 'plan-sagebeet-spring.md', 'Splitting the campaign into tasks', '# Sagebeet spring campaign\n\n1. Social posts ×6 → Social Media 2\n2. Ads ×2 → Graphic Designer 1\n3. QA → QA Lead'),
-    screen('ea', 'sheet', 'vinyl-icons-sept.xlsx', 'Writing the summary section', 'Clicks  +18%  ·  Impressions  +24%  ·  Avg. position 14.2 → 11.8'),
-    screen('shopify-dev', 'editor', 'sections/bundle-hero.liquid', 'Fixing CTA overflow at 375px', '{% schema %}\n{\n  "name": "Bundle hero",\n  "settings": [\n    { "type": "image_picker", "id": "image" },\n    { "type": "text", "id": "heading", "default": "Build your bundle" }\n  ]\n}\n{% endschema %}'),
-    screen('webflow-dev', 'browser', 'lvlup.vc/ecosystem — preview', 'Binding CMS fields to the card grid'),
-    screen('fullstack-dev', 'editor', 'src/halaxy/client.ts', 'Handling 429 retries from Halaxy', 'export async function listSlots(practitionerId: string, day: string) {\n  const res = await halaxy.get(`/appointments/available`, { params: { practitionerId, day } });\n  return res.data.slots;\n}'),
-    screen('seo-1', 'doc', 'bundle-meta.md', 'Writing meta descriptions', 'Build Your Perfect Bundle | Madam Muse\nMix and match shapewear essentials and save up to 20%.'),
-    screen('seo-2', 'doc', 'shopify-speed-checklist.md', 'Outlining H2 sections', '## 1. Compress your hero images\n## 2. Remove unused apps\n## 3. Lazy-load below the fold'),
-    screen('prospector', 'leads', 'Lead Finder — AU · Shopify', 'Scoring store 11 of 30'),
-    screen('job-scout', 'browser', 'onlinejobs.ph — Shopify developer', 'Screening listing 10 of 14'),
-    screen('uiux-1', 'browser', 'Figma — Bundle page wireframe', 'Mobile layout for the bundle builder'),
-    screen('graphic-1', 'browser', 'Ad set — 4:5', 'Rendering the 4:5 variant'),
-    screen('social-1', 'sheet', 'october-calendar.xlsx', 'Scheduling week 2'),
-    screen('video-editor', 'browser', 'collagen-jelly-v2.mp4', 'Tightening the first 3 seconds'),
+    screen('coo', 'doc', 'plan-sagebeet-spring.md', 'Splitting the campaign into tasks', '# Sagebeet spring campaign\n\n1. Social captions ×6 → Content Writer\n2. Ads ×2 → Graphic Designer\n3. QA → QA'),
+    screen('web-dev', 'browser', 'lvlup.vc/ecosystem — preview', 'Binding CMS fields to the card grid'),
+    screen('designer', 'browser', 'Figma — Bundle page wireframe', 'Mobile layout for the bundle builder'),
+    screen('writer', 'doc', 'bundle-meta.md', 'Writing meta descriptions', 'Build Your Perfect Bundle | Madam Muse\nMix and match shapewear essentials and save up to 20%.'),
+    screen('sales', 'leads', 'Lead Finder — AU · Shopify', 'Waiting for the Lead Finder job (11 of 30 scored)'),
     screen('qa-lead', 'review', 'Landing copy v2 (Madam Muse)', 'Checking keyword in H1 and CTA links'),
-    screen('pipeline', 'doc', 'proposal-shopify-speed.md', 'Pricing the 3 packages'),
   ];
 
   const ap = (id: string, kind: ApprovalRow['kind'], title: string, agent_id: string, o: Partial<ApprovalRow>): ApprovalRow => ({
@@ -173,18 +142,18 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
         assumptions: ['Bundle discount is 20% for 3+ items', 'Use the existing brand fonts and product photos', 'Build on an unpublished duplicate theme only'],
         questions_for_ceo: ['Should the bundle page link from the main nav or only from ads?', 'Any products to exclude from bundles?'],
         tasks: [
-          { key: 'copy', agent_id: 'seo-1', work_type: 'landing-copy', title: 'Bundle landing copy', depends_on: [],
+          { key: 'copy', agent_id: 'writer', work_type: 'landing-copy', title: 'Bundle landing copy', depends_on: [],
             acceptance_criteria: ['Primary keyword in H1', '450–600 words', '3 CTAs linking to /bundle', 'Brand voice per brand.md'] },
-          { key: 'wire', agent_id: 'uiux-1', work_type: 'wireframe', title: 'Bundle page wireframe', depends_on: ['copy'],
+          { key: 'wire', agent_id: 'designer', work_type: 'wireframe', title: 'Bundle page wireframe', depends_on: ['copy'],
             acceptance_criteria: ['Mobile-first at 375px', 'Bundle builder above the fold', 'Uses the approved copy'] },
-          { key: 'build', agent_id: 'shopify-dev', work_type: 'shopify-section', title: 'Bundle hero + builder section', depends_on: ['copy', 'wire'],
+          { key: 'build', agent_id: 'web-dev', work_type: 'shopify-section', title: 'Bundle hero + builder section', depends_on: ['copy', 'wire'],
             acceptance_criteria: ['OS 2.0 section with schema settings', 'No layout shift (CLS < 0.1)', 'Works at 375px and 1440px', 'Unpublished theme only'] },
-          { key: 'ads', agent_id: 'graphic-1', work_type: 'ad-creative', title: '3 launch ads (1:1, 4:5, 9:16)', depends_on: [],
+          { key: 'ads', agent_id: 'designer', work_type: 'ad-creative', title: '3 launch ads (1:1, 4:5, 9:16)', depends_on: [],
             acceptance_criteria: ['Three sizes exported', 'Logo safe zones respected', 'Offer text readable on mobile'] },
         ],
       },
     }),
-    ap('ap2', 'deliverable', 'Bundle landing copy', 'seo-1', {
+    ap('ap2', 'deliverable', 'Bundle landing copy', 'writer', {
       request_id: 'r-mm-copy', task_id: 't-copy', summary: '540 words, keyword in H1, 3 CTAs to /bundle · QA 92',
       preview_url: 'https://docs.example.com/madam-muse/bundle-copy', created_at: ago(45),
       payload: {
@@ -204,15 +173,15 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
         },
       },
     }),
-    ap('ap3', 'external_action', 'Create RizeHub workspace', 'client-success', {
+    ap('ap3', 'external_action', 'Create RizeHub workspace', 'coo', {
       request_id: 'r-bc-onboard', task_id: 't-bc-ws', summary: 'Account + "shopify-growth" workspace (dry run checked)', created_at: ago(60),
       payload: {
         type: 'action', action: 'Create RizeHub account "Brisbane Coffee Co" with a "shopify-growth" workspace',
-        risk: 'Low · reversible', on_approve: 'Client Success calls the RizeHub Agent API (onboarding key) and emails the access checklist.',
+        risk: 'Low · reversible', on_approve: 'The COO calls the RizeHub Agent API (onboarding key) and emails the access checklist.',
         options: ['Create now', 'Wait until the contract is signed'],
       },
     }),
-    ap('ap4', 'deliverable', 'Lead report: 18 AU Shopify stores', 'prospector', {
+    ap('ap4', 'deliverable', 'Lead report: 18 AU Shopify stores', 'sales', {
       request_id: 'r-leads', task_id: 't-lead-report', summary: '18 qualified leads, 18 outreach drafts · QA 88', created_at: ago(70),
       payload: {
         output: { summary: '18 AU Shopify stores with LCP > 4s, each with a fit score and a first-touch draft.', files: ['au-shopify-leads.csv', 'outreach-drafts.md'] },
@@ -223,7 +192,7 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
         ] },
       },
     }),
-    ap('ap5', 'deliverable', 'Job shortlist (5 drafts)', 'job-scout', {
+    ap('ap5', 'deliverable', 'Job shortlist (5 drafts)', 'sales', {
       request_id: 'r-jobs', task_id: 't-jobs', summary: 'Top match: Shopify dev, US agency, $25/h, fit 91 · QA 90', created_at: ago(90),
       payload: {
         output: { summary: '5 roles scored ≥ 80 with tailored application drafts.', links: ['https://www.onlinejobs.ph/jobseekers/job/example'] },
@@ -234,18 +203,18 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
         ] },
       },
     }),
-    ap('ap6', 'deliverable', 'Collagen Jelly reel v1', 'video-editor', {
-      request_id: 'r-io-reel', task_id: 't-reel1', summary: '28 s, 9:16, captions burned in, −14 LUFS · QA 86', created_at: ago(120),
+    ap('ap6', 'deliverable', 'Collagen Jelly reel script v1', 'writer', {
+      request_id: 'r-io-reel', task_id: 't-reel1', summary: '28 s, 6 beats, hook in 2 s, on-screen text per beat · QA 86', created_at: ago(120),
       payload: {
-        output: { summary: '28-second 9:16 reel with burned-in captions, mixed to −14 LUFS.', files: ['collagen-jelly-v1.mp4', 'captions.srt'] },
+        output: { summary: '28-second 9:16 reel script: hook, 4 benefit beats and CTA, with on-screen text and shot notes.', files: ['collagen-jelly-script-v1.md'] },
         qa: { verdict: 'pass', score: 86, checks: [
           { criterion: 'Hook in first 2 seconds', result: 'pass', note: '' },
-          { criterion: 'Captions readable in safe zone', result: 'pass', note: '' },
-          { criterion: 'Loudness −14 LUFS ±1', result: 'pass', note: '−14.3 LUFS' },
+          { criterion: 'On-screen text ≤ 7 words per beat', result: 'pass', note: '' },
+          { criterion: 'Claims match brand.md', result: 'pass', note: 'No medical claims' },
         ] },
       },
     }),
-    ap('ap7', 'external_action', 'Publish September report', 'ea', {
+    ap('ap7', 'external_action', 'Publish September report', 'coo', {
       request_id: 'r-vi-report', task_id: 't-vi-publish', summary: 'Report + cover email to the client', created_at: ago(150),
       payload: {
         type: 'question', question: 'The September report is ready. Send it to Vinyl Icons today with the cover email, or hold until Monday?',
@@ -254,7 +223,7 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
     }),
     // history
     ap('ap-h1', 'plan', 'Plan: October content calendar', 'coo', { status: 'approved', decided_at: at(12, 5), decided_via: 'telegram', request_id: 'r-oct-cal', created_at: at(11, 40), summary: '3 tasks · due Friday', payload: { title: 'October content calendar', tasks: [] } }),
-    ap('ap-h2', 'deliverable', 'Vinyl Icons data sheet', 'ea', { status: 'approved', decided_at: at(9, 20), decided_via: 'dashboard', request_id: 'r-vi-data', created_at: at(9, 16), summary: 'GSC + GA4 · QA 96' }),
+    ap('ap-h2', 'deliverable', 'Vinyl Icons data sheet', 'coo', { status: 'approved', decided_at: at(9, 20), decided_via: 'dashboard', request_id: 'r-vi-data', created_at: at(9, 16), summary: 'GSC + GA4 · QA 96' }),
     ap('ap-h3', 'plan', 'Plan: Nanaimo homepage audit', 'coo', { status: 'rejected', decided_at: daysAgo(2, 17), decided_via: 'dashboard', ceo_note: 'Not a client yet', request_id: 'r-audit', created_at: daysAgo(2, 16), summary: '1 task' }),
   ];
 
@@ -264,10 +233,10 @@ export function demoSnapshot(now = new Date()): HqSnapshot {
   const activity: ActivityRow[] = [
     act(6, at(12, 5), 'ceo', 'approval.approved', { kind: 'plan', text: 'You approved the October content calendar' }),
     act(5, at(11, 20), 'qa-lead', 'qa.revision', { text: 'QA sent landing copy back: 1 fix' }),
-    act(4, at(10), 'prospector', 'tool.rizehub.lead_finder', { text: 'Lead Finder found 30 AU Shopify stores' }),
+    act(4, at(10), 'sales', 'tool.rizehub.lead_finder', { text: 'Lead Finder found 30 AU Shopify stores' }),
     act(3, at(9, 15), 'qa-lead', 'qa.pass', { score: 96, text: 'QA passed: Vinyl Icons report data (96)' }),
     act(2, at(8, 30), 'ceo', 'request.created', { source: 'dashboard' }, { request_id: 'r-mm-bundle' }),
-    act(1, at(8), 'ea', 'digest.morning', { text: 'Morning brief sent to Telegram' }),
+    act(1, at(8), 'coo', 'digest.morning', { text: 'Morning brief sent to Telegram' }),
   ];
 
   const qaReviews: QaReviewRow[] = [];

@@ -1,7 +1,7 @@
 // BotDb: everything the bot reads/writes in Supabase (service role, server-only). Decisions go
 // through the decide_approval RPC so the bot and dashboard share one set of rules.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AgentLite, BotApproval, BotReport, Decision, QuickFacts, SpendRow } from './types';
+import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow } from './types';
 
 export const APPROVAL_COLS = '*, requests(priority,title,due_date,clients(name))';
 const REPORT_COLS = 'id,agent_id,report_date,kind,body_md,data,created_at,telegram_sent_at';
@@ -21,6 +21,9 @@ export interface BotDb {
   decidedSince(sinceIso: string): Promise<BotApproval[]>;
   unsentReports(sinceIso: string): Promise<BotReport[]>;
   markReportSent(id: string): Promise<void>;
+  /** Daily-budget alerts not yet sent to Telegram (oldest first). */
+  unsentBudgetAlerts(): Promise<BudgetAlert[]>;
+  markBudgetAlertSent(id: string): Promise<void>;
   latestReport(kind: BotReport['kind'], date: string): Promise<BotReport | null>;
   reportFacts(date: string): Promise<QuickFacts>;
   spendRows(sinceIso: string): Promise<SpendRow[]>;
@@ -55,6 +58,11 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
       .in('kind', [...BROADCAST_KINDS]).is('telegram_sent_at', null).gte('created_at', sinceIso).order('created_at').limit(5), 'reports'),
     markReportSent: async (id) => {
       must(await sb.from('reports').update({ telegram_sent_at: new Date().toISOString() }).eq('id', id).is('telegram_sent_at', null), 'report sent');
+    },
+    unsentBudgetAlerts: async () => must<BudgetAlert[]>(await sb.from('budget_alerts').select('*')
+      .is('telegram_sent_at', null).order('alert_day').order('level').limit(10), 'budget_alerts'),
+    markBudgetAlertSent: async (id) => {
+      must(await sb.from('budget_alerts').update({ telegram_sent_at: new Date().toISOString() }).eq('id', id).is('telegram_sent_at', null), 'budget alert sent');
     },
     latestReport: async (kind, date) => must<BotReport | null>(await sb.from('reports').select(REPORT_COLS)
       .eq('kind', kind).eq('report_date', date).order('created_at', { ascending: false }).limit(1).maybeSingle(), 'report'),

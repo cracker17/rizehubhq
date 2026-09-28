@@ -1,6 +1,6 @@
 # SOP: wordpress-fix
 
-Owner: wordpress-dev. Output: a diagnosed and fixed WordPress issue (bug, broken layout, plugin conflict, slow site, suspected hack) reproduced and fixed on STAGING, with root cause and a live-apply plan for CEO approval.
+Owner: web-dev. Output: a diagnosed and fixed WordPress issue (bug, broken layout, plugin conflict, slow site, suspected hack) reproduced and fixed on STAGING, with root cause and a live-apply plan for CEO approval.
 
 ## Inputs to confirm
 Symptom, URL(s), device/browser, when it started, recent changes (updates, new plugins, host moves), error messages/screenshots, whether a fresh staging copy exists. No staging → `ask_ceo` (ask the host's one-click staging or a migration plugin copy). Signs of compromise → escalate immediately (see below).

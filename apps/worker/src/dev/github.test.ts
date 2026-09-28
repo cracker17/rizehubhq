@@ -41,7 +41,7 @@ function setup(o: { head?: string; config?: string; staged?: string; pushFails?:
       return json({ message: `unexpected ${c.url} ${TOKEN}` }, 500);
     },
   });
-  const s = devSetup(f.env, 'fullstack-dev');
+  const s = devSetup(f.env, 'web-dev');
   const taskId = s.task.id;
   return { ...f, ...s };
 }
@@ -178,19 +178,19 @@ test('vault credential: grant checked, use audited, token from the vault only', 
   const cred = v.add({ platform: 'github', secret: 'github_pat_VAULT_demo_987654321', urlAllowlist: ['https://api.github.com/repos/acme', 'https://github.com/acme'] });
   const wrong = v.add({ platform: 'shopify', secret: 'shpat_x_demo_123456' });
   const f = fakeEnv({ vault: v.vault, fetch: (c) => json({ default_branch: 'main', echo: c.headers.get('authorization') }) });
-  const s = devSetup(f.env, 'fullstack-dev');
+  const s = devSetup(f.env, 'web-dev');
   const r = await run(s.tools, 'github', { op: 'pr_status', repo: 'acme/theme', number: 1, credential_id: cred });
   assert.doesNotMatch(r, /VAULT_demo/);
   assert.equal(f.fetchCalls[0]!.headers.get('authorization'), 'Bearer github_pat_VAULT_demo_987654321');
   assert.ok(v.store.log.some((e) => e.credentialId === cred && e.action === 'api_call' && e.detail?.tool === 'github'));
   assert.match(await run(s.tools, 'github', { op: 'pr_status', repo: 'acme/theme', number: 1, credential_id: wrong }), /is for shopify/);
-  const s2 = devSetup(f.env, 'seo-1');
+  const s2 = devSetup(f.env, 'writer');
   assert.match(await run(s2.tools, 'github', { op: 'pr_status', repo: 'acme/theme', number: 1, credential_id: cred }), /not granted/);
 });
 
 test('no token configured → clear instruction, no calls', async () => {
   const f = fakeEnv();
-  const s = devSetup(f.env, 'fullstack-dev');
+  const s = devSetup(f.env, 'web-dev');
   assert.match(await run(s.tools, 'github', { op: 'open_pr', repo: 'acme/theme', title: 't' }), /GITHUB_TOKEN_DEFAULT is not set/);
   assert.equal(f.fetchCalls.length, 0);
 });

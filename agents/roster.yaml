@@ -1,77 +1,79 @@
 # RizeHub HQ roster: what the COO routes on (docs/04-AGENTS.md)
-# work_type → default agent. A list means load-balance by queue length.
+# Six agents: coo, web-dev, designer, writer, sales, qa-lead. work_type → owning agent.
 # Every work_type has an SOP at brain/sops/<work_type>.md and a QA checklist at brain/qa-checklists/<work_type>.md
+# runtime: worker = Vercel AI SDK runner in apps/worker; hermes = Hermes Agent instance (until that runtime lands,
+# hermes agents run on the worker runner too). Set per agent in the role file front-matter.
+
+agents:
+  coo:      { name: COO,              department: leadership, runtime: worker, model_role: lead }
+  web-dev:  { name: Web Developer,    department: dev,        runtime: hermes, model_role: dev }
+  designer: { name: Graphic Designer, department: design,     runtime: hermes, model_role: design }
+  writer:   { name: Content Writer,   department: content,    runtime: hermes, model_role: writer }
+  sales:    { name: Sales Agent,      department: growth,     runtime: hermes, model_role: sales }
+  qa-lead:  { name: QA,               department: qa,         runtime: worker, model_role: qa }
 
 routing:
-  # Leadership & ops
+  # Leadership & ops (COO plans and runs onboarding, client reports and the CEO's inbox/briefs itself)
   planning:             coo
   weekly-summary:       coo
-  inbox-triage:         ea
-  daily-report:         ea
-  client-report:        ea
-  meeting-prep:         ea
-  client-onboarding:    client-success
-  workspace-setup:      client-success
-  access-checklist:     client-success
+  inbox-triage:         coo
+  daily-report:         coo
+  client-report:        coo
+  meeting-prep:         coo
+  client-onboarding:    coo
+  workspace-setup:      coo
+  access-checklist:     coo
 
-  # Growth
-  proposal:             pipeline
-  follow-up-email:      pipeline
-  lead-finder-search:   prospector
-  lead-report:          prospector
-  outreach-draft:       prospector
-  dm-reply-draft:       inbound
-  lead-qualification:   inbound
-  job-search:           job-scout
-  job-application:      job-scout
+  # Growth (Sales Agent: lead finding → research → outreach → replies → proposals → follow-ups;
+  # also screens contract/job opportunities for the CEO and drafts his applications)
+  lead-finder-search:   sales
+  lead-report:          sales
+  outreach-draft:       sales
+  dm-reply-draft:       sales
+  lead-qualification:   sales
+  proposal:             sales
+  follow-up-email:      sales
+  job-search:           sales
+  job-application:      sales
 
-  # Dev
-  shopify-section:      shopify-dev
-  shopify-page:         shopify-dev
-  shopify-theme-fix:    shopify-dev
-  shopify-speed:        shopify-dev
-  webflow-page:         webflow-dev
-  webflow-cms:          webflow-dev
-  webflow-interaction:  webflow-dev
-  wordpress-page:       wordpress-dev
-  wordpress-plugin:     wordpress-dev
-  wordpress-fix:        wordpress-dev
-  web-app:              fullstack-dev
-  api-integration:      fullstack-dev
-  automation:           fullstack-dev
+  # Dev (Web Developer: Shopify, Webflow, WordPress, full-stack)
+  shopify-section:      web-dev
+  shopify-page:         web-dev
+  shopify-theme-fix:    web-dev
+  shopify-speed:        web-dev
+  webflow-page:         web-dev
+  webflow-cms:          web-dev
+  webflow-interaction:  web-dev
+  wordpress-page:       web-dev
+  wordpress-plugin:     web-dev
+  wordpress-fix:        web-dev
+  web-app:              web-dev
+  api-integration:      web-dev
+  automation:           web-dev
 
-  # Design
-  wireframe:            [uiux-1, uiux-2]
-  ui-mockup:            [uiux-1, uiux-2]
-  ux-audit:             [uiux-1, uiux-2]
-  ad-creative:          [graphic-1, graphic-2]
-  social-graphic:       [graphic-1, graphic-2]
-  brand-asset:          [graphic-1, graphic-2]
+  # Design (Graphic Designer: UI/UX + graphics; always delivers a design spec + assets)
+  wireframe:            designer
+  ui-mockup:            designer
+  ux-audit:             designer
+  ad-creative:          designer
+  social-graphic:       designer
+  brand-asset:          designer
 
-  # Content
-  content-calendar:     [social-1, social-2]
-  social-captions:      [social-1, social-2]
-  short-video-script:   [social-1, social-2]
-  seo-article:          [seo-1, seo-2]
-  landing-copy:         [seo-1, seo-2]
-  meta-tags:            [seo-1, seo-2]
-  keyword-research:     [seo-1, seo-2]
-
-  # Multimedia
-  video-edit:           video-editor
-  reel:                 video-editor
-  subtitles:            video-editor
-  voiceover:            sound-engineer
-  voice-design:         sound-engineer
-  audio-cleanup:        sound-engineer
-  music-sfx:            sound-engineer
+  # Content (Content Writer: SEO + social + short-video scripts)
+  seo-article:          writer
+  landing-copy:         writer
+  meta-tags:            writer
+  keyword-research:     writer
+  content-calendar:     writer
+  social-captions:      writer
+  short-video-script:   writer
 
 qa:
   default: qa-lead          # every deliverable is reviewed before it reaches the CEO
 
-# Lets "fix the Madam Muse store" route to the right dev without naming the platform
+# Lets "fix the Madam Muse store" route to the developer without naming the platform
 platform_to_dev:
-  shopify: shopify-dev
-  webflow: webflow-dev
-  wordpress: wordpress-dev
-  custom: fullstack-dev
+  shopify: web-dev
+  webflow: web-dev
+  wordpress: web-dev
+  custom: web-dev

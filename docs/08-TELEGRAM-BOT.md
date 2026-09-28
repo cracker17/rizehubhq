@@ -27,15 +27,15 @@ Your pocket command line. Long polling (no domain or webhook needed), so it runs
 ```
 📋 PLAN · Madam Muse — Bundle landing page
 4 tasks · est. $4.20 · due Fri Oct 2
-1. SEO Writer 1 — landing copy
-2. UI/UX 1 — wireframe (after 1)
-3. Shopify Dev — build on unpublished theme (after 2)
-4. Graphic 1 — 3 ad graphics (after 1)
+1. Content Writer — landing copy
+2. Graphic Designer — wireframe (after 1)
+3. Web Developer — build on unpublished theme (after 2)
+4. Graphic Designer — 3 ad graphics (after 1)
 
 [✅ Approve] [✏️ Changes] [❌ Reject] [🔗 Open]
 ```
 ```
-✅ QA PASSED 92/100 · Landing copy (SEO Writer 1)
+✅ QA PASSED 92/100 · Landing copy (Content Writer)
 "Build your bundle…" — 540 words, keyword in H1, 3 CTAs
 [✅ Approve] [✏️ Changes] [❌ Reject] [🔗 Open]
 ```

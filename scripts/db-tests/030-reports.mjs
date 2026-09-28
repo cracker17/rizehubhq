@@ -6,8 +6,8 @@ export default async function ({ db, step, one, val, as, assert }) {
   let req, tDone, tDone2, tWork, tFail;
 
   await step('reports: morning_brief kind allowed, unknown kinds refused', async () => {
-    await db.exec(`insert into reports (agent_id, report_date, kind) values ('ea', '2020-01-01', 'morning_brief')`);
-    await assert.rejects(db.query(`insert into reports (agent_id, report_date, kind) values ('ea', '2020-01-01', 'monthly')`), /check/);
+    await db.exec(`insert into reports (agent_id, report_date, kind) values ('coo', '2020-01-01', 'morning_brief')`);
+    await assert.rejects(db.query(`insert into reports (agent_id, report_date, kind) values ('coo', '2020-01-01', 'monthly')`), /check/);
   });
 
   await step('reports: one digest per day even without an agent (null agent_id)', async () => {
@@ -30,20 +30,20 @@ export default async function ({ db, step, one, val, as, assert }) {
       `insert into tasks (request_id, client_id, agent_id, title, instructions, work_type, status ${extra ? ',' + extra.split('|')[0] : ''})
        values ($1, 'c0000000-0000-0000-0000-000000000001', $2, $3, 'x', 'landing-copy', $4 ${extra ? ',' + extra.split('|')[1] : ''}) returning id`,
       [req, agentId, title, status]);
-    tDone = await mk('seo-1', 'Landing copy', 'done', `completed_at, started_at|'2026-01-15T03:00:00Z', '2026-01-15T01:00:00Z'`);
+    tDone = await mk('writer', 'Landing copy', 'done', `completed_at, started_at|'2026-01-15T03:00:00Z', '2026-01-15T01:00:00Z'`);
     // completed 23:30 Manila on the 15th → inside; 00:30 Manila on the 16th → outside
-    tDone2 = await mk('graphic-1', 'Hero banner', 'done', `completed_at|'2026-01-15T15:30:00Z'`);
-    await mk('graphic-1', 'Late banner', 'done', `completed_at|'2026-01-15T16:30:00Z'`);
-    tWork = await mk('uiux-1', 'Wireframe', 'working', `started_at|'2026-01-15T02:00:00Z'`);
-    tFail = await mk('shopify-dev', 'Build section', 'failed');
+    tDone2 = await mk('designer', 'Hero banner', 'done', `completed_at|'2026-01-15T15:30:00Z'`);
+    await mk('designer', 'Late banner', 'done', `completed_at|'2026-01-15T16:30:00Z'`);
+    tWork = await mk('designer', 'Wireframe', 'working', `started_at|'2026-01-15T02:00:00Z'`);
+    tFail = await mk('web-dev', 'Build section', 'failed');
     await db.query(`insert into approvals (kind, request_id, task_id, agent_id, title, summary, payload)
-                    values ('external_action', $1, $2, 'shopify-dev', 'Stuck: Build section', 'Missing theme access', '{"type":"task_failed"}')`, [req, tFail]);
+                    values ('external_action', $1, $2, 'web-dev', 'Stuck: Build section', 'Missing theme access', '{"type":"task_failed"}')`, [req, tFail]);
     // spend: two rows inside the window, one the minute after it closes
     await db.exec(`insert into activity_log (actor, action, task_id, client_id, cost_usd, created_at) values
-      ('seo-1', 'usage.task', '${tDone}', 'c0000000-0000-0000-0000-000000000001', 0.5, '2026-01-14T16:00:00Z'),
-      ('graphic-1', 'usage.task', '${tDone2}', null, 0.25, '2026-01-15T15:59:00Z'),
-      ('graphic-1', 'usage.task', '${tDone2}', null, 9, '2026-01-15T16:00:00Z'),
-      ('seo-1', 'task.submitted', '${tDone}', null, 0, '2026-01-15T02:30:00Z'),
+      ('writer', 'usage.task', '${tDone}', 'c0000000-0000-0000-0000-000000000001', 0.5, '2026-01-14T16:00:00Z'),
+      ('designer', 'usage.task', '${tDone2}', null, 0.25, '2026-01-15T15:59:00Z'),
+      ('designer', 'usage.task', '${tDone2}', null, 9, '2026-01-15T16:00:00Z'),
+      ('writer', 'task.submitted', '${tDone}', null, 0, '2026-01-15T02:30:00Z'),
       ('qa-lead', 'qa.pass', '${tDone}', null, 0, '2026-01-15T02:40:00Z')`);
     await db.exec(`insert into qa_reviews (task_id, reviewer_id, attempt, verdict, score, checks, created_at) values
       ('${tDone}', 'qa-lead', 1, 'fail', 60, '[]', '2026-01-15T02:00:00Z'),
@@ -58,11 +58,11 @@ export default async function ({ db, step, one, val, as, assert }) {
     assert.deepEqual(f.done.map((d) => d.title).sort(), ['Hero banner', 'Landing copy']);
     assert.equal(f.done.find((d) => d.title === 'Landing copy').client_name, 'Madam Muse');
     assert.equal(Number(f.spend_usd), 0.75);
-    assert.deepEqual(f.spend_by_actor.map((s) => [s.actor, Number(s.usd)]), [['seo-1', 0.5], ['graphic-1', 0.25]]);
+    assert.deepEqual(f.spend_by_actor.map((s) => [s.actor, Number(s.usd)]), [['writer', 0.5], ['designer', 0.25]]);
     assert.deepEqual(f.spend_by_client.map((s) => [s.name, Number(s.usd)]), [['Madam Muse', 0.5]]);
     assert.deepEqual(f.qa, { reviews: 2, passed: 1 });
     assert.equal(f.requests_created, 1);
-    assert.deepEqual(f.events.map((e) => `${e.actor}:${e.action}`), ['seo-1:task.submitted', 'qa-lead:qa.pass']);
+    assert.deepEqual(f.events.map((e) => `${e.actor}:${e.action}`), ['writer:task.submitted', 'qa-lead:qa.pass']);
     assert.equal(f.events[0].task_title, 'Landing copy');
   });
 
@@ -72,7 +72,7 @@ export default async function ({ db, step, one, val, as, assert }) {
     assert.equal(b.kind, 'failed');
     assert.equal(b.reason, 'Missing theme access');
     assert.ok(f.approvals_waiting.some((a) => a.title === 'Stuck: Build section' && a.type === 'task_failed' && a.priority === 'high'));
-    assert.ok(f.agents.length >= 20);
+    assert.equal(f.agents.length, 6);
   });
 
   await step('report_facts: a 7-day window sums every day', async () => {
@@ -84,17 +84,17 @@ export default async function ({ db, step, one, val, as, assert }) {
   });
 
   await step('save_report is idempotent per (author, date, kind); overwrite updates in place', async () => {
-    const a = await val(`select save_report('ea', $1::date, 'daily_digest', '[]', '[]', '[]', 'first', 0.01, '{"headline":"h"}'::jsonb)`, [D]);
+    const a = await val(`select save_report('coo', $1::date, 'daily_digest', '[]', '[]', '[]', 'first', 0.01, '{"headline":"h"}'::jsonb)`, [D]);
     assert.ok(a);
-    assert.equal(await val(`select save_report('ea', $1::date, 'daily_digest', '[]', '[]', '[]', 'second', 0, '{}'::jsonb)`, [D]), null);
+    assert.equal(await val(`select save_report('coo', $1::date, 'daily_digest', '[]', '[]', '[]', 'second', 0, '{}'::jsonb)`, [D]), null);
     assert.equal(await val(`select body_md from reports where id = $1`, [a]), 'first');
-    assert.equal(await val(`select save_report('ea', $1::date, 'daily_digest', '[]', '[]', '[]', 'third', 0, '{}'::jsonb, true)`, [D]), a);
+    assert.equal(await val(`select save_report('coo', $1::date, 'daily_digest', '[]', '[]', '[]', 'third', 0, '{}'::jsonb, true)`, [D]), a);
     assert.equal(await val(`select body_md from reports where id = $1`, [a]), 'third');
     assert.equal(await val(`select count(*)::int from activity_log where action = 'report.daily_digest'`), 1);
     // standups: one per agent per day
-    assert.ok(await val(`select save_report('seo-1', $1::date, 'standup', '["a"]', '[]', '[]', null)`, [D]));
-    assert.ok(await val(`select save_report('graphic-1', $1::date, 'standup', '["b"]', '[]', '[]', null)`, [D]));
-    assert.equal(await val(`select save_report('seo-1', $1::date, 'standup', '["c"]', '[]', '[]', null)`, [D]), null);
+    assert.ok(await val(`select save_report('writer', $1::date, 'standup', '["a"]', '[]', '[]', null)`, [D]));
+    assert.ok(await val(`select save_report('designer', $1::date, 'standup', '["b"]', '[]', '[]', null)`, [D]));
+    assert.equal(await val(`select save_report('writer', $1::date, 'standup', '["c"]', '[]', '[]', null)`, [D]), null);
   });
 
   await step('set_paused toggles settings.paused and logs it', async () => {
@@ -114,7 +114,7 @@ export default async function ({ db, step, one, val, as, assert }) {
 
   await step('anonymous visitors cannot read facts, save reports or pause', () => as('anon', null, async () => {
     await assert.rejects(db.query(`select report_facts(current_date)`), /permission denied/);
-    await assert.rejects(db.query(`select save_report('ea', current_date, 'standup', '[]', '[]', '[]', null)`), /permission denied/);
+    await assert.rejects(db.query(`select save_report('coo', current_date, 'standup', '[]', '[]', '[]', null)`), /permission denied/);
     await assert.rejects(db.query(`select set_paused(true)`), /permission denied/);
   }));
 

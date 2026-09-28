@@ -1,4 +1,4 @@
-// brain_write (Client Success only by role): create/update client knowledge files at
+// brain_write (the COO only, by role): create/update client knowledge files at
 // brain/clients/<slug>/<name>.md. Nothing else in brain/ is writable by agents.
 import fs from 'node:fs';
 import path from 'node:path';

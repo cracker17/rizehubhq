@@ -4,7 +4,7 @@ import { createBrain, type Brain } from './brain';
 import { config } from './config';
 import type { WorkerDeps } from './deps';
 import { FakeHqDb } from './fakeHqDb';
-import { costUsd, type PickedModel } from './models/usage';
+import { costUsd, normalizeUsage, type PickedModel } from './models/usage';
 import { loadRole } from './roles';
 
 type CallOptions = MockLanguageModelV2['doGenerateCalls'][number];
@@ -53,7 +53,7 @@ export function makeDeps(opts: {
   const modelId = opts.modelId ?? 'mock-model';
   const logs: string[] = [];
   const quotaHits: string[] = [];
-  const picked: PickedModel = { model: opts.model, provider, modelId, recordCall: (usage) => costUsd(provider, modelId, usage) };
+  const picked: PickedModel = { model: opts.model, provider, modelId, recordCall: (usage, meta) => costUsd(provider, modelId, normalizeUsage(provider, usage, meta)) };
   return {
     db, brain: opts.brain ?? createBrain(), pickModel: async () => picked, loadRole: (id) => loadRole(id),
     agentsDir: config.agentsDir, qaThreshold: opts.qaThreshold ?? 85,

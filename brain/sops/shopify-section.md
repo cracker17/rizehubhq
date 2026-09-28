@@ -1,6 +1,6 @@
 # SOP: shopify-section
 
-Owner: shopify-dev. Output: one reusable, merchant-editable OS 2.0 section (or theme block set) pushed to an UNPUBLISHED theme, with PR + preview link.
+Owner: web-dev. Output: one reusable, merchant-editable OS 2.0 section (or theme block set) pushed to an UNPUBLISHED theme, with PR + preview link.
 
 ## Inputs to confirm
 Store, target theme (unpublished ID), design (Figma frame or reference screenshot), content source (copy task output or client), where it will be used (templates), dynamic data (metafields/metaobjects/collections). Missing design states (mobile, empty, hover) or copy → placeholders in schema defaults + note; missing access → `ask_ceo`.

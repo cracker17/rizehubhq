@@ -30,7 +30,7 @@ Each milestone ends with something you can **see working locally**. Don't start 
 - ✅ `pnpm dev` starts empty dashboard/worker/bot without errors; Studio opens.
 
 ## M1 · Database + seed (Day 1–2)
-- Migration from 03, RLS, realtime, seed 22 agents + settings, generated types.
+- Migration from 03, RLS, realtime, seed agents + settings (now 6 agents: `20260928080000_six_agent_roster.sql`), generated types.
 - ✅ `supabase db reset` works; you can log in; agents visible in Studio.
 
 ## M2 · Dashboard shell matching mockup (Days 2–5)
@@ -50,7 +50,7 @@ Each milestone ends with something you can **see working locally**. Don't start 
 - ✅ "Write a blog post about Shopify speed for Madam Muse" produces a sensible plan; approving creates queued tasks.
 
 ## M6 · First specialist + QA loop (Days 10–14)
-- Agent runner (Vercel AI SDK + model router with the free profile; see 14), hq tools (`report_progress`, `submit_output`, `ask_ceo`), SEO Writer 1 + QA Lead, QA verdict schema, revision loop, deliverable approval.
+- Agent runner (Vercel AI SDK + model router with the free profile; see 14), hq tools (`report_progress`, `submit_output`, `ask_ceo`), Content Writer + QA, QA verdict schema, revision loop, deliverable approval.
 - ✅ End-to-end: command → plan → article written → QA fails once → revised → QA passes → you approve → done. Costs logged.
 
 ## M7 · Reports (Days 14–16)
@@ -81,11 +81,11 @@ Each milestone ends with something you can **see working locally**. Don't start 
 
 ## M9c · Onboarding automation
 - RizeHub: account + workspace create endpoints, workspace templates, invite drafts, `test: true` accounts.
-- HQ: Client Success agent, onboarding playbook, `client.signed_up` webhook → auto request.
+- HQ: COO-run onboarding (was the Client Success agent), onboarding playbook, `client.signed_up` webhook → auto request.
 - ✅ Onboard a **test** client end-to-end: approval preview shows exactly what will be created; account + workspace appear in RizeHub staging; QA reads them back and they match the intake; welcome email draft ready.
 
 ## M10 · Remaining roles (Days 30–40)
-- Add one role at a time: Graphic (Magnific), UI/UX, Social ×2, Pipeline, Prospector, Inbound, EA inbox, Webflow, WordPress, Full-Stack.
+- Add one capability at a time (the team is now 6 agents: coo, web-dev, designer, writer, sales, qa-lead): design (Magnific), social/SEO content, sales pipeline + prospecting + inbound, COO inbox, Webflow, WordPress, full-stack.
 - ✅ Each new role completes 3 real tasks with QA pass ≥ 85 before the next role is added.
 
 ## M11 · Deploy to `hq.rizehub.ph` (Days 40–42)
@@ -116,4 +116,4 @@ Each milestone ends with something you can **see working locally**. Don't start 
 | 12 | Does RizeHub run in Docker on the VPS? | decides the network setup in 10 |
 | 13 | Workspace templates per service package | list packages in `brain/company/services.md` |
 | 14 | Cold-email sending domain (separate from main) | needed before outreach sends |
-| 15 | Which job-alert emails to route to the Job Scout | set up alerts on OJ.ph / Indeed / LinkedIn / Upwork |
+| 15 | Which job-alert emails to route to the Sales Agent (job search) | set up alerts on OJ.ph / Indeed / LinkedIn / Upwork |

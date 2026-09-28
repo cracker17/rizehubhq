@@ -31,7 +31,7 @@ function setup(o: { site?: FakeSite; agent?: string; fetchImpl?: (url: string, i
     void store.insertCredential({
       id, clientId: CLIENT, platform: 'shopify', label: 'Madam Muse Admin API', loginUrl: null, username: 'dev@rizehub.ph',
       secretType: 'api_token', twofaMethod: 'none', scopeNotes: 'Themes only. header: X-Shopify-Access-Token',
-      urlAllowlist: ['https://madammuse.myshopify.com/admin/api'], expiresAt: null, grants: ['shopify-dev', 'qa-lead'],
+      urlAllowlist: ['https://madammuse.myshopify.com/admin/api'], expiresAt: null, grants: ['web-dev', 'qa-lead'],
       ...c, sealed: seal(c.secret, kr, id),
     });
     return id;
@@ -41,7 +41,7 @@ function setup(o: { site?: FakeSite; agent?: string; fetchImpl?: (url: string, i
     secret: PASSWORD, secretType: 'password', label: 'Madam Muse store login', loginUrl: 'https://madammuse.myshopify.com/admin',
     scopeNotes: 'Theme edits on unpublished themes only', urlAllowlist: ['https://madammuse.myshopify.com/admin/themes'], twofaMethod: 'sms',
   });
-  add({ secret: 'other-demo', label: 'Ads account', platform: 'ga4', grants: ['seo-1'] });
+  add({ secret: 'other-demo', label: 'Ads account', platform: 'ga4', grants: ['writer'] });
 
   const fetchCalls: Setup['fetchCalls'] = [];
   const fetchImpl = o.fetchImpl ?? ((url: string, init: RequestInit) => {
@@ -61,8 +61,8 @@ function setup(o: { site?: FakeSite; agent?: string; fetchImpl?: (url: string, i
     launchBrowser: o.launch ?? launcher, twofaTimeoutMs: 50, twofaPollMs: 1, sleep: async () => undefined,
   };
   const deps = makeDeps({ model: mockModel([]) });
-  const task = deps.db.addTask({ agent_id: o.agent ?? 'shopify-dev', client_id: CLIENT, status: 'working' });
-  const ctx: ToolContext = { task, role: loadRole(o.agent ?? 'shopify-dev'), deps, state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } };
+  const task = deps.db.addTask({ agent_id: o.agent ?? 'web-dev', client_id: CLIENT, status: 'working' });
+  const ctx: ToolContext = { task, role: loadRole(o.agent ?? 'web-dev'), deps, state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } };
   return { store, kr, tools: createVaultTools(ctx, env), env, ctx, fetchCalls, api, login, launcher };
 }
 
@@ -84,11 +84,11 @@ test('vault_list shows only granted credentials, masked usernames, never secrets
 });
 
 test('grants are enforced: an agent without a grant gets nothing and the attempt is logged', async () => {
-  const s = setup({ agent: 'seo-1' });
+  const s = setup({ agent: 'writer' });
   const out = await run(s.tools, 'vault_api', { credential_id: s.api, request: { method: 'GET', url: 'https://madammuse.myshopify.com/admin/api/2025-07/themes.json' } });
   assert.match(out, /not granted/);
   assert.equal(s.fetchCalls.length, 0);
-  assert.deepEqual(s.store.log.at(-1), { credentialId: s.api, agentId: 'seo-1', taskId: s.ctx.task.id, action: 'denied', success: false, detail: { tool: 'vault_api', reason: 'not granted' } });
+  assert.deepEqual(s.store.log.at(-1), { credentialId: s.api, agentId: 'writer', taskId: s.ctx.task.id, action: 'denied', success: false, detail: { tool: 'vault_api', reason: 'not granted' } });
   assert.match(await run(s.tools, 'vault_login', { credential_id: s.login }), /not granted/);
   assert.match(await run(s.tools, 'vault_api', { credential_id: 'not-a-uuid', request: { method: 'GET', url: 'https://x.com' } }), /Unknown credential/);
   assert.match(await run(s.tools, 'vault_report_problem', { credential_id: s.api, issue: 'broken' }), /not granted/);
@@ -263,7 +263,7 @@ test('2FA: the worker asks the CEO, types the code itself and never shows it to 
   assert.ok(!out.includes('482913'));
   const ap = s.store.approvals.at(-1)!;
   assert.equal(ap.payload.type, 'question');
-  assert.match(String(ap.payload.question), /Shopify Dev is logging in to Madam Muse store login .* sent by SMS\. Reply with the code only\./);
+  assert.match(String(ap.payload.question), /Web Developer is logging in to Madam Muse store login .* sent by SMS\. Reply with the code only\./);
   assert.equal(ap.ceo_note, '[2FA code used]');
   assert.equal(s.launcher.browsers[0]!.contexts[0]!.pages[0]!.stage, 'home');
   assert.equal(getVaultBrowserSession(s.ctx.state, s.login)?.state, 'logged_in');
@@ -314,7 +314,7 @@ test('end to end in the runner: the model never sees the secret', async () => {
     toolCalls([{ name: 'submit_output', input: { summary: 'Checked the shop via the API' } }]),
   ]);
   const deps = Object.assign(makeDeps({ model }), { vault: s.env });
-  const task = deps.db.addTask({ agent_id: 'shopify-dev', client_id: CLIENT, status: 'working' });
+  const task = deps.db.addTask({ agent_id: 'web-dev', client_id: CLIENT, status: 'working' });
   const r = await runTask(task, deps, { heartbeatMs: 5 });
   assert.equal(r.status, 'submitted');
   const seen = model.doGenerateCalls.map(promptText).join('\n');

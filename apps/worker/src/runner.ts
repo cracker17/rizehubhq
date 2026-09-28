@@ -7,7 +7,8 @@ import { z } from 'zod';
 import type { ClientRow, TaskOutput, TaskRow } from './hqdb';
 import type { Role } from './roles';
 import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
-import { addUsage, isQuotaError, type PickedModel } from './models/usage';
+import { addUsage, isQuotaError, normalizeUsage, type PickedModel, type TokenUsage } from './models/usage';
+import { cachedPrompt, withRollingCache } from './models/cache';
 import { WORKER_EXECUTED_ACTIONS } from './rizehub/background';
 
 /** Where not-yet-built tools arrive (docs/11-ROADMAP.md). */
@@ -37,6 +38,11 @@ export type RunResult =
   | { status: 'requeued'; reason: string; costUsd: number };
 
 interface RunState { ended: null | 'submitted' | 'asked'; costUsd: number; overBudget: boolean; toolErrors: number }
+
+/** Failure reasons for the per-task limits (role max_turns / budget_usd_per_task). Shown on the task and to the CEO. */
+export const maxStepsReason = (maxTurns: number) => `stopped: exceeded max steps ${maxTurns}`;
+export const taskBudgetReason = (budgetUsd: number, spentUsd: number) =>
+  `stopped: exceeded $${budgetUsd.toFixed(2)} task budget ($${spentUsd.toFixed(4)} spent)`;
 
 export function stubMessage(name: string): string {
   const m = TOOL_MILESTONES[name] ?? 'a later milestone';
@@ -204,7 +210,7 @@ export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions 
   const db = deps.db;
   const state: RunState = { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 };
   let picked: PickedModel | null = null;
-  let usage = {};
+  let usage: TokenUsage = {};
   let steps = 0;
   const heartbeat = setInterval(() => { db.touchHeartbeat(task.id).catch(() => undefined); }, opts.heartbeatMs ?? 30_000);
   heartbeat.unref?.();
@@ -222,15 +228,16 @@ export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions 
 
     const result = await generateText({
       model: pm.model,
-      system: role.body,
-      prompt: buildTaskPrompt(task, client, deps),
+      // Anthropic: system prompt + tools cached once per run, conversation cached step by step (models/cache.ts).
+      ...cachedPrompt(pm.provider, role.body, buildTaskPrompt(task, client, deps)),
+      prepareStep: ({ messages }) => ({ messages: withRollingCache(pm.provider, messages) }),
       tools,
       stopWhen,
       abortSignal: opts.abortSignal,
       onStepFinish: (step) => {
         steps++;
-        usage = addUsage(usage, step.usage);
-        state.costUsd += pm.recordCall(step.usage);
+        usage = addUsage(usage, normalizeUsage(pm.provider, step.usage, step.providerMetadata));
+        state.costUsd += pm.recordCall(step.usage, step.providerMetadata);
         state.toolErrors = step.content.some((c) => c.type === 'tool-error') ? state.toolErrors + 1 : 0;
         if (state.costUsd > role.budget_usd_per_task) state.overBudget = true;
       },
@@ -239,8 +246,15 @@ export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions 
     if (state.ended === 'submitted') return { status: 'submitted', costUsd: state.costUsd, fallback: false };
     if (state.ended === 'asked') return { status: 'asked_ceo', costUsd: state.costUsd };
     if (state.overBudget) {
-      await db.failTask(task.id, `Budget exceeded: $${state.costUsd.toFixed(4)} > $${role.budget_usd_per_task.toFixed(2)} per task`);
+      const reason = taskBudgetReason(role.budget_usd_per_task, state.costUsd);
+      await db.failTask(task.id, reason);
       return { status: 'budget_exceeded', costUsd: state.costUsd };
+    }
+    // The step cap (role max_turns) cut the loop while the model still wanted to call tools.
+    if (steps >= role.max_turns && result.finishReason === 'tool-calls') {
+      const reason = maxStepsReason(role.max_turns);
+      await db.failTask(task.id, reason);
+      return { status: 'failed', reason, costUsd: state.costUsd };
     }
     if (state.toolErrors >= 3) {
       const reason = '3 consecutive tool errors';
@@ -279,7 +293,7 @@ export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions 
     // Close any logged-in client sessions from vault_login right away (cookies wiped).
     await closeRunSessions(state).catch(() => undefined);
     if (picked && steps > 0) {
-      const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
+      const u = usage;
       await db.recordUsage({
         actor: task.agent_id, kind: 'task', taskId: task.id, requestId: task.request_id,
         tokensIn: u.inputTokens ?? 0, tokensOut: u.outputTokens ?? 0, costUsd: state.costUsd,

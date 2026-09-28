@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseCandidate, loadModelsConfig, QuotaExhaustedError } from './router';
+import { chooseCandidate, loadModelsConfig, MODEL_PROFILES, QuotaExhaustedError, roleEnvVar, roleSpecs } from './router';
 
 const cfg = loadModelsConfig();
 const usage = { requestsToday: {}, spentThisMonthUsd: 0 };
@@ -30,5 +30,43 @@ test('per-agent override is tried first', () => {
 });
 
 test('every profile defines every role', () => {
-  for (const p of Object.keys(cfg.profiles)) assert.ok((cfg.profiles[p]?.light.length ?? 0) > 0, p);
+  for (const p of Object.keys(cfg.profiles)) {
+    for (const r of ['lead', 'specialist', 'dev', 'design', 'writer', 'sales', 'reports', 'qa', 'light'] as const) assert.ok((cfg.profiles[p]?.[r]?.length ?? 0) > 0, `${p}.${r}`);
+  }
+});
+
+// ---------- paid profile + env overrides (six-agent roster, docs/14) ----------
+const paidEnv = { ANTHROPIC_API_KEY: 'a', OPENAI_API_KEY: 'o' };
+
+test('paid profile: lead/dev/sales → Sonnet, design/writer/light → Haiku, QA → OpenAI', () => {
+  const pick = (role: Parameters<typeof chooseCandidate>[0]) =>
+    chooseCandidate(role, cfg, { profile: 'paid', env: paidEnv, usage, monthlyBudgetUsd: 50 });
+  for (const r of ['lead', 'dev', 'sales'] as const) assert.deepEqual(pick(r), { provider: 'anthropic', modelId: 'claude-sonnet-5' }, r);
+  for (const r of ['design', 'writer', 'light'] as const) assert.deepEqual(pick(r), { provider: 'anthropic', modelId: 'claude-haiku-4-5-20251001' }, r);
+  assert.equal(pick('qa').provider, 'openai');
+  // QA falls back to Sonnet only when OpenAI is unavailable
+  assert.deepEqual(chooseCandidate('qa', cfg, { profile: 'paid', env: { ANTHROPIC_API_KEY: 'a' }, usage, monthlyBudgetUsd: 50 }),
+    { provider: 'anthropic', modelId: 'claude-sonnet-5' });
+});
+
+test('MODEL_ID_<ROLE> env overrides win over the file; the agent override still comes first', () => {
+  const env = { ...paidEnv, MODEL_ID_WRITER: 'anthropic:claude-sonnet-5', MODEL_ID_QA: 'openai:gpt-5.4', MODEL_ID_LIGHT: ' anthropic:claude-haiku-4-5-20251001 ' };
+  assert.deepEqual(chooseCandidate('writer', cfg, { profile: 'paid', env, usage, monthlyBudgetUsd: 50 }), { provider: 'anthropic', modelId: 'claude-sonnet-5' });
+  assert.deepEqual(chooseCandidate('qa', cfg, { profile: 'paid', env, usage, monthlyBudgetUsd: 50 }), { provider: 'openai', modelId: 'gpt-5.4' });
+  assert.deepEqual(roleSpecs('qa', cfg, { profile: 'paid', env }), ['openai:gpt-5.4', 'openai:gpt-5.5', 'anthropic:claude-sonnet-5']);
+  assert.deepEqual(roleSpecs('light', cfg, { profile: 'paid', env }), ['anthropic:claude-haiku-4-5-20251001'], 'de-duplicated and trimmed');
+  assert.deepEqual(chooseCandidate('writer', cfg, { profile: 'paid', env, usage, monthlyBudgetUsd: 50, override: 'openai:gpt-5.4-mini' }),
+    { provider: 'openai', modelId: 'gpt-5.4-mini' });
+  // an env override works on the free profile too (key present, budget allows)
+  assert.deepEqual(chooseCandidate('dev', cfg, { profile: 'free', env: { ...env, MODEL_ID_DEV: 'anthropic:claude-sonnet-5' }, usage, monthlyBudgetUsd: 10 }),
+    { provider: 'anthropic', modelId: 'claude-sonnet-5' });
+  assert.equal(roleEnvVar('design'), 'MODEL_ID_DESIGN');
+  assert.throws(() => chooseCandidate('dev', cfg, { profile: 'paid', env: { ...paidEnv, MODEL_ID_DEV: 'sonnet' }, usage, monthlyBudgetUsd: 50 }), /Bad model spec "sonnet"/);
+});
+
+test('roles missing from an older profile fall back to specialist; unknown profile throws', () => {
+  const old = { ...cfg, profiles: { legacy: { ...cfg.profiles.free!, design: undefined, writer: undefined, sales: undefined } } };
+  assert.deepEqual(roleSpecs('sales', old, { profile: 'legacy', env: {} }), cfg.profiles.free!.specialist);
+  assert.throws(() => roleSpecs('dev', cfg, { profile: 'nope', env: {} }), /Unknown model profile "nope"/);
+  for (const p of MODEL_PROFILES) assert.ok(cfg.profiles[p], `profile ${p} exists in config/models.yaml`);
 });

@@ -1,6 +1,6 @@
 # SOP: keyword-research
 
-Owner: seo-1 (e-commerce/Shopify) or seo-2 (services, local, long-form). Output: a clustered keyword map that tells the team which page targets which query, and what to create next.
+Owner: writer. Output: a clustered keyword map that tells the team which page targets which query, and what to create next.
 
 ## Inputs to confirm
 Client, domain, market (Semrush database: us, au, uk), seed topics/products/services, locations served, competitors (if known), goal (traffic, sales, leads), existing pages. Missing market or services → `ask_ceo`.

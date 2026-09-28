@@ -1,6 +1,6 @@
 # SOP: ux-audit
 
-Owner: uiux-1 (stores/landing pages) / uiux-2 (apps). Output: prioritised, evidence-based UX audit the CEO can send as a RizeHub report.
+Owner: designer. Output: prioritised, evidence-based UX audit the CEO can send as a RizeHub report.
 
 ## 1. Scope
 Confirm from the brief: URL(s), pages/flows (e.g. home → collection → PDP → cart), devices, goal (conversion, sign-ups, task completion), and whether login is needed. Logged-in areas: `vault_list(client)` then `vault_login` with a granted credential; never ask for or store passwords. No access → `ask_ceo`.

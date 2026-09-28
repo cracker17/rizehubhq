@@ -1,6 +1,6 @@
 # SOP: ad-creative
 
-Owner: graphic-1 (preferred) / graphic-2. Output: static ad creatives per platform spec, ready for the CEO to approve and run.
+Owner: designer. Output: static ad creatives per platform spec, ready for the CEO to approve and run.
 
 ## 1. Inputs (missing → `ask_ceo`)
 - Offer, audience, platform(s), ratios, number of variants, CTA.

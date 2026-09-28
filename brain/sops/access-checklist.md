@@ -1,4 +1,4 @@
-# SOP: access-checklist (Client Success)
+# SOP: access-checklist (COO)
 
 Goal: a per-client list of exactly the access RizeHub needs for the agreed scope, the least-privilege way to grant each, and a secure way for the client to provide it. Secrets never pass through email, chat or the brain.
 
@@ -24,7 +24,7 @@ Per item:
 [ ] <Platform> · <Access type + role/scope> · Why we need it (one line)
     Client steps (≤ 6, plain language, current UI names)
     Method: collaborator invite to <RizeHub team email from brain/company> | secure access link
-    Grant to agents: <e.g. shopify-dev, qa-lead>
+    Grant to agents: <e.g. web-dev, qa-lead>
     Status: missing | requested | received | verified
 ```
 Order by what blocks the first-month work.

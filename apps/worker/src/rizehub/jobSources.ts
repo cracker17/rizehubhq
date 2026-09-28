@@ -1,4 +1,4 @@
-// Job Scout sources (docs/13 §2): public RSS/JSON feeds of remote job boards + links the CEO pastes. No logins,
+// Job sources for the Sales Agent's job-search work (docs/13 §2): public RSS/JSON feeds of remote job boards + links the CEO pastes. No logins,
 // no scraping behind auth, no applying. Every source is fetched with a timeout; a source that fails (offline,
 // blocked, changed format) is reported and skipped, never fatal. Items are deduped by canonical URL.
 // Extra RSS/Atom feeds: JOB_FEEDS="https://a.example/jobs.rss,https://b.example/feed" (worker env).
@@ -188,7 +188,7 @@ async function readCapped(res: Response, maxBytes: number): Promise<string> {
 export async function fetchSource(src: JobSource, o: FetchFeedsOptions = {}): Promise<JobItem[]> {
   const f = o.fetch ?? ((url, init) => fetch(url, init));
   const res = await f(src.url, {
-    headers: { 'user-agent': 'RizeHubHQ-JobScout/1.0 (+https://rizehub.ph)', accept: src.kind === 'rss' ? 'application/rss+xml, application/atom+xml, text/xml' : 'application/json' },
+    headers: { 'user-agent': 'RizeHubHQ-JobFeeds/1.0 (+https://rizehub.ph)', accept: src.kind === 'rss' ? 'application/rss+xml, application/atom+xml, text/xml' : 'application/json' },
     signal: AbortSignal.timeout(o.timeoutMs ?? 10_000),
     redirect: 'follow',
   });

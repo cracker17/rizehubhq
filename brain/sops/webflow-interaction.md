@@ -1,6 +1,6 @@
 # SOP: webflow-interaction
 
-Owner: webflow-dev. Output: an interaction or custom-code feature (Webflow Interactions or GSAP/JS) that is smooth, accessible and delivered as a complete drop-in script block with a CONFIG object, tested on staging.
+Owner: web-dev. Output: an interaction or custom-code feature (Webflow Interactions or GSAP/JS) that is smooth, accessible and delivered as a complete drop-in script block with a CONFIG object, tested on staging.
 
 ## Inputs to confirm
 Reference (video/Loom, Figma prototype, or example site), trigger (load, scroll, hover, click), elements involved, breakpoints where it runs, reduced-motion expectation, existing scripts on the site (Lenis, GSAP version, Finsweet). Unclear motion spec → `ask_ceo` with 2 options described.

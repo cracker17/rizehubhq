@@ -62,7 +62,7 @@ rizehub-hq/
 │   ├── sops/               # how-we-do-it per work type (shopify-build.md, seo-article.md…)
 │   ├── qa-checklists/      # one checklist per work type
 │   ├── playbooks/          # workflows: lead-gen, job-hunt, onboarding, monthly-report (see 13)
-│   ├── career/             # job filters, portfolio, application style (Job Scout)
+│   ├── career/             # job filters, portfolio, application style (Sales Agent)
 │   └── clients/            # one folder per client: profile.md, brand.md, access.md (no secrets!)
 ├── workspaces/             # per-task scratch dirs the worker creates (gitignored)
 ├── assets/office/          # character sprites + office background

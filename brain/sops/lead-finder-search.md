@@ -1,4 +1,4 @@
-# SOP: lead-finder-search (Social Prospecting)
+# SOP: lead-finder-search (Sales Agent)
 
 Goal: run an approved RizeHub Lead Finder search and return a clean, de-duplicated set of lead IDs ready for research.
 

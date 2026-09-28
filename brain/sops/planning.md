@@ -5,12 +5,12 @@ Goal: turn one CEO request into an approvable plan (docs/05 schema) that special
 ## 1. Understand the request (5 min)
 - Extract: client, deliverables, quantities, formats, deadline, priority, channel/platform, anything explicitly excluded.
 - Client check: `brain/clients/<slug>/profile.md` exists? If not and the request is client work → `questions_for_ceo` ("Client not onboarded. Run onboarding first?").
-- `rizehub_readonly`: workspace services, open projects. Not covered by the package → add a `proposal` task for Pipeline Desk and flag in `summary`.
+- `rizehub_readonly`: workspace services, open projects. Not covered by the package → add a `proposal` task for the Sales Agent (`sales`) and flag in `summary`.
 - Match a playbook: lead-gen, job-hunt, onboarding, monthly-report, proposal, client-work. Follow its step order and approval points.
 
 ## 2. Break down
 - One task = one owner, one work_type, one deliverable, ≤ 2 h human effort. Split bigger work (e.g. "homepage" → hero section, product grid section, footer fix).
-- Route by `roster.yaml`; dev by `platform_to_dev`; pairs by specialty (seo-1 e-commerce / seo-2 local & long-form; check role files), else leave either.
+- Route by `roster.yaml` (six agents: coo, web-dev, designer, writer, sales, qa-lead); dev work by `platform_to_dev` (always web-dev). A dev task that builds a design depends on the design task (it needs the design spec).
 - Order: research/copy → wireframe/design → build → media. Anything without a real dependency runs in parallel.
 
 ## 3. Write instructions (per task)
@@ -42,4 +42,4 @@ Binary, measurable, tool-checkable. Good vs bad:
 
 ## Worked mini-example
 Request: "Madam Muse bundle landing page + 3 ad graphics by Fri."
-Tasks: copy (seo-1, landing-copy) → wireframe (uiux-1) → build (shopify-dev, shopify-page, unpublished theme) ; ads (graphic-1, ad-creative, depends on copy). Publishing theme and running ads: CEO approval via request_external_action.
+Tasks: copy (writer, landing-copy) → wireframe + design spec (designer) → build (web-dev, shopify-page, unpublished theme, depends on the wireframe) ; ads (designer, ad-creative, depends on copy). Publishing theme and running ads: CEO approval via request_external_action.

@@ -3,7 +3,7 @@
 import type { AgentStatus } from '@rizehubhq/shared';
 import { IDLE_LABEL, buildIndexes, clip, toTileAgent } from '../../../lib/data/derive';
 import type { HqSnapshot, PlanPayload } from '../../../lib/data/types';
-import { OFFICE, deskFor, spotsOf, type OfficeMap, type Spot } from './map';
+import { OFFICE, assignmentsFor, buildOfficeMap, deskFor, spotsOf, type OfficeMap, type Spot } from './map';
 import type { GestureName, Goal, LoopName } from './motion';
 import { assignSpots } from './spots';
 
@@ -32,22 +32,18 @@ export interface OfficeModel {
   meeting: { label: string } | null;
   /** agentId → idle spot id (feed back in as `prevSpots` to keep spots stable). */
   spots: Map<string, string>;
+  /** The map (desk assignments) this model was derived for. */
+  map: OfficeMap;
 }
 
 export const SHORT: Record<string, string> = {
-  coo: 'COO', ea: 'EA', 'client-success': 'Client Success', pipeline: 'Pipeline', prospector: 'Prospecting',
-  inbound: 'Inbound', 'job-scout': 'Job Scout', 'shopify-dev': 'Shopify', 'webflow-dev': 'Webflow',
-  'wordpress-dev': 'WordPress', 'fullstack-dev': 'Full-Stack', 'uiux-1': 'UI/UX 1', 'uiux-2': 'UI/UX 2',
-  'graphic-1': 'Graphic 1', 'graphic-2': 'Graphic 2', 'social-1': 'Social 1', 'social-2': 'Social 2',
-  'seo-1': 'SEO 1', 'seo-2': 'SEO 2', 'video-editor': 'Video', 'sound-engineer': 'Sound', 'qa-lead': 'QA Lead',
+  coo: 'COO', 'web-dev': 'Web Dev', designer: 'Designer', writer: 'Writer', sales: 'Sales', 'qa-lead': 'QA',
 };
 
 const COO_ID = 'coo';
 const QA_ID = 'qa-lead';
 
 export function workLoop(agentId: string, department: string): LoopName {
-  if (agentId === 'video-editor') return 'scrub';
-  if (agentId === 'sound-engineer') return 'sing';
   if (agentId === QA_ID) return 'review';
   if (agentId === COO_ID) return 'call';
   if (department === 'dev') return 'type';
@@ -73,16 +69,25 @@ function hash(s: string) {
 export function deskGoal(m: OfficeMap, agentId: string, loop: LoopName, seated = true): Goal | null {
   const d = deskFor(m, agentId);
   if (!d) return null;
-  return { key: `desk:${agentId}`, x: d.x, y: d.y, face: d.face, seated: d.kind === 'booth' ? false : seated, loop };
+  return { key: `desk:${agentId}`, x: d.x, y: d.y, face: d.face, seated, loop };
+}
+
+/** Where the COO stands next to an agent's desk while handing over a task. */
+export function visitGoal(m: OfficeMap, agentId: string): Goal | null {
+  const d = deskFor(m, agentId);
+  const v = d ? m.visits.get(d.id) : undefined;
+  if (!d || !v) return null;
+  const dx = d.x - v.x;
+  const dy = d.y - v.y;
+  const face = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : dy >= 0 ? 'down' : 'up';
+  return { key: `visit:${agentId}`, x: v.x, y: v.y, face, seated: false, loop: 'present' };
 }
 
 export function spotGoal(s: Spot, loop: LoopName): Goal {
   return { key: `spot:${s.id}`, x: s.x, y: s.y, face: s.face, seated: s.pose === 'sit', loop };
 }
 
-function screenFor(app: string | undefined, agentId: string, department: string): ScreenApp {
-  if (agentId === 'video-editor') return 'timeline';
-  if (agentId === 'sound-engineer') return 'audio';
+function screenFor(app: string | undefined, _agentId: string, department: string): ScreenApp {
   if (department === 'design') return 'design';
   switch (app) {
     case 'editor': return 'editor';
@@ -113,8 +118,22 @@ export function planningInfo(snap: HqSnapshot) {
   return { label: `Meeting: ${title}`, attendees: named };
 }
 
+/** Tasks the COO has just handed out (queued, not yet picked up) → the COO walks over to that desk. */
+export function handoverTarget(snap: HqSnapshot): string | null {
+  const t = snap.tasks
+    .filter((x) => x.status === 'queued' && x.agent_id !== COO_ID && x.agent_id !== QA_ID)
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))[0];
+  return t?.agent_id ?? null;
+}
+
+export function officeMapFor(snap: HqSnapshot): OfficeMap {
+  const a = assignmentsFor(snap.agents);
+  const same = Object.keys(a).length === OFFICE.desks.length && OFFICE.desks.every((d) => a[d.agentId] === d.id);
+  return same ? OFFICE : buildOfficeMap(a);
+}
+
 export function deriveOffice(snap: HqSnapshot, opts: DeriveOptions): OfficeModel {
-  const m = opts.map ?? OFFICE;
+  const m = opts.map ?? officeMapFor(snap);
   const idx = buildIndexes(snap);
   const tiles = snap.agents.map((a) => toTileAgent(a, snap, idx));
   const plan = planningInfo(snap);
@@ -142,6 +161,16 @@ export function deriveOffice(snap: HqSnapshot, opts: DeriveOptions): OfficeModel
     // COO runs planning meetings in the Boardroom.
     if (t.id === COO_ID && plan) {
       return { ...base, goal: spotGoal(head, 'present'), tag: `In the Boardroom · ${plan.label}`, badge: null, screen: 'screensaver' };
+    }
+    // The COO walks over to a desk to hand over a freshly queued task.
+    if (t.id === COO_ID && (t.status === 'working' || t.status === 'idle')) {
+      const target = handoverTarget(snap);
+      const visit = target ? visitGoal(m, target) : null;
+      if (visit) {
+        const who = tiles.find((x) => x.id === target)?.name ?? 'the team';
+        const brief = snap.tasks.find((x) => x.agent_id === target && x.status === 'queued');
+        return { ...base, status: 'working', goal: visit, tag: `Briefing ${who}${brief ? ` · ${clip(brief.title, 40)}` : ''}`, badge: null, screen: 'doc' };
+      }
     }
     const ai = attendees.findIndex((x) => x.id === t.id);
     if (ai >= 0 && boardSeats[ai]) {
@@ -186,7 +215,7 @@ export function deriveOffice(snap: HqSnapshot, opts: DeriveOptions): OfficeModel
     }
   });
 
-  return { agents, meeting: plan ? { label: plan.label } : null, spots };
+  return { agents, meeting: plan ? { label: plan.label } : null, spots, map: m };
 }
 
 export interface OfficeEvent { agentId: string; gesture: GestureName }

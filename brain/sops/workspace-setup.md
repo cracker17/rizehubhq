@@ -1,4 +1,4 @@
-# SOP: workspace-setup (Client Success)
+# SOP: workspace-setup (COO)
 
 Goal: a RizeHub account + workspace created from the right template and configured exactly to intake, with a dry-run preview the CEO approves first.
 

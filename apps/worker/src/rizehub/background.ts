@@ -2,7 +2,7 @@
 // 1. process stored webhook events (job.completed → resume parked task, client.signed_up → onboarding request, …)
 // 2. poll RizeHub jobs that parked a task, in case a webhook was missed ("or HQ polls GET /jobs/{id}", docs/12)
 // 3. execute approved non-pausing external actions (report publish, invite send) exactly once
-// 4. queue job follow-up requests that came due; import public job-feed candidates (Job Scout, docs/13 §2)
+// 4. queue job follow-up requests that came due; import public job-feed candidates (Sales Agent job-search, docs/13 §2)
 import { errMsg, log, type WorkerDeps } from '../deps';
 import type { HqDb } from '../hqdb';
 import { toRizehubError, type RizehubClient } from './client';
@@ -91,7 +91,7 @@ export async function executeApprovedActions(db: HqDb, client: RizehubClient, lo
   return n;
 }
 
-/** New public-feed jobs go in as `found` (no score yet); Job Scout screens them in its next job-search task. */
+/** New public-feed jobs go in as `found` (no score yet); the Sales Agent screens them in its next job-search task. */
 export async function importJobFeeds(db: HqDb, fetchFeeds: (o: FetchFeedsOptions) => ReturnType<typeof fetchJobFeeds> = fetchJobFeeds,
   logf: Logger = () => undefined, maxNew = 30): Promise<number> {
   const res = await fetchFeeds({ sinceDays: 7, limit: 150 });

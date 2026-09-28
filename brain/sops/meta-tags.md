@@ -1,6 +1,6 @@
 # SOP: meta-tags
 
-Owner: seo-1 (product/collection pages) or seo-2 (service, location, blog pages). Output: a sheet of title tags, meta descriptions and (if asked) H1s, OG tags and alt text, ready for a dev to apply. We never edit live pages.
+Owner: writer. Output: a sheet of title tags, meta descriptions and (if asked) H1s, OG tags and alt text, ready for a dev to apply. We never edit live pages.
 
 ## Inputs to confirm
 List of URLs (or "all pages in sitemap"), market, primary keyword per URL (from keyword map, or you assign one), brand name format, character rules, whether OG/social tags and H1s are in scope.

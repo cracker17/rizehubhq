@@ -1,6 +1,6 @@
 # SOP: webflow-cms
 
-Owner: webflow-dev. Output: CMS collections designed/updated and items created or updated as DRAFTS via the Data API, with a mapping file and item log. Nothing published.
+Owner: web-dev. Output: CMS collections designed/updated and items created or updated as DRAFTS via the Data API, with a mapping file and item log. Nothing published.
 
 ## Inputs to confirm
 Site + token grant, collection(s), source data (CSV/sheet/doc from client or another task), field mapping, which items are new vs updates, image sources and licences, reference relationships, slug rules. Missing source content → `ask_ceo`; never generate content to fill a collection unless the brief is a copy task.

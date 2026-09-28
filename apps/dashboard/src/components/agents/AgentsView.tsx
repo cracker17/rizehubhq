@@ -11,7 +11,7 @@ import { STATUS_COLOR, STATUS_LABEL } from '@/lib/status';
 import { relDay } from '@/lib/data/derive';
 import { Avatar } from '../Avatar';
 
-const DEPTS = ['all', 'leadership', 'ops', 'growth', 'dev', 'design', 'content', 'multimedia', 'qa'] as const;
+const DEPTS = ['all', 'leadership', 'growth', 'dev', 'design', 'content', 'qa'] as const;
 const dept = (d: string) => (d === 'qa' ? 'QA' : d.replace(/^./, (c) => c.toUpperCase()));
 const usd = (n: number) => `$${n.toFixed(2)}`;
 

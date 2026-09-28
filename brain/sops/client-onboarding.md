@@ -1,4 +1,4 @@
-# SOP: client-onboarding (Client Success)
+# SOP: client-onboarding (COO)
 
 Goal: signed client → correct brain file, RizeHub account/workspace prepared, access requested, welcome drafted, all gated by CEO approval. Playbook: `brain/playbooks/onboarding.md`. Workspace details: `brain/sops/workspace-setup.md`; access: `brain/sops/access-checklist.md`.
 

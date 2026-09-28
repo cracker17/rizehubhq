@@ -36,8 +36,8 @@ for (const f of fs.readdirSync(migDir).filter((f) => f.endsWith('.sql')).sort())
   await step(`migration ${f}`, () => db.exec(fs.readFileSync(path.join(migDir, f), 'utf8')));
 }
 await step('seed', () => db.exec(fs.readFileSync('./supabase/seed.sql', 'utf8')));
-await step('22 agents seeded, all idle', async () => {
-  assert.equal(await val('select count(*)::int from agents'), 22);
+await step('6 agents seeded, all idle', async () => {
+  assert.equal(await val('select count(*)::int from agents'), 6);
   assert.equal(await val(`select count(*)::int from agents where status <> 'idle'`), 0);
 });
 
@@ -72,10 +72,10 @@ await step('COO claims it for planning (COO working)', async () => {
 });
 await step('invalid plans are rejected (unknown agent, bad dependency)', async () => {
   await assert.rejects(db.query(`select submit_plan($1, $2::jsonb)`, [req, plan([T('x', 'nobody', 'seo-article')])]), /unknown or disabled agent/);
-  await assert.rejects(db.query(`select submit_plan($1, $2::jsonb)`, [req, plan([T('x', 'seo-1', 'seo-article', ['zzz'])])]), /unknown task/);
+  await assert.rejects(db.query(`select submit_plan($1, $2::jsonb)`, [req, plan([T('x', 'writer', 'seo-article', ['zzz'])])]), /unknown task/);
 });
 await step('submit_plan → approval pending, COO waiting for CEO', async () => {
-  apPlan = await val(`select submit_plan($1, $2::jsonb)`, [req, plan([T('copy', 'seo-1', 'landing-copy'), T('wire', 'uiux-1', 'wireframe', ['copy'])])]);
+  apPlan = await val(`select submit_plan($1, $2::jsonb)`, [req, plan([T('copy', 'writer', 'landing-copy'), T('wire', 'designer', 'wireframe', ['copy'])])]);
   assert.equal(await status('requests', req), 'plan_review');
   assert.equal(await status('approvals', apPlan), 'pending');
   assert.equal(await agent('coo'), 'waiting');
@@ -95,12 +95,12 @@ await step('deciding twice is a no-op', async () => {
 });
 await step('agent claims task, reports progress (POV screen), submits → QA pending', async () => {
   assert.equal((await one(`select (claim_next_task()).id`)).id, copy);
-  assert.equal(await agent('seo-1'), 'working');
+  assert.equal(await agent('writer'), 'working');
   await db.query(`select report_progress($1, 40, 'Writing the hero', '{"app":"doc","title":"bundle-copy.md","content":"Build your bundle"}'::jsonb)`, [copy]);
-  assert.equal(await val(`select step_note from agent_screens where agent_id = 'seo-1'`), 'Writing the hero');
+  assert.equal(await val(`select step_note from agent_screens where agent_id = 'writer'`), 'Writing the hero');
   await db.query(`select submit_task_output($1, '{"summary":"540 words"}'::jsonb)`, [copy]);
   assert.equal(await status('tasks', copy), 'qa_pending');
-  assert.equal(await agent('seo-1'), 'idle');
+  assert.equal(await agent('writer'), 'idle');
 });
 await step('QA fails it → revision with fix list, back in the queue', async () => {
   assert.equal((await one(`select (claim_qa_review()).id`)).id, copy);
@@ -126,20 +126,20 @@ await step('revised work passes QA → deliverable approval, agent waiting', asy
   assert.equal(await status('tasks', copy), 'awaiting_ceo');
   apDeliv = await val(`select id from approvals where task_id = $1 and kind = 'deliverable'`, [copy]);
   assert.equal(await val(`select preview_url from approvals where id = $1`, [apDeliv]), 'https://example.com/p');
-  assert.equal(await agent('seo-1'), 'waiting');
+  assert.equal(await agent('writer'), 'waiting');
   assert.equal(await val(`select count(*)::int from qa_reviews where task_id = $1`, [copy]), 3);
 });
 await step('CEO approves deliverable → done, dependent task released', async () => {
   assert.equal(await val(`select decide_approval($1, 'approve')`, [apDeliv]), 'task_done');
   assert.equal(await status('tasks', copy), 'done');
   assert.equal(await status('tasks', wire), 'queued');
-  assert.equal(await agent('seo-1'), 'idle');
+  assert.equal(await agent('writer'), 'idle');
 });
 await step('agent asks the CEO a question, answer resumes the task', async () => {
   assert.equal((await one(`select (claim_next_task()).id`)).id, wire);
   const q = await val(`select ask_ceo($1, 'Which hero image?', '["A","B"]'::jsonb)`, [wire]);
   assert.equal(await status('tasks', wire), 'awaiting_ceo');
-  assert.equal(await agent('uiux-1'), 'waiting');
+  assert.equal(await agent('designer'), 'waiting');
   await assert.rejects(db.query(`select decide_approval($1, 'changes', '')`, [q]), /say what should change/);
   assert.equal(await val(`select decide_approval($1, 'approve', 'Use B')`, [q]), 'action_approved');
   assert.equal(await status('tasks', wire), 'queued');
@@ -158,7 +158,7 @@ await step('last task approved → request done', async () => {
 await step('CEO "changes" on a plan sends it back to the COO with the note', async () => {
   const r2 = await val(`select create_request('telegram', 'Blog post')`);
   await one(`select (claim_request_for_planning()).id`);
-  const ap = await val(`select submit_plan($1, $2::jsonb)`, [r2, plan([T('post', 'seo-2', 'seo-article')], 'Blog')]);
+  const ap = await val(`select submit_plan($1, $2::jsonb)`, [r2, plan([T('post', 'writer', 'seo-article')], 'Blog')]);
   assert.equal(await val(`select decide_approval($1, 'changes', 'Make it 1,500 words')`, [ap]), 'replan');
   assert.equal(await status('requests', r2), 'staged');
   assert.deepEqual(await val(`select brief->'ceo_feedback' from requests where id = $1`, [r2]), ['Make it 1,500 words']);
@@ -166,9 +166,9 @@ await step('CEO "changes" on a plan sends it back to the COO with the note', asy
 await step('QA failing past max revisions escalates to the CEO; agent waits for the CEO', async () => {
   const r3 = await val(`select create_request('dashboard', 'Hard task')`);
   await one(`select (claim_request_for_planning()).id`);
-  const ap = await val(`select submit_plan($1, $2::jsonb)`, [r3, plan([T('hard', 'graphic-1', 'ad-creative')], 'Ads')]);
+  const ap = await val(`select submit_plan($1, $2::jsonb)`, [r3, plan([T('hard', 'designer', 'ad-creative')], 'Ads')]);
   await db.query(`select decide_approval($1, 'approve')`, [ap]);
-  // replan request r2 is still staged, so claim_next_task only sees graphic-1's task
+  // replan request r2 is still staged, so claim_next_task only sees the designer's task
   const t = await val(`select id from tasks where request_id = $1`, [r3]);
   let res;
   for (let i = 0; i < 4; i++) {
@@ -179,20 +179,20 @@ await step('QA failing past max revisions escalates to the CEO; agent waits for 
   }
   assert.equal(res, 'escalated');
   assert.equal(await status('tasks', t), 'failed');
-  assert.equal(await agent('graphic-1'), 'waiting'); // has a pending escalation approval
+  assert.equal(await agent('designer'), 'waiting'); // has a pending escalation approval
   const esc = await val(`select id from approvals where task_id = $1 and payload->>'type' = 'qa_escalation'`, [t]);
   assert.equal(await val(`select decide_approval($1, 'approve', 'Try a darker background')`, [esc]), 'action_approved');
   assert.equal(await status('tasks', t), 'queued');
 });
 await step('fail_task creates a "stuck" approval', async () => {
-  const t = await val(`select id from tasks where agent_id = 'graphic-1' and status = 'queued'`);
+  const t = await val(`select id from tasks where agent_id = 'designer' and status = 'queued'`);
   await one(`select (claim_next_task()).id`);
   await db.query(`select fail_task($1, 'Missing brand fonts')`, [t]);
   assert.equal(await status('tasks', t), 'failed');
   assert.equal(await val(`select count(*)::int from approvals where task_id = $1 and payload->>'type' = 'task_failed'`, [t]), 1);
 });
 await step('stale working tasks are re-queued', async () => {
-  await db.exec(`update tasks set status='working', heartbeat_at = now() - interval '20 minutes' where agent_id = 'graphic-1'`);
+  await db.exec(`update tasks set status='working', heartbeat_at = now() - interval '20 minutes' where agent_id = 'designer' and status = 'failed'`);
   assert.equal(await val(`select requeue_stale_tasks()`), 1);
 });
 
@@ -212,7 +212,7 @@ await step('anonymous visitors cannot call workflow functions', () => as('anon',
   await assert.rejects(db.query(`select create_request('dashboard','hack')`), /permission denied/);
 }));
 await step('the CEO sees the office and can create requests', () => as('authenticated', '11111111-1111-1111-1111-111111111111', async () => {
-  assert.equal(await val('select count(*)::int from agents'), 22);
+  assert.equal(await val('select count(*)::int from agents'), 6);
   assert.ok(await val(`select create_request('dashboard','From the CEO')`));
 }));
 await step('nobody in the browser can read vault secrets', () => as('authenticated', '11111111-1111-1111-1111-111111111111', async () => {
@@ -245,7 +245,7 @@ let helperTask;
 await step('requeue_task puts a working task back without failing it; heartbeat touch works', async () => {
   const r = await val(`select create_request('dashboard', 'Helper test')`);
   await db.exec(`update requests set status = 'planning' where id = '${r}'`);
-  const ap = await val(`select submit_plan($1, $2::jsonb)`, [r, plan([T('h', 'seo-2', 'seo-article')], 'Helper')]);
+  const ap = await val(`select submit_plan($1, $2::jsonb)`, [r, plan([T('h', 'writer', 'seo-article')], 'Helper')]);
   await db.query(`select decide_approval($1, 'approve')`, [ap]);
   helperTask = await val(`select id from tasks where request_id = $1`, [r]);
   await db.exec(`update tasks set status = 'pending' where status = 'queued' and id <> '${helperTask}'`);
@@ -255,7 +255,7 @@ await step('requeue_task puts a working task back without failing it; heartbeat 
   assert.ok(await val(`select heartbeat_at > now() - interval '1 minute' from tasks where id = $1`, [helperTask]));
   await db.query(`select requeue_task($1, 'quota')`, [helperTask]);
   assert.equal(await status('tasks', helperTask), 'queued');
-  assert.equal(await agent('seo-2'), 'idle');
+  assert.equal(await agent('writer'), 'idle');
   assert.equal(await val(`select count(*)::int from activity_log where action = 'task.requeued' and task_id = $1`, [helperTask]), 1);
 });
 await step('request_external_action queues an approval and leaves the task running', async () => {
@@ -266,8 +266,8 @@ await step('request_external_action queues an approval and leaves the task runni
   assert.equal(await status('tasks', helperTask), 'working');
 });
 await step('record_usage logs tokens + cost and adds them to the task and request', async () => {
-  await db.query(`select record_usage('seo-2', $1, null, 'task', 1200, 300, 0.0123, '{"provider":"anthropic"}'::jsonb)`, [helperTask]);
-  await db.query(`select record_usage('seo-2', $1, null, 'task', 100, 50, 0.001, '{}'::jsonb)`, [helperTask]);
+  await db.query(`select record_usage('writer', $1, null, 'task', 1200, 300, 0.0123, '{"provider":"anthropic"}'::jsonb)`, [helperTask]);
+  await db.query(`select record_usage('writer', $1, null, 'task', 100, 50, 0.001, '{}'::jsonb)`, [helperTask]);
   assert.equal(await val(`select tokens_in from tasks where id = $1`, [helperTask]), 1300);
   assert.equal(Number(await val(`select cost_usd from tasks where id = $1`, [helperTask])), 0.0133);
   assert.equal(Number(await val(`select r.cost_usd from requests r join tasks t on t.request_id = r.id where t.id = $1`, [helperTask])), 0.0133);
@@ -281,11 +281,11 @@ await step('release_qa_review hands a review back to qa_pending', async () => {
   assert.equal(await agent('qa-lead'), 'idle');
 });
 await step('set_idle_activity only moves idle agents; update_agent_screen upserts the POV row', async () => {
-  assert.equal(await val(`select set_idle_activity('seo-1', 'coffee')`), true);
-  assert.equal(await val(`select idle_activity from agents where id = 'seo-1'`), 'coffee');
-  await db.exec(`update agents set status = 'working' where id = 'seo-1'`);
-  assert.equal(await val(`select set_idle_activity('seo-1', 'lobby')`), false);
-  await db.exec(`update agents set status = 'idle' where id = 'seo-1'`);
+  assert.equal(await val(`select set_idle_activity('web-dev', 'coffee')`), true);
+  assert.equal(await val(`select idle_activity from agents where id = 'web-dev'`), 'coffee');
+  await db.exec(`update agents set status = 'working' where id = 'web-dev'`);
+  assert.equal(await val(`select set_idle_activity('web-dev', 'lobby')`), false);
+  await db.exec(`update agents set status = 'idle' where id = 'web-dev'`);
   await db.query(`select update_agent_screen('qa-lead', $1, '{"app":"review","title":"QA","step_note":"Checking","progress":40}'::jsonb)`, [helperTask]);
   assert.equal(await val(`select progress from agent_screens where agent_id = 'qa-lead'`), 40);
 });
@@ -296,12 +296,13 @@ await step('anonymous visitors cannot call worker helpers', () => as('anon', nul
 console.log(`\nAll ${passed} database checks passed.`);
 
 // ---------- extra suites (scripts/db-tests/*.mjs, run in name order) ----------
-// Each suite: export default async function ({ db, step, one, val, status, agent, as, assert }) { ... }
+// Each suite: export default async function ({ db, step, one, val, status, agent, as, assert, stub }) { ... }
+// (stub = the Supabase auth/roles shim, for suites that build their own fresh database)
 const extraDir = './scripts/db-tests';
 if (fs.existsSync(extraDir)) {
   for (const f of fs.readdirSync(extraDir).filter((f) => f.endsWith('.mjs')).sort()) {
     const mod = await import(path.resolve(extraDir, f));
-    await mod.default({ db, step, one, val, status, agent, as, assert });
+    await mod.default({ db, step, one, val, status, agent, as, assert, stub });
   }
   console.log(`All ${passed} database checks passed (incl. extra suites).`);
 }

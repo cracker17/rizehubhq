@@ -1,6 +1,6 @@
 # SOP: automation
 
-Owner: fullstack-dev. Output: an automation (n8n workflow, scheduled script, Supabase edge function/cron, or Vercel cron) that is idempotent, observable and tested with sandbox data, delivered as exported JSON/code in a PR. Activation against real data = CEO approval.
+Owner: web-dev. Output: an automation (n8n workflow, scheduled script, Supabase edge function/cron, or Vercel cron) that is idempotent, observable and tested with sandbox data, delivered as exported JSON/code in a PR. Activation against real data = CEO approval.
 
 ## Inputs to confirm
 Trigger (event, schedule with time zone, manual), steps, systems and credentials, expected volume, what "done" looks like, who is notified on failure, any outbound messages (emails, SMS, DMs). Outbound messaging to people → confirm consent/opt-out handling and anti-spam rules (CAN-SPAM, Spam Act 2003 AU, PECR UK, PH Data Privacy Act) and that messages go out only after CEO approval. No automated social DMs, job applications or platform actions that break ToS.

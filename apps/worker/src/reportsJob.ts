@@ -1,10 +1,10 @@
-// Runs scheduled reports (docs/05 "Scheduled work"): standups → CEO digest (EA), morning brief (EA),
-// weekly summary (COO). The "reports" model role only rephrases; any model problem (no key, quota,
+// Runs scheduled reports (docs/05 "Scheduled work"): standups → CEO digest, morning brief and
+// weekly summary, all written by the COO. The "reports" model role only rephrases; any model problem (no key, quota,
 // bad output) falls back to the deterministic template so a report is always written.
 import { generateObject, generateText } from 'ai';
 import { Standup } from '@rizehubhq/shared';
 import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
-import { isQuotaError, type PickedModel } from './models/usage';
+import { isQuotaError, normalizeUsage, type PickedModel } from './models/usage';
 import {
   activeAgentIds, acceptRewrite, buildDigest, buildMorningBrief, buildWeekly, digestMarkdown, morningMarkdown, standupMarkdown,
   templateStandup, weeklyMarkdown, type DayFacts, type StandupLines,
@@ -31,9 +31,10 @@ export class Phraser {
     return this.picked;
   }
 
-  private async record(picked: PickedModel, usage: Parameters<PickedModel['recordCall']>[0]) {
+  private async record(picked: PickedModel, raw: Parameters<PickedModel['recordCall']>[0], meta?: Parameters<PickedModel['recordCall']>[1]) {
     this.modelCalls++;
-    const cost = picked.recordCall(usage);
+    const cost = picked.recordCall(raw, meta);
+    const usage = normalizeUsage(picked.provider, raw, meta);
     this.costUsd += cost;
     await this.deps.db.recordUsage({
       actor: this.actor, kind: 'report', taskId: null, requestId: null,
@@ -63,7 +64,7 @@ export class Phraser {
           + 'You may merge two items of the same section but never add items or leave a non-empty section empty.',
         prompt: `Rewrite these facts as a standup.\n${JSON.stringify(tpl, null, 2)}`,
       });
-      const cost = await this.record(picked, res.usage);
+      const cost = await this.record(picked, res.usage, res.providerMetadata);
       const out = { done: res.object.done, next: res.object.next, blockers: res.object.blockers };
       if (!acceptRewrite(tpl, out)) { log(this.deps, `[reports] ${name}: rewrite changed the facts, using template`); return { lines: tpl, costUsd: cost }; }
       return { lines: out, costUsd: cost };
@@ -84,7 +85,7 @@ export class Phraser {
           + 'Use only the numbers given; mention what needs the CEO first. Never invent anything.',
         prompt: `Template headline: ${template}\n\nFacts:\n${JSON.stringify(facts).slice(0, 6000)}`,
       });
-      await this.record(picked, res.usage);
+      await this.record(picked, res.usage, res.providerMetadata);
       const text = res.text.trim().replace(/^["“]|["”]$/g, '');
       return text && text.length <= 280 && !text.includes('\n') ? text : template;
     } catch (e) {
@@ -122,7 +123,7 @@ export async function writeStandups(date: string, f: DayFacts, deps: WorkerDeps,
 }
 
 export async function runReportJob(job: ReportJob, deps: WorkerDeps, existing: { standupAgents?: Set<string> } = {}): Promise<JobResult> {
-  const actor = job.kind === 'weekly' ? 'coo' : 'ea';
+  const actor = 'coo'; // the COO owns every scheduled report (digest, morning brief, weekly)
   const phraser = new Phraser(deps, actor);
   const facts = await deps.db.reportFacts(job.from, job.days);
   const names = agentNames(facts);
@@ -134,7 +135,7 @@ export async function runReportJob(job: ReportJob, deps: WorkerDeps, existing: {
     const digest = buildDigest(facts, standups);
     digest.headline = await phraser.headline('daily digest', digest.headline, { counts: digest.counts, qa: digest.qa, spend_usd: digest.spend_usd });
     reportId = await deps.db.saveReport({
-      agentId: 'ea', date: job.date, kind: 'daily_digest',
+      agentId: 'coo', date: job.date, kind: 'daily_digest',
       done: digest.done.map((d) => d.title), next: digest.in_progress.map((d) => d.title), blockers: digest.blocked.map((d) => `${d.title}: ${d.note ?? ''}`.trim()),
       bodyMd: digestMarkdown(job.date, digest, names), costUsd: phraser.costUsd, data: digest as unknown as Record<string, unknown>,
     });
@@ -142,7 +143,7 @@ export async function runReportJob(job: ReportJob, deps: WorkerDeps, existing: {
     const y = await deps.db.reportFacts(addDays(job.date, -1), 1);
     const brief = buildMorningBrief(facts, { done: y.done.length, spend_usd: Number(y.spend_usd || 0) });
     reportId = await deps.db.saveReport({
-      agentId: 'ea', date: job.date, kind: 'morning_brief',
+      agentId: 'coo', date: job.date, kind: 'morning_brief',
       done: [], next: [...brief.in_progress, ...brief.queue].map((d) => d.title), blockers: brief.blocked.map((d) => d.title),
       bodyMd: morningMarkdown(job.date, brief, names), costUsd: 0, data: brief as unknown as Record<string, unknown>,
     });

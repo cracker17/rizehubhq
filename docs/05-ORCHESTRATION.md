@@ -31,7 +31,7 @@
   │                                                     any other type is a MANUAL step: you do it (dashboard says so)
   ▼
  [7] CLOSE ── all tasks done → request done ─────────── done
-             EA includes it in the 6pm daily digest
+             COO includes it in the 6pm daily digest
 ```
 
 ## [1] Intake
@@ -58,15 +58,15 @@ Optional quick syntax (parsed by bot, else COO infers):
   "priority": "normal",
   "estimated_cost_usd": 4.20,
   "tasks": [
-    { "key": "copy",   "agent_id": "seo-1",       "work_type": "landing-copy",
+    { "key": "copy",   "agent_id": "writer",      "work_type": "landing-copy",
       "title": "Write bundle landing page copy",
       "instructions": "…", "acceptance_criteria": ["Primary keyword in H1", "≤ 600 words", "3 CTAs to /bundle"],
       "depends_on": [] },
-    { "key": "layout", "agent_id": "uiux-1",      "work_type": "wireframe",
+    { "key": "layout", "agent_id": "designer",    "work_type": "wireframe",
       "title": "Wireframe the landing page", "depends_on": ["copy"], "acceptance_criteria": ["…"] },
-    { "key": "build",  "agent_id": "shopify-dev", "work_type": "shopify-page",
+    { "key": "build",  "agent_id": "web-dev",     "work_type": "shopify-page",
       "title": "Build page on unpublished theme", "depends_on": ["layout"], "acceptance_criteria": ["…"] },
-    { "key": "ads",    "agent_id": "graphic-1",   "work_type": "ad-creative",
+    { "key": "ads",    "agent_id": "designer",    "work_type": "ad-creative",
       "title": "3 launch ad graphics (1:1, 4:5, 9:16)", "depends_on": ["copy"], "acceptance_criteria": ["…"] }
   ]
 }
@@ -191,8 +191,8 @@ External actions are executed by **fixed worker code**, not by the agent, using 
 |---|---|---|
 | Every 90s | Re-roll idle activities | worker |
 | Every 1 min | Re-queue stale tasks | worker |
-| 08:00 daily | Morning brief: today's queue, due dates, pending approvals | EA |
-| 18:00 daily | Standups from each active agent → CEO daily digest | EA |
+| 08:00 daily | Morning brief: today's queue, due dates, pending approvals | COO |
+| 18:00 daily | Standups from each active agent → CEO daily digest | COO |
 | Monday 08:00 | Weekly summary: done, costs, QA pass rate, bottlenecks | COO |
 | Custom | Recurring requests (e.g. "weekly SEO report for Vinyl Icons") | via `source='schedule'` |
 

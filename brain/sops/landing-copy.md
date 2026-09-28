@@ -1,6 +1,6 @@
 # SOP: landing-copy
 
-Owner: seo-1 (product, bundle, collection landing pages) or seo-2 (service, local, lead-gen pages). Output: section-by-section copy a designer and developer can drop into a wireframe, plus SEO package. We never publish.
+Owner: writer. Output: section-by-section copy a designer and developer can drop into a wireframe, plus SEO package. We never publish.
 
 ## Inputs to confirm
 Offer (exact terms, price, dates), audience and their main problem, primary keyword, conversion goal (buy, book, call, quote, sign up), CTA URL, proof available (reviews with permission, logos, numbers, guarantees), objections heard, brand voice. No offer terms or proof list → `ask_ceo`; never fill with invented proof.

@@ -72,7 +72,7 @@ Put the seed SQL (agents roster, settings) into `supabase/seed.sql`, then:
 supabase db reset        # applies migrations + seed
 pnpm db:types            # generates TypeScript types
 ```
-Open Studio and confirm the tables and 22 agents exist.
+Open Studio and confirm the tables and the 6 agents exist.
 
 Create your CEO login: Studio → Authentication → Add user → your email + password. Then in the SQL editor: `insert into ceo_users (user_id) select id from auth.users where email = '<your email>';` (RLS only lets `ceo_users` in; see 03).
 

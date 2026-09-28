@@ -1,4 +1,4 @@
-# SOP: meeting-prep (EA & Report Desk)
+# SOP: meeting-prep (COO)
 
 Goal: a one-page pack the CEO reads in 3 minutes before any client, lead or partner call, delivered at least 2 hours before the meeting (or on request).
 

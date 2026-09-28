@@ -122,19 +122,19 @@ function rng(seed: string) {
 
 // [agent, client, title] — same agents and clients as src/lib/mock.ts
 const WORK: [string, string | null, string][] = [
-  ['seo-1', 'Madam Muse', 'Bundle landing page copy'],
-  ['seo-2', 'Vinyl Icons', 'September SEO blog: vinyl care guide'],
-  ['uiux-1', 'Madam Muse', 'Bundle page wireframe'],
-  ['shopify-dev', 'Madam Muse', 'Bundle builder section (unpublished theme)'],
-  ['webflow-dev', 'LvlUp Ventures', 'Ecosystem Initiatives CMS grid'],
-  ['graphic-1', 'Madam Muse', '3 bundle ad creatives'],
-  ['social-1', 'IO', 'October content calendar'],
-  ['video-editor', 'IO', 'Club O reel: 30s cut + subtitles'],
-  ['fullstack-dev', 'MVS Psychology', 'Halaxy booking webhook'],
-  ['prospector', null, 'Threads lead list: 25 Shopify DTC founders'],
-  ['job-scout', null, 'OnlineJobs.ph shortlist + drafts'],
-  ['pipeline', 'Sagebeet', 'Proposal: Shopify speed retainer'],
-  ['wordpress-dev', 'Brisbane Coffee Co', 'Plugin update + speed pass'],
+  ['writer', 'Madam Muse', 'Bundle landing page copy'],
+  ['writer', 'Vinyl Icons', 'September SEO blog: vinyl care guide'],
+  ['designer', 'Madam Muse', 'Bundle page wireframe'],
+  ['web-dev', 'Madam Muse', 'Bundle builder section (unpublished theme)'],
+  ['web-dev', 'LvlUp Ventures', 'Ecosystem Initiatives CMS grid'],
+  ['designer', 'Madam Muse', '3 bundle ad creatives'],
+  ['writer', 'IO', 'October content calendar'],
+  ['writer', 'IO', 'Club O reel script (30s)'],
+  ['web-dev', 'MVS Psychology', 'Halaxy booking webhook'],
+  ['sales', null, 'Threads lead list: 25 Shopify DTC founders'],
+  ['sales', null, 'OnlineJobs.ph shortlist + drafts'],
+  ['sales', 'Sagebeet', 'Proposal: Shopify speed retainer'],
+  ['web-dev', 'Brisbane Coffee Co', 'Plugin update + speed pass'],
 ];
 
 function line(w: [string, string | null, string], note?: string): DigestLine {
@@ -155,11 +155,11 @@ function demoDigest(date: string, today: string) {
   const nDone = 3 + Math.floor(r() * 4);
   const done = shuffled.slice(0, nDone);
   const prog = shuffled.slice(nDone, nDone + 3 + Math.floor(r() * 2));
-  const blocked = date === today || r() > 0.4 ? [line(['graphic-2', 'Vinyl Icons', 'Record Store Day banner set'], 'Missing brand fonts: asked the client for the .otf files')] : [];
+  const blocked = date === today || r() > 0.4 ? [line(['designer', 'Vinyl Icons', 'Record Store Day banner set'], 'Missing brand fonts: asked the client for the .otf files')] : [];
   const approvals: DigestLine[] = [
     { title: 'Plan: Vinyl Icons October SEO report', agent_id: 'coo', client: null, note: 'Plan' },
-    { title: 'Bundle page wireframe', agent_id: 'uiux-1', client: null, note: 'Deliverable' },
-    ...(r() > 0.5 ? [{ title: 'Action: publish · IO October calendar to Meta Business Suite', agent_id: 'social-1', client: null, note: 'Action' }] : []),
+    { title: 'Bundle page wireframe', agent_id: 'designer', client: null, note: 'Deliverable' },
+    ...(r() > 0.5 ? [{ title: 'Action: publish · IO October calendar to Meta Business Suite', agent_id: 'writer', client: null, note: 'Action' }] : []),
   ];
   const reviews = 4 + Math.floor(r() * 6);
   const passed = Math.max(1, reviews - 1 - Math.floor(r() * 2));
@@ -186,11 +186,15 @@ function demoDigest(date: string, today: string) {
 }
 
 function demoStandups(date: string, d: ReturnType<typeof demoDigest>): ReportRow[] {
-  const out: ReportRow[] = [];
-  const add = (agent: string, done: string[], next: string[], blockers: string[], cost: number) =>
-    out.push({ ...row(`s-${agent}-${date}`, date, 'standup', agent, { spend_usd: cost }), done, next, blockers, cost_usd: cost });
+  // one standup per agent per day (the six agents each own several lines of work)
+  const acc = new Map<string, { done: string[]; next: string[]; blockers: string[]; cost: number }>();
+  const add = (agent: string, done: string[], next: string[], blockers: string[], cost: number) => {
+    const a = acc.get(agent) ?? { done: [], next: [], blockers: [], cost: 0 };
+    a.done.push(...done); a.next.push(...next); a.blockers.push(...blockers); a.cost = Math.round((a.cost + cost) * 100) / 100;
+    acc.set(agent, a);
+  };
   const r = d.r;
-  add('coo', ['Planned the Vinyl Icons October SEO report (4 tasks) and sent it to you', 'Re-planned the IO reel after your note: now 30s with subtitles'],
+  add('coo', ['Planned the Vinyl Icons October SEO report (4 tasks) and sent it to you', 'Re-planned the IO reel after your note: now a 30s script with on-screen captions'],
     ['Route tomorrow’s Madam Muse follow-ups once the wireframe is approved'], ['The Vinyl Icons SEO report plan is waiting for your approval'], 0.21);
   add('qa-lead', [`Reviewed ${d.data.qa.reviews} deliverables: ${d.data.qa.passed} passed, ${d.data.qa.reviews - d.data.qa.passed} sent back with fix lists`],
     [`Review ${d.prog.length > 1 ? 2 : 1} deliverables waiting for QA`], [], 0.34);
@@ -203,7 +207,9 @@ function demoStandups(date: string, d: ReturnType<typeof demoDigest>): ReportRow
     add(w[0], i === 1 ? [`Submitted “${w[2]}” for QA`] : [`Got “${w[2]}” to ${50 + Math.floor(r() * 40)}%`],
       i === 0 ? [`Fix the QA notes on “${w[2]}” (revision 1)`] : [`Finish “${w[2]}”`], [], Math.round(r() * 30) / 100);
   });
-  if (d.blocked.length) add('graphic-2', ['Drafted 2 of 4 Record Store Day banners'], ['Finish the banner set once the fonts arrive'], ['“Record Store Day banner set” is stuck: missing brand fonts (.otf) from Vinyl Icons'], 0.12);
+  if (d.blocked.length) add('designer', ['Drafted 2 of 4 Record Store Day banners'], ['Finish the banner set once the fonts arrive'], ['“Record Store Day banner set” is stuck: missing brand fonts (.otf) from Vinyl Icons'], 0.12);
+  const out: ReportRow[] = [...acc].map(([agent, a]) =>
+    ({ ...row(`s-${agent}-${date}`, date, 'standup', agent, { spend_usd: a.cost }), done: a.done, next: a.next, blockers: a.blockers, cost_usd: a.cost }));
   return out.sort((a, b) => (b.blockers.length - a.blockers.length) || (a.agent_id ?? '').localeCompare(b.agent_id ?? ''));
 }
 
@@ -216,7 +222,7 @@ function demoWeekly(monday: string): ReportRow & { data: WeeklyData } {
   });
   const reviews = trend.reduce((s, d) => s + d.reviews, 0);
   const passed = trend.reduce((s, d) => s + Math.round(d.reviews * (d.pass_rate ?? 0) / 100), 0);
-  const depts = [['content', 11], ['dev', 7], ['design', 6], ['growth', 5], ['multimedia', 3], ['ops', 2]] as const;
+  const depts = [['content', 11], ['dev', 7], ['design', 6], ['growth', 5], ['leadership', 2]] as const;
   const by_department = depts.map(([department, n]) => ({ department, done: Math.max(1, Math.round(n * (0.7 + r() * 0.6))) })).sort((a, b) => b.done - a.done);
   const done = by_department.reduce((s, d) => s + d.done, 0);
   const cost_by_client = [['Madam Muse', 3.9], ['Vinyl Icons', 2.4], ['IO', 2.1], ['LvlUp Ventures', 1.3], ['MVS Psychology', 0.9], ['Sagebeet', 0.5]]
@@ -227,7 +233,7 @@ function demoWeekly(monday: string): ReportRow & { data: WeeklyData } {
     headline: `${done} tasks delivered for 6 clients at $${spend.toFixed(2)} in model spend; QA first-pass rate ${rate}%, with Madam Muse’s bundle launch the biggest workstream.`,
     range: { from, to: addDays(from, 6) }, done, spend_usd: spend, requests_created: 9 + Math.floor(r() * 6),
     qa: { reviews, passed, pass_rate: rate }, qa_trend: trend, by_department, cost_by_client,
-    cost_by_agent: [{ agent_id: 'shopify-dev', usd: 2.8 }, { agent_id: 'seo-1', usd: 1.9 }, { agent_id: 'qa-lead', usd: 1.6 }],
+    cost_by_agent: [{ agent_id: 'web-dev', usd: 2.8 }, { agent_id: 'writer', usd: 1.9 }, { agent_id: 'qa-lead', usd: 1.6 }],
     bottlenecks: [
       '“Bundle builder section” needed 3 QA revisions: acceptance criteria were missing mobile breakpoints',
       '2 approvals waited on you for over a day (plans are the slowest step this week)',
@@ -245,7 +251,7 @@ export function demoReports(date: string, today = manilaToday()): ReportsForDate
   const d = demoDigest(date, today);
   const standups = demoStandups(date, d);
   d.data.standups = standups.length;
-  const digest = row(`d-${date}`, date, 'daily_digest', 'ea', d.data as unknown as Record<string, unknown>) as unknown as ReportRow & { data: DigestData };
+  const digest = row(`d-${date}`, date, 'daily_digest', 'coo', d.data as unknown as Record<string, unknown>) as unknown as ReportRow & { data: DigestData };
   const morningData: MorningData = {
     headline: `Good morning. ${d.prog.length + 3} tasks on the board, ${d.data.approvals.length} approvals waiting, 2 due in the next 3 days.`,
     queue: WORK.slice(9, 12).map((w) => line(w)),
@@ -258,6 +264,6 @@ export function demoReports(date: string, today = manilaToday()): ReportsForDate
     blocked: d.data.blocked,
     yesterday: { done: 4, spend_usd: 1.37 },
   };
-  const morning = row(`m-${date}`, date, 'morning_brief', 'ea', morningData as unknown as Record<string, unknown>) as unknown as ReportRow & { data: MorningData };
+  const morning = row(`m-${date}`, date, 'morning_brief', 'coo', morningData as unknown as Record<string, unknown>) as unknown as ReportRow & { data: MorningData };
   return { date, today, digest, morning, standups, weekly };
 }

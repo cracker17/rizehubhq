@@ -23,7 +23,7 @@ HQ ships a mock RizeHub that implements the whole contract in memory. From the H
 ```bash
 pnpm --filter worker mock:rizehub                  # Agent API on http://localhost:8080/agent-api/v1, prints the test keys
 curl -s localhost:8080/agent-api/v1/leads/ld_1001 \
-  -H 'authorization: Bearer rzh_mock_leads' -H 'x-hq-task-id: t1' -H 'x-hq-agent-id: prospector'
+  -H 'authorization: Bearer rzh_mock_leads' -H 'x-hq-task-id: t1' -H 'x-hq-agent-id: sales'
 curl -s -XPOST localhost:8080/_mock/events -H 'content-type: application/json' \
   -d '{"event":"client.signed_up","data":{"company":"Kinfolk Candle Studio","package":"shopify-growth"}}'
 ```

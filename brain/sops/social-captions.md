@@ -1,6 +1,6 @@
 # SOP: social-captions
 
-Owner: social-1 or social-2. Output: ready-to-approve captions, one block per post, per platform.
+Owner: writer. Output: ready-to-approve captions, one block per post, per platform.
 
 ## Inputs to confirm
 Client, platform(s), post topic or asset description, goal, CTA destination (link, DM keyword, booking), offer terms, handles to tag (with permission), disclosure needs. Missing link or offer → `[PLACEHOLDER: ...]` or `ask_ceo` if blocking.

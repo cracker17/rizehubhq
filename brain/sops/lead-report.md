@@ -1,4 +1,4 @@
-# SOP: lead-report (Social Prospecting)
+# SOP: lead-report (Sales Agent)
 
 Goal: a researched, scored lead table where every finding is reproducible, so outreach can be specific and true.
 

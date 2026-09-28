@@ -1,4 +1,4 @@
-# SOP: follow-up-email (Pipeline Desk)
+# SOP: follow-up-email (Sales Agent)
 
 Goal: short follow-ups that add value and get a reply, drafted for CEO approval.
 

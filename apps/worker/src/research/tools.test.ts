@@ -32,16 +32,19 @@ async function run(tools: ToolSet, name: string, input: unknown): Promise<string
   return String(await tools[name]!.execute!(input as never, { toolCallId: 't', messages: [] }));
 }
 
-function toolsFor(agent: string, research: Partial<ResearchEnv>) {
+function toolsFor(agent: string, research: Partial<ResearchEnv>, extraTools: string[] = []) {
   const deps = Object.assign(makeDeps({ model: mockModel([]) }), { research });
   const task = deps.db.addTask({ agent_id: agent, status: 'working' });
-  const ctx: ToolContext = { task, role: loadRole(agent), deps, state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } };
+  const base = loadRole(agent);
+  const role = { ...base, tools: [...base.tools, ...extraTools] };
+  const ctx: ToolContext = { task, role, deps, state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } };
   return buildTools(ctx);
 }
 
 test('qa-lead gets real research tools (not stubs) and they work with fakes', async () => {
   const r = researchEnv({ site: { [PREVIEW]: { title: 'Bundle', console: ['oops'] } } });
-  const tools = toolsFor('qa-lead', r.env);
+  // video_tools/audio_tools are generic media tools no current role lists; they stay tested here.
+  const tools = toolsFor('qa-lead', r.env, ['video_tools', 'audio_tools']);
   for (const name of ['playwright', 'lighthouse', 'pagespeed', 'link_checker', 'web_fetch', 'semrush', 'figma_read', 'video_tools', 'audio_tools']) {
     assert.doesNotMatch(String(tools[name]!.description), /not connected yet/, name);
   }
@@ -67,7 +70,7 @@ test('connectors: search/gmail/image messages when not configured; semrush + fig
     } } } }) },
     { match: 'https://api.figma.com/v1/images/', reply: () => jsonRes({ images: { '12:34': 'https://figma-alpha.example/img.png' } }) },
   ] });
-  const seo = toolsFor('seo-1', r.env);
+  const seo = toolsFor('writer', r.env);
   const s = await run(seo, 'semrush', { report: 'keyword_overview', target: 'shapewear', database: 'au' });
   assert.match(s, /"Search Volume": "49500"/);
   const u = new URL(r.apiFetch.calls[0]!.url);
@@ -75,7 +78,7 @@ test('connectors: search/gmail/image messages when not configured; semrush + fig
   assert.ok(!s.includes('SEMKEY'));
   assert.match(await run(seo, 'web_search', { query: 'x' }), /TAVILY_API_KEY/);
 
-  const ui = toolsFor('uiux-1', r.env);
+  const ui = toolsFor('designer', r.env);
   const f = await run(ui, 'figma_read', { file: 'https://www.figma.com/design/AbCdEf123456/Landing?node-id=12-34', export_images: true });
   assert.match(f, /<figma_content source="figma:AbCdEf123456">/);
   assert.match(f, /FRAME "Hero" \(12:34\) 1440×800 · fill #ff0000/);
@@ -83,9 +86,9 @@ test('connectors: search/gmail/image messages when not configured; semrush + fig
   assert.match(f, /12:34: https:\/\/figma-alpha\.example\/img\.png/);
   assert.equal((r.apiFetch.calls.at(-1)!.init!.headers as Record<string, string>)['x-figma-token'], 'figd_x');
 
-  const ea = toolsFor('ea', r.env);
+  const ea = toolsFor('coo', r.env);
   assert.equal(await run(ea, 'gmail_read', { query: 'from:client' }), GOOGLE_NOT_CONFIGURED);
-  const g = toolsFor('graphic-1', r.env);
+  const g = toolsFor('designer', r.env);
   assert.match(await run(g, 'image_gen', { prompt: 'a red dress flat lay' }), /not connected: set MEDIA_PROVIDER/);
 
   assert.deepEqual(parseFigmaRef('https://www.figma.com/design/KEY123abc/branch/BR456xyz/F?node-id=1-2'), { fileKey: 'BR456xyz', nodeId: '1:2' });
@@ -99,7 +102,7 @@ const verdict = { verdict: 'pass', score: 95, summary: 'ok', fix_list: [],
 
 function qaSetup(output: Record<string, unknown>, research: Partial<ResearchEnv>) {
   const db = new FakeHqDb();
-  const task = db.addTask({ agent_id: 'shopify-dev', status: 'qa_pending', work_type: 'shopify-section', acceptance_criteria: CRITERIA, output });
+  const task = db.addTask({ agent_id: 'web-dev', status: 'qa_pending', work_type: 'shopify-section', acceptance_criteria: CRITERIA, output });
   const model = mockModel([jsonResponse(verdict)]);
   const deps = Object.assign(makeDeps({ db, model }), { research });
   return { db, task, model, deps };

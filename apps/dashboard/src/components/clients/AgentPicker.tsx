@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { Check } from 'lucide-react';
 import { useHq } from '@/lib/data/store';
 
-const DEPT_ORDER = ['dev', 'qa', 'design', 'content', 'ops', 'growth', 'leadership', 'multimedia'];
+const DEPT_ORDER = ['dev', 'qa', 'design', 'content', 'growth', 'leadership'];
 
 export function AgentPicker({ value, onChange, disabled }: { value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
   const { snap } = useHq();

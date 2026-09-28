@@ -58,10 +58,10 @@ RizeHub    →  http://hq-worker:4000/hooks/rizehub        (internal webhooks ba
 
 | Key | Used by | Scopes |
 |---|---|---|
-| `RIZEHUB_KEY_LEADS` | Social Prospecting, Pipeline Desk | `leads:search`, `leads:read`, `leads:write_notes`, `lists:write` |
-| `RIZEHUB_KEY_ONBOARDING` | Client Success | `accounts:create`, `workspaces:create`, `workspaces:configure`, `invites:draft` |
-| `RIZEHUB_KEY_REPORTS` | EA & Report Desk, SEO, Social | `reports:generate`, `reports:read`, `metrics:read` |
-| `RIZEHUB_KEY_READONLY` | QA Lead, COO | `*:read` |
+| `RIZEHUB_KEY_LEADS` | Sales Agent | `leads:search`, `leads:read`, `leads:write_notes`, `lists:write` |
+| `RIZEHUB_KEY_ONBOARDING` | COO (onboarding) | `accounts:create`, `workspaces:create`, `workspaces:configure`, `invites:draft` |
+| `RIZEHUB_KEY_REPORTS` | COO (client reports), Content Writer | `reports:generate`, `reports:read`, `metrics:read` |
+| `RIZEHUB_KEY_READONLY` | QA, COO | `*:read` |
 
 - Keys are stored hashed in RizeHub (like passwords), with scopes, an owner label and `last_used_at`.
 - Every request also sends `X-HQ-Task-Id` and `X-HQ-Agent-Id`, so RizeHub's audit log shows **which AI employee did what, for which task**.
@@ -117,7 +117,7 @@ Plain HTTP + JSON, versioned under `/agent-api/v1`. Build it in whatever RizeHub
 | `job.completed` / `job.failed` | Resume the waiting agent task |
 | `account.created`, `workspace.ready` | Onboarding workflow continues |
 | `client.signed_up` / `payment.received` | Creates an HQ request automatically: "Onboard {client}" (source=`rizehub`) |
-| `lead.replied` (if RizeHub tracks inbox) | Pipeline Desk drafts a follow-up |
+| `lead.replied` (if RizeHub tracks inbox) | Sales Agent drafts a follow-up |
 | `report.viewed` | Logged; appears in client activity |
 
 Webhook requests are signed (`X-RizeHub-Signature`) and HQ rejects unsigned ones.

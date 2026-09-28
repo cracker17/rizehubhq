@@ -1,4 +1,4 @@
-# SOP: dm-reply-draft (Social + Inbound)
+# SOP: dm-reply-draft (Sales Agent)
 
 Goal: a reply to a comment, DM or inbound enquiry that the CEO can post as-is: fast, human, useful, moving a real buyer one step forward.
 

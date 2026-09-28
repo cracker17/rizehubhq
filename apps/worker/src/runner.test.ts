@@ -11,7 +11,7 @@ const CRITERIA = ['H1 contains "shopify speed"', 'Title ≤ 60 characters', 'At 
 
 function setup() {
   const db = new FakeHqDb();
-  const task = db.addTask({ agent_id: 'seo-1', title: 'Shopify speed article', acceptance_criteria: CRITERIA });
+  const task = db.addTask({ agent_id: 'writer', title: 'Shopify speed article', acceptance_criteria: CRITERIA });
   db.tasks.get(task.id)!.status = 'working';
   return { db, task: { ...task, status: 'working' as const } };
 }
@@ -34,7 +34,7 @@ test('tool calls → report_progress + submit_output recorded; run stops after s
   const progress = db.callsOf('reportProgress');
   assert.equal(progress.length, 2); // initial "Reading the brief" + agent's own
   assert.equal(progress[1]?.args[2], 'Drafting');
-  assert.equal(db.screens.get('seo-1')?.title, 'article.md');
+  assert.equal(db.screens.get('writer')?.title, 'article.md');
   const out = db.tasks.get(task.id)!.output as unknown as TaskOutput;
   assert.equal(out.summary, '1,200-word article');
   assert.equal(out.criteria_map[CRITERIA[0]!], 'yes');
@@ -42,19 +42,19 @@ test('tool calls → report_progress + submit_output recorded; run stops after s
   assert.equal(db.usage.length, 1);
   assert.equal(db.usage[0]?.kind, 'task');
   assert.equal(db.usage[0]?.tokensIn, 200);
-  assert.equal(db.callsOf('finishAgentTurn').at(-1)?.args[0], 'seo-1');
+  assert.equal(db.callsOf('finishAgentTurn').at(-1)?.args[0], 'writer');
 
   // the model saw exactly the role's tools, the task prompt, and the role as system prompt
   const call = model.doGenerateCalls[0]!;
   const names = (call.tools ?? []).map((t) => t.name).sort();
-  assert.deepEqual(names, [...loadRole('seo-1').tools].sort());
-  assert.match(promptText(call), /SEO Content Writer 1/);
+  assert.deepEqual(names, [...loadRole('writer').tools].sort());
+  assert.match(promptText(call), /You are RizeHub's Content Writer/);
   assert.match(promptText(call), /At least 3 internal links/);
 });
 
 test('tools not built yet are stubs that tell the agent to degrade gracefully', async () => {
   const { db, task } = setup();
-  const role = { ...loadRole('seo-1'), tools: [...loadRole('seo-1').tools, 'future_tool'] };
+  const role = { ...loadRole('writer'), tools: [...loadRole('writer').tools, 'future_tool'] };
   const tools = buildTools({ task, role, deps: makeDeps({ db, model: mockModel([]) }), state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } });
   const exec = tools.future_tool?.execute as ((input: unknown, opts: unknown) => Promise<string>) | undefined;
   assert.ok(exec, 'unknown tool is registered as a stub');
@@ -66,7 +66,7 @@ test('every tool named in a role file has a real implementation', () => {
   const { db, task } = setup();
   const deps = makeDeps({ db, model: mockModel([]) });
   const known = new Set(['create_plan', 'qa_submit_verdict']); // handled outside task runs (planner / QA)
-  for (const id of ['coo','ea','client-success','pipeline','prospector','inbound','job-scout','shopify-dev','webflow-dev','wordpress-dev','fullstack-dev','uiux-1','graphic-1','social-1','seo-1','video-editor','sound-engineer','qa-lead']) {
+  for (const id of ['coo', 'web-dev', 'designer', 'writer', 'sales', 'qa-lead']) {
     const role = loadRole(id);
     const tools = buildTools({ task, role, deps, state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } });
     for (const name of role.tools) {
@@ -89,7 +89,7 @@ test('model ends without submit_output → final text saved as output', async ()
 
 test('budget exceeded → run stops and the task fails', async () => {
   const { db, task } = setup();
-  // 1M input tokens on Opus = $4 > seo-1 budget $0.90
+  // 1M input tokens on Opus = $4 > the writer's budget $0.90
   const model = mockModel([
     toolCalls([{ name: 'report_progress', input: { percent: 10, note: 'Reading' } }], { inputTokens: 1_000_000, outputTokens: 10 }),
     toolCalls([{ name: 'submit_output', input: { summary: 'too late' } }]),
@@ -99,7 +99,7 @@ test('budget exceeded → run stops and the task fails', async () => {
   assert.equal(r.status, 'budget_exceeded');
   assert.equal(model.doGenerateCalls.length, 1);
   assert.equal(db.tasks.get(task.id)!.status, 'failed');
-  assert.match(String(db.callsOf('failTask')[0]?.args[1]), /Budget exceeded: \$4\.0\d+ > \$0\.90/);
+  assert.match(String(db.callsOf('failTask')[0]?.args[1]), /^stopped: exceeded \$0\.90 task budget \(\$4\.0\d+ spent\)$/);
   assert.ok((db.usage[0]?.costUsd ?? 0) > 4);
 });
 
@@ -146,7 +146,7 @@ test('provider 429 → task re-queued, not failed', async () => {
 test('revision prompt carries QA feedback and the previous output', () => {
   const db = new FakeHqDb();
   const task = db.addTask({
-    agent_id: 'seo-1', revision_count: 1, output: { summary: 'v1' },
+    agent_id: 'writer', revision_count: 1, output: { summary: 'v1' },
     qa_feedback: { source: 'qa', fix_list: ['Shorten the title'], failed_checks: [{ criterion: 'Title ≤ 60 characters', note: '72 chars' }] },
   });
   const text = buildTaskPrompt(task, null, makeDeps({ db, model: mockModel([]) }));
@@ -154,4 +154,50 @@ test('revision prompt carries QA feedback and the previous output', () => {
   assert.match(text, /Title ≤ 60 characters: 72 chars/);
   assert.match(text, /"summary":"v1"/);
   assert.match(text, /brain\/sops\/seo-article\.md/);
+});
+
+test('Anthropic: system prompt + tools cached once, conversation cached per step; cache writes/reads priced', async () => {
+  const { db, task } = setup();
+  const withCache = (r: ReturnType<typeof toolCalls>, write: number, read: number) => ({
+    ...r, usage: { ...r.usage, inputTokens: 1_000, cachedInputTokens: read }, providerMetadata: { anthropic: { cacheCreationInputTokens: write } },
+  });
+  const model = mockModel([
+    withCache(toolCalls([{ name: 'report_progress', input: { percent: 50, note: 'Drafting' } }]), 10_000, 0),
+    withCache(toolCalls([{ name: 'submit_output', input: { summary: 'done', content: 'x' } }]), 500, 10_000),
+  ]);
+  const r = await runTask(task, makeDeps({ db, model, provider: 'anthropic', modelId: 'claude-sonnet-5' }));
+  assert.equal(r.status, 'submitted');
+  const [first, second] = model.doGenerateCalls;
+  const sys = first!.prompt[0]!;
+  assert.equal(sys.role, 'system');
+  assert.deepEqual(sys.providerOptions?.anthropic, { cacheControl: { type: 'ephemeral' } });
+  assert.deepEqual(first!.prompt.at(-1)!.providerOptions?.anthropic, { cacheControl: { type: 'ephemeral' } });
+  assert.equal(second!.prompt[0]!.role, 'system');
+  assert.deepEqual(second!.prompt.at(-1)!.providerOptions?.anthropic, { cacheControl: { type: 'ephemeral' } }, 'newest message marked on step 2');
+  assert.equal(second!.prompt.filter((m) => m.providerOptions?.anthropic).length, 2, 'system + one rolling breakpoint');
+  // step 1: 1k fresh ($0.002) + 10k write ($0.025) + 50 out ($0.0005); step 2: 1k fresh + 500 write ($0.00125) + 10k read ($0.002) + 50 out
+  const u = db.usage[0]!;
+  assert.equal(u.tokensIn, 1_000 + 10_000 + 1_000 + 500 + 10_000);
+  assert.equal(u.detail.cache_write_in, 10_500);
+  assert.equal(u.detail.cached_in, 10_000);
+  assert.ok(Math.abs(u.costUsd - (0.0275 + 0.00575)) < 1e-9, `cost ${u.costUsd}`);
+});
+
+test('other providers get the plain system prompt (no cache options)', async () => {
+  const { db, task } = setup();
+  const model = mockModel([toolCalls([{ name: 'submit_output', input: { summary: 'done' } }])]);
+  await runTask(task, makeDeps({ db, model, provider: 'openai', modelId: 'gpt-5.5' }));
+  assert.ok(model.doGenerateCalls[0]!.prompt.every((m) => !m.providerOptions?.anthropic));
+});
+
+test('max steps: the loop stops at the role\'s max_turns and the task fails with an explicit reason', async () => {
+  const { db, task } = setup();
+  const step = () => toolCalls([{ name: 'report_progress', input: { percent: 10, note: 'Still going' } }]);
+  const model = mockModel([step(), step(), step(), step()]);
+  const deps = makeDeps({ db, model });
+  const r = await runTask(task, { ...deps, loadRole: (id) => ({ ...loadRole(id), max_turns: 3 }) });
+  assert.deepEqual(r.status === 'failed' && r.reason, 'stopped: exceeded max steps 3');
+  assert.equal(model.doGenerateCalls.length, 3);
+  assert.equal(db.tasks.get(task.id)!.status, 'failed');
+  assert.equal(db.callsOf('failTask')[0]?.args[1], 'stopped: exceeded max steps 3');
 });

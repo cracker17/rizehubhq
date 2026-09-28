@@ -1,6 +1,6 @@
 # SOP: wireframe
 
-Owner: uiux-1 (e-commerce/landing) or uiux-2 (apps/dashboards). Output: annotated low-fidelity wireframes that a developer can build without asking questions.
+Owner: designer. Output: annotated low-fidelity wireframes that a developer can build without asking questions.
 
 ## 1. Inputs (stop and `ask_ceo` if any is missing)
 - Goal of the page/flow and primary action (e.g. "add bundle to cart").

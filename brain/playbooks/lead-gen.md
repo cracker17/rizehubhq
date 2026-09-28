@@ -2,20 +2,20 @@
 
 **Trigger:** CEO request like "Find 30 Shopify stores in Australia with slow sites and draft outreach", or a scheduled prospecting request.
 
-**Owner of the plan:** COO. **Main agents:** prospector (Social Prospecting), pipeline (Pipeline Desk). **Work types:** lead-finder-search, lead-report, outreach-draft, follow-up-email.
+**Owner of the plan:** COO. **Main agent:** sales (Sales Agent). **Work types:** lead-finder-search, lead-report, outreach-draft, follow-up-email.
 
 ## Steps
 | # | Owner | Step | Output |
 |---|---|---|---|
 | 1 | coo | Plan: industry, location, platform, signal (slow site, no SSL, hiring), lead count, list name, channel (email or DM) | Plan for approval |
 | 2 | CEO | Approve plan | ✅ |
-| 3 | prospector (`lead-finder-search`) | `leads_search` in RizeHub Lead Finder, wait for `job.completed` | Raw lead IDs |
-| 4 | prospector (`lead-report`) | Per lead: visit site (`web_fetch`), confirm the signal with a real measurement (`pagespeed` mobile score), check fit (platform, size, market), `lead_add_notes` with fit score 0–100 and recommended angle; drop fits < 60 | Lead report table |
-| 5 | prospector (`outreach-draft`) | Save top leads to a RizeHub list; draft one personalized first message per lead using one verified finding from their site | Drafts |
+| 3 | sales (`lead-finder-search`) | `leads_search` in RizeHub Lead Finder, wait for `job.completed` | Raw lead IDs |
+| 4 | sales (`lead-report`) | Per lead: visit site (`web_fetch`), confirm the signal with a real measurement (`pagespeed` mobile score), check fit (platform, size, market), `lead_add_notes` with fit score 0–100 and recommended angle; drop fits < 60 | Lead report table |
+| 5 | sales (`outreach-draft`) | Save top leads to a RizeHub list; draft one personalized first message per lead using one verified finding from their site | Drafts |
 | 6 | qa-lead | Checks below | Verdict |
 | 7 | CEO | One approval: lead report + drafts (approve all / edit / drop) | ✅ |
 | 8 | CEO / worker | CEO sends DMs personally; approved emails sent by worker from the warmed RizeHub sending domain, volume-capped | Sent |
-| 9 | pipeline (`follow-up-email`) | Stage → "contacted" (only after send); day-3 and day-7 follow-up drafts, each needs approval | Follow-ups |
+| 9 | sales (`follow-up-email`) | Stage → "contacted" (only after send); day-3 and day-7 follow-up drafts, each needs approval | Follow-ups |
 
 ## Approvals
 Plan · lead report + drafts · every send · every follow-up. No agent sends anything.

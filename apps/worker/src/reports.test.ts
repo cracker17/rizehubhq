@@ -6,12 +6,12 @@ import {
 import { sampleFacts } from './reportsFixtures';
 
 test('active agents: events, finished tasks and spend count; report writes and unknown actors do not', () => {
-  assert.deepEqual(activeAgentIds(sampleFacts()), ['coo', 'qa-lead', 'seo-1', 'uiux-1']);
+  assert.deepEqual(activeAgentIds(sampleFacts()), ['coo', 'designer', 'qa-lead', 'writer']);
 });
 
 test('standup template: done / next / blockers from the facts only', () => {
   const f = sampleFacts();
-  const seo = templateStandup('seo-1', f);
+  const seo = templateStandup('writer', f);
   assert.deepEqual(seo.done, ['Finished “Bundle landing copy” (Madam Muse), approved by you', 'Submitted “Meta descriptions” for QA (2 rounds)']);
   assert.deepEqual(seo.next, ['“Meta descriptions” is with QA']);
   assert.deepEqual(seo.blockers, []);
@@ -20,8 +20,8 @@ test('standup template: done / next / blockers from the facts only', () => {
   assert.deepEqual(templateStandup('coo', f).done, ['Planned “Vinyl Icons SEO report” and sent the plan for approval']);
   assert.deepEqual(templateStandup('coo', f).blockers, ['“Vinyl Icons SEO report” plan is waiting for your approval']);
   // the failure approval is not listed twice
-  assert.deepEqual(templateStandup('graphic-2', f).blockers, ['“Ad set B” is stuck: Missing brand fonts']);
-  assert.deepEqual(templateStandup('shopify-dev', f).next, ['Start “Build bundle section” (Madam Muse) (after its dependencies)']);
+  assert.deepEqual(templateStandup('designer', f).blockers, ['“Ad set B” is stuck: Missing brand fonts']);
+  assert.deepEqual(templateStandup('web-dev', f).next, ['Start “Build bundle section” (Madam Muse) (after its dependencies)']);
 });
 
 test('model rewrites may merge but never add items or empty a section', () => {
@@ -43,9 +43,9 @@ test('digest: counts, QA rate, spend and per-client lines are exact', () => {
     { name: 'Vinyl Icons', done: 0, in_progress: 1, blocked: 1, spend_usd: 0 },
   ]);
   assert.equal(d.done[0]?.note, '2 revisions');
-  const md = digestMarkdown('2026-09-28', d, new Map([['seo-1', 'SEO Writer 1']]));
-  assert.match(md, /## Done today \(1\)\n- Bundle landing copy · Madam Muse · SEO Writer 1 \(2 revisions\)/);
-  assert.match(md, /## Blocked \/ needs you \(1\)\n- Ad set B · Vinyl Icons · graphic-2 \(Missing brand fonts\)/);
+  const md = digestMarkdown('2026-09-28', d, new Map([['writer', 'Content Writer']]));
+  assert.match(md, /## Done today \(1\)\n- Bundle landing copy · Madam Muse · Content Writer \(2 revisions\)/);
+  assert.match(md, /## Blocked \/ needs you \(1\)\n- Ad set B · Vinyl Icons · designer \(Missing brand fonts\)/);
   assert.match(md, /\*\*QA pass rate:\*\* 50% \(1\/2\) · \*\*Spend today:\*\* \$0\.42/);
 });
 
@@ -67,7 +67,7 @@ test('morning brief lists queue, approvals and due dates', () => {
 test('weekly: tasks by department, daily QA trend over 7 days, bottlenecks', () => {
   const f = sampleFacts('2026-09-21');
   f.to = '2026-09-28';
-  f.done.push({ task_id: 't9', title: 'Hero graphic', agent_id: 'graphic-2', revision_count: 3 });
+  f.done.push({ task_id: 't9', title: 'Hero graphic', agent_id: 'designer', revision_count: 3 });
   f.qa_by_day = [{ date: '2026-09-22', reviews: 4, passed: 3 }];
   f.qa = { reviews: 10, passed: 6 };
   const w = buildWeekly(f);

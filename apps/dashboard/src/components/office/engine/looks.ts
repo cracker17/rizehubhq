@@ -49,28 +49,12 @@ export function shade(c: number, f: number): number {
 type Spec = Partial<CharacterLook> & { topStyle: TopStyle; hairStyle?: HairStyle; accessories: Accessory[] };
 
 const ROLE: Record<string, Spec> = {
-  coo: { topStyle: 'blazer', hairStyle: 'short', accessories: ['tie'], prop: 'tablet', inner: 0xf3f1ea },
-  ea: { topStyle: 'shirt', hairStyle: 'bun', accessories: ['headset'], prop: 'clipboard' },
-  'client-success': { topStyle: 'cardigan', hairStyle: 'long', accessories: ['lanyard'] },
-  pipeline: { topStyle: 'rolled', hairStyle: 'short', accessories: [], prop: 'clipboard' },
-  prospector: { topStyle: 'tee', hairStyle: 'buzz', accessories: ['cap'] },
-  inbound: { topStyle: 'tee', hairStyle: 'curly', accessories: [], prop: 'phone' },
-  'job-scout': { topStyle: 'jacket', hairStyle: 'ponytail', accessories: ['backpack'] },
-  'shopify-dev': { topStyle: 'shirt', hairStyle: 'short', accessories: ['headphones'] },
-  'webflow-dev': { topStyle: 'sweater', hairStyle: 'bob', accessories: ['headphones'] },
-  'wordpress-dev': { topStyle: 'shirt', hairStyle: 'curly', accessories: ['headphones', 'glasses'] },
-  'fullstack-dev': { topStyle: 'hoodie', hairStyle: 'quiff', accessories: ['headphones'] },
-  'uiux-1': { topStyle: 'tee', hairStyle: 'bob', accessories: ['beret'] },
-  'uiux-2': { topStyle: 'sweater', hairStyle: 'short', accessories: ['beret'] },
-  'graphic-1': { topStyle: 'apron', hairStyle: 'ponytail', accessories: [] },
-  'graphic-2': { topStyle: 'apron', hairStyle: 'short', accessories: [] },
-  'social-1': { topStyle: 'jacket', hairStyle: 'long', accessories: ['sunglasses'], prop: 'phone' },
-  'social-2': { topStyle: 'jacket', hairStyle: 'quiff', accessories: ['sunglasses'], prop: 'phone' },
-  'seo-1': { topStyle: 'cardigan', hairStyle: 'bun', accessories: ['glasses'] },
-  'seo-2': { topStyle: 'sweater', hairStyle: 'short', accessories: ['glasses'] },
-  'video-editor': { topStyle: 'hoodie', hairStyle: 'short', accessories: ['beanie', 'headphones'] },
-  'sound-engineer': { topStyle: 'tee', hairStyle: 'curly', accessories: ['studio_headphones'] },
-  'qa-lead': { topStyle: 'coat', hairStyle: 'bun', accessories: ['glasses'] },
+  coo: { topStyle: 'blazer', hairStyle: 'short', accessories: [], prop: 'tablet', inner: 0xf3f1ea },
+  'web-dev': { topStyle: 'hoodie', hairStyle: 'quiff', accessories: ['headphones'] },
+  designer: { topStyle: 'sweater', hairStyle: 'bob', accessories: ['earring'] },
+  writer: { topStyle: 'cardigan', hairStyle: 'long', accessories: ['glasses'] },
+  sales: { topStyle: 'rolled', hairStyle: 'short', accessories: ['headset'], prop: 'phone' },
+  'qa-lead': { topStyle: 'jacket', hairStyle: 'bun', accessories: ['glasses'], prop: 'clipboard' },
 };
 
 export function lookFor(agentId: string, color: string): CharacterLook {

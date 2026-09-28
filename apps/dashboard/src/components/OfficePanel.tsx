@@ -13,9 +13,8 @@ import { MapSkeleton } from './office/MapSkeleton';
 const OfficeMap = dynamic(() => import('./office/OfficeMap'), { ssr: false, loading: () => <MapSkeleton /> });
 
 const DEPTS: { id: string; label: string }[] = [
-  { id: 'all', label: 'All' }, { id: 'leadership', label: 'Leadership' }, { id: 'ops', label: 'Ops' },
-  { id: 'growth', label: 'Growth' }, { id: 'dev', label: 'Dev' }, { id: 'design', label: 'Design' },
-  { id: 'content', label: 'Content' }, { id: 'multimedia', label: 'Multimedia' }, { id: 'qa', label: 'QA' },
+  { id: 'all', label: 'All' }, { id: 'leadership', label: 'Leadership' }, { id: 'growth', label: 'Growth' },
+  { id: 'dev', label: 'Dev' }, { id: 'design', label: 'Design' }, { id: 'content', label: 'Content' }, { id: 'qa', label: 'QA' },
 ];
 const VIEW_KEY = 'hq-office-view';
 

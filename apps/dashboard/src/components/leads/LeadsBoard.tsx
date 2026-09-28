@@ -116,7 +116,7 @@ export function LeadsBoard({ data }: { data: LeadsData }) {
         <div className="card flex flex-col items-center gap-3 p-10 text-center">
           <Target size={28} className="text-[var(--color-primary-hover)]" aria-hidden />
           <p className="text-[15px] font-medium">No leads yet</p>
-          <p className="max-w-md text-[13px] text-[var(--color-muted)]">Ask the team to run a Lead Finder search. Leads appear here as Social Prospecting researches them.</p>
+          <p className="max-w-md text-[13px] text-[var(--color-muted)]">Ask the team to run a Lead Finder search. Leads appear here as the Sales Agent researches them.</p>
           <button onClick={() => setFinding(true)} className="h-10 rounded-xl bg-[var(--color-primary)] px-4 text-sm font-medium hover:bg-[var(--color-primary-hover)]">Find leads</button>
         </div>
       ) : (
@@ -146,7 +146,7 @@ export function LeadsBoard({ data }: { data: LeadsData }) {
       )}
 
       <PrefillRequestDialog open={finding} onClose={() => setFinding(false)} title="Find leads"
-        intro="Social Prospecting runs RizeHub Lead Finder, verifies each signal on the real site, scores fit and drafts outreach. You approve every message."
+        intro="The Sales Agent runs RizeHub Lead Finder, verifies each signal on the real site, scores fit and drafts outreach. You approve every message."
         fields={FIND_FIELDS} build={buildFind} />
     </>
   );

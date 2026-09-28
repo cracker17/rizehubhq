@@ -1,19 +1,44 @@
 # Role → model mapping (docs/14-MODELS-AND-COSTS.md). Model IDs change often:
 # check each provider's docs and update the IDs here; code never hard-codes them.
-active_profile: free   # free | hybrid | claude | openai  (env MODEL_PROFILE overrides)
+#
+# Which model a call gets (first usable wins; "usable" = API key set, free cap not nearly used, paid budget left):
+#   1. the agent's model_override (Agents page)
+#   2. env MODEL_ID_<ROLE> (MODEL_ID_LEAD, MODEL_ID_DEV, MODEL_ID_DESIGN, MODEL_ID_WRITER, MODEL_ID_SALES,
+#      MODEL_ID_QA, MODEL_ID_LIGHT, …), format provider:model, e.g. MODEL_ID_QA=openai:gpt-5.5
+#   3. this file: profiles.<active profile>.<role>, in order (later entries are fallbacks)
+# Roles missing from a profile fall back: design/writer/sales → specialist.
+active_profile: free   # free | paid | hybrid | claude | openai  (env MODEL_PROFILE overrides)
 
 profiles:
   free:
     lead:       [google:gemini-2.5-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
     specialist: [google:gemini-2.5-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
     dev:        [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
+    design:     [google:gemini-2.5-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
+    writer:     [google:gemini-2.5-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
+    sales:      [google:gemini-2.5-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
     reports:    [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
     qa:         [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
     light:      [groq:llama-3.1-8b-instant, google:gemini-2.5-flash-lite]
+  # Paid API keys only (Anthropic Console + OpenAI platform; Claude.ai Pro/Max subscriptions can't power agents).
+  # Needs ANTHROPIC_API_KEY, OPENAI_API_KEY and MONTHLY_BUDGET_USD > 0. Anthropic calls use prompt caching.
+  paid:
+    lead:       [anthropic:claude-sonnet-5]
+    dev:        [anthropic:claude-sonnet-5]
+    sales:      [anthropic:claude-sonnet-5]
+    design:     [anthropic:claude-haiku-4-5-20251001]
+    writer:     [anthropic:claude-haiku-4-5-20251001]   # switch to claude-sonnet-5 (MODEL_ID_WRITER) if QA flags quality
+    qa:         [openai:gpt-5.5, anthropic:claude-sonnet-5]   # a different provider on purpose (fresh eyes); Sonnet only if OpenAI is unavailable
+    light:      [anthropic:claude-haiku-4-5-20251001]
+    reports:    [anthropic:claude-haiku-4-5-20251001]
+    specialist: [anthropic:claude-sonnet-5]
   hybrid:
     lead:       [anthropic:claude-sonnet-5]
     specialist: [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
     dev:        [anthropic:claude-sonnet-5]
+    design:     [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
+    writer:     [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
+    sales:      [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
     reports:    [anthropic:claude-sonnet-5]
     qa:         [anthropic:claude-sonnet-5]
     light:      [groq:llama-3.1-8b-instant]
@@ -21,6 +46,9 @@ profiles:
     lead:       [anthropic:claude-opus-5-5]
     specialist: [anthropic:claude-sonnet-5]
     dev:        [anthropic:claude-sonnet-5]
+    design:     [anthropic:claude-sonnet-5]
+    writer:     [anthropic:claude-sonnet-5]
+    sales:      [anthropic:claude-sonnet-5]
     reports:    [anthropic:claude-sonnet-5]
     qa:         [anthropic:claude-opus-5-5]
     light:      [anthropic:claude-haiku-4-5-20251001]
@@ -28,6 +56,9 @@ profiles:
     lead:       [openai:gpt-5.5]
     specialist: [openai:gpt-5.4-mini]
     dev:        [openai:gpt-5.4]
+    design:     [openai:gpt-5.4-mini]
+    writer:     [openai:gpt-5.4-mini]
+    sales:      [openai:gpt-5.4]
     reports:    [openai:gpt-5.4-mini]
     qa:         [openai:gpt-5.5]
     light:      [openai:gpt-5.4-nano]

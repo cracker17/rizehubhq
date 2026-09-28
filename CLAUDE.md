@@ -1,6 +1,6 @@
 # CLAUDE.md — RizeHub HQ
 
-You are helping build **RizeHub HQ**: an AI employee team (COO, specialists, QA) commanded via Telegram and a dashboard, with a CEO approval gate on everything external. The full spec lives in `docs/` (files 00–14). HQ connects to the existing **RizeHub** app only through its Agent API (`docs/12-RIZEHUB-INTEGRATION.md`); workflows are in `docs/13-WORKFLOWS.md`. Read the relevant spec file before working on any part.
+You are helping build **RizeHub HQ**: a 6-agent AI team (COO, Web Developer, Graphic Designer, Content Writer, Sales Agent, QA; see `agents/roster.yaml`) commanded via Telegram and a dashboard, with a CEO approval gate on everything external. The full spec lives in `docs/` (files 00–14). HQ connects to the existing **RizeHub** app only through its Agent API (`docs/12-RIZEHUB-INTEGRATION.md`); workflows are in `docs/13-WORKFLOWS.md`. Read the relevant spec file before working on any part.
 
 ## Stack
 - pnpm monorepo: `apps/dashboard` (Next.js App Router, TS, Tailwind, shadcn/ui), `apps/worker` (Node TS, Vercel AI SDK with a provider-agnostic model router), `apps/bot` (grammY), `packages/shared` (types, zod schemas, enums).

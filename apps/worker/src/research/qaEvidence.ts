@@ -1,4 +1,4 @@
-// Automatic QA evidence (docs/05 [5]): before the QA Lead gives a verdict on output with a preview_url or
+// Automatic QA evidence (docs/05 [5]): before QA gives a verdict on output with a preview_url or
 // http(s) links, capture screenshots at 375/768/1440, console errors, a 375px overflow check and PageSpeed
 // (mobile) for the primary URL, and a reachability check for the other links. Every step is optional and
 // time-boxed; offline or without a browser the summary just says what could not be collected.

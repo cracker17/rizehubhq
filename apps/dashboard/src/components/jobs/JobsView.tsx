@@ -88,7 +88,7 @@ export function JobsView({ data, initialJobId }: { data: JobsData; initialJobId?
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold">Jobs</h1>
-          <p className="text-[13px] text-[var(--color-muted)]">Job Scout&apos;s shortlist · you click apply{data.mode === 'demo' ? ' · demo data' : ''}</p>
+          <p className="text-[13px] text-[var(--color-muted)]">The Sales Agent&apos;s shortlist · you click apply{data.mode === 'demo' ? ' · demo data' : ''}</p>
         </div>
         <button onClick={() => setFinding(true)} className="ml-auto flex h-10 items-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 text-sm font-medium hover:bg-[var(--color-primary-hover)]">
           <Briefcase size={16} aria-hidden /> Find jobs
@@ -128,7 +128,7 @@ export function JobsView({ data, initialJobId }: { data: JobsData; initialJobId?
         <div className="card flex flex-col items-center gap-2 p-10 text-center">
           <Briefcase size={26} className="text-[var(--color-primary-hover)]" aria-hidden />
           <p className="text-[15px] font-medium">{jobs.length ? 'No jobs match these filters' : 'No jobs tracked yet'}</p>
-          <p className="max-w-md text-[13px] text-[var(--color-muted)]">{jobs.length ? 'Loosen a filter to see more.' : 'Ask Job Scout to search. Public remote-board feeds are also checked every few hours.'}</p>
+          <p className="max-w-md text-[13px] text-[var(--color-muted)]">{jobs.length ? 'Loosen a filter to see more.' : 'Ask the Sales Agent to search. Public remote-board feeds are also checked every few hours.'}</p>
         </div>
       ) : (
         <>
@@ -198,7 +198,7 @@ export function JobsView({ data, initialJobId }: { data: JobsData; initialJobId?
 
       {open && <JobDrawer key={open.id} job={open} now={now} busy={busy} onClose={close} onCopy={copy} onApplied={(d) => markApplied(open, d)} onSkip={() => skip(open)} />}
       <PrefillRequestDialog open={finding} onClose={() => setFinding(false)} title="Find jobs"
-        intro="Job Scout checks your job-alert emails, public remote boards and links you paste, screens them against brain/career/job-filters.md and drafts applications. You apply yourself."
+        intro="The Sales Agent checks your job-alert emails, public remote boards and links you paste, screens them against brain/career/job-filters.md and drafts applications. You apply yourself."
         fields={FIND_FIELDS} build={buildFind} />
     </>
   );

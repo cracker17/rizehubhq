@@ -66,13 +66,13 @@ test('pending change note: one per chat, consumed once, expires after 10 minutes
 test('spend: today and month-to-date in Manila, top spenders today', () => {
   const now = new Date('2026-09-28T10:00:00+08:00');
   const s = summarizeSpend([
-    { actor: 'seo-1', cost_usd: '0.40', created_at: '2026-09-28T01:00:00+08:00' },
+    { actor: 'writer', cost_usd: '0.40', created_at: '2026-09-28T01:00:00+08:00' },
     { actor: 'coo', cost_usd: 0.1, created_at: '2026-09-28T00:10:00+08:00' },
-    { actor: 'seo-1', cost_usd: 0.2, created_at: '2026-09-27T23:50:00+08:00' },   // yesterday (still this month)
+    { actor: 'writer', cost_usd: 0.2, created_at: '2026-09-27T23:50:00+08:00' },   // yesterday (still this month)
     { actor: 'qa-lead', cost_usd: 5, created_at: '2026-08-31T23:00:00+08:00' },  // last month
     { actor: 'x', cost_usd: 0, created_at: '2026-09-28T01:00:00+08:00' },
   ], now);
   assert.equal(s.today.toFixed(2), '0.50');
   assert.equal(s.month.toFixed(2), '0.70');
-  assert.deepEqual(s.topToday.map((t) => t.actor), ['seo-1', 'coo']);
+  assert.deepEqual(s.topToday.map((t) => t.actor), ['writer', 'coo']);
 });

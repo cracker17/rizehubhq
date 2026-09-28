@@ -1,6 +1,6 @@
 # SOP: web-app
 
-Owner: fullstack-dev. Output: a feature or app increment (Next.js App Router + Supabase by default) delivered as a small, tested PR on `agent/<task-id>`, with preview link. Never merged or deployed by the agent.
+Owner: web-dev. Output: a feature or app increment (Next.js App Router + Supabase by default) delivered as a small, tested PR on `agent/<task-id>`, with preview link. Never merged or deployed by the agent.
 
 ## Inputs to confirm
 Repo, user story + acceptance criteria, design (Figma/mockup), data involved (and whether it's personal data), auth/roles, environments (dev Supabase project, Vercel preview). Missing design states, roles or data rules → `ask_ceo`. New paid service or architecture change → `ask_ceo` before building.

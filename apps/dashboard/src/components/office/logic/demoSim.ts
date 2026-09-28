@@ -39,27 +39,24 @@ export function applyOverlay(base: HqSnapshot, o: SimOverlay): HqSnapshot {
 // ---------------------------------------------------------------- content for synthetic work
 const WORK: Record<string, { title: string; work_type: string; app: string; steps: string[] }[]> = {
   dev: [
-    { title: 'Product page speed fixes', work_type: 'shopify-section', app: 'editor', steps: ['Deferring app scripts', 'Lazy-loading below the fold', 'Checking CLS at 375px'] },
+    { title: 'Product page speed fixes', work_type: 'shopify-speed', app: 'editor', steps: ['Deferring app scripts', 'Lazy-loading below the fold', 'Checking CLS at 375px'] },
     { title: 'Footer newsletter block', work_type: 'webflow-cms', app: 'editor', steps: ['Binding CMS fields', 'Styling the mobile layout'] },
+    { title: 'Bundle hero section', work_type: 'shopify-section', app: 'editor', steps: ['Reading the design spec', 'Building the Liquid section', 'Testing at 375px'] },
   ],
   design: [
-    { title: 'Instagram carousel (5 slides)', work_type: 'social-graphics', app: 'browser', steps: ['Blocking out the grid', 'Picking brand colours', 'Exporting 1080×1350'] },
-    { title: 'Checkout wireframe', work_type: 'wireframe', app: 'browser', steps: ['Mapping the flow', 'Mobile layout'] },
+    { title: 'Instagram carousel (5 slides)', work_type: 'social-graphic', app: 'browser', steps: ['Blocking out the grid', 'Picking brand colours', 'Exporting 1080×1350'] },
+    { title: 'Bundle hero mockup + spec', work_type: 'ui-mockup', app: 'browser', steps: ['Mapping the layout', 'Writing the design spec', 'Exporting assets'] },
   ],
   content: [
-    { title: 'Product descriptions (8)', work_type: 'landing-copy', app: 'doc', steps: ['Reading brand.md', 'Writing drafts', 'Adding keywords'] },
-    { title: 'Weekly captions pack', work_type: 'captions', app: 'doc', steps: ['Drafting hooks', 'Adding hashtags'] },
+    { title: 'Product descriptions (8)', work_type: 'landing-copy', app: 'doc', steps: ['Reading the writing samples', 'Writing drafts', 'Adding keywords'] },
+    { title: 'Shopify speed blog post', work_type: 'seo-article', app: 'doc', steps: ['Keyword research', 'Outlining H2s', 'Writing the meta description'] },
   ],
   growth: [
-    { title: 'Follow-up emails (6 leads)', work_type: 'proposal', app: 'doc', steps: ['Checking the CRM', 'Drafting follow-ups'] },
-    { title: 'Lead Finder: NZ Shopify stores', work_type: 'lead-research', app: 'leads', steps: ['Scoring stores', 'Measuring LCP'] },
+    { title: 'First emails: 12 Shopify stores', work_type: 'outreach-draft', app: 'doc', steps: ['Reading each site', 'Writing personal openers', 'Adding the opt-out line'] },
+    { title: 'Lead Finder: US Webflow agencies', work_type: 'lead-finder-search', app: 'leads', steps: ['Scoring businesses', 'Checking site issues'] },
   ],
-  ops: [
-    { title: 'Inbox triage', work_type: 'report', app: 'doc', steps: ['Sorting the inbox', 'Drafting replies'] },
-  ],
-  multimedia: [
-    { title: 'Testimonial cut (30s)', work_type: 'reel', app: 'browser', steps: ['Syncing the voiceover', 'Colour grading', 'Rendering'] },
-    { title: 'Voiceover: product teaser', work_type: 'voiceover', app: 'browser', steps: ['Recording take 3', 'Cleaning noise', 'Mixing to −14 LUFS'] },
+  leadership: [
+    { title: 'Client report: Vinyl Icons', work_type: 'client-report', app: 'doc', steps: ['Pulling the numbers', 'Writing the summary'] },
   ],
 };
 const MEETINGS = ['Brisbane Coffee Co onboarding', 'Vinyl Icons Q4 SEO plan', 'LvlUp site refresh', 'IO holiday campaign'];
@@ -140,14 +137,17 @@ export function simStep(view: HqSnapshot, overlay: SimOverlay, rng: () => number
         if (!taskId) {
           const t: TaskRow = {
             id: `sim-${o.step}-${i}-${a.id}`, request_id: 'sim', client_id: null, agent_id: a.id, title: w.title, instructions: w.title,
-            work_type: w.work_type, acceptance_criteria: [], depends_on: [], status: 'working', revision_count: 0, max_revisions: 3,
-            output: null, claimed_at: now, started_at: now, completed_at: null, cost_usd: 0, created_at: now, updated_at: now,
+            work_type: w.work_type, acceptance_criteria: [], depends_on: [], status: 'queued', revision_count: 0, max_revisions: 3,
+            output: null, claimed_at: null, started_at: null, completed_at: null, cost_usd: 0, created_at: now, updated_at: now,
           };
           o.newTasks.push(t);
           if (o.newTasks.length > 40) o.newTasks.shift();
           tasks.set(t.id, t);
-          taskId = t.id;
-        } else patchTask(taskId, { status: 'working', started_at: now });
+          // The COO walks over to brief them first; they pick it up on a later step.
+          if (!agents.get('coo')?.enabled) taskId = t.id;
+          else continue;
+        }
+        patchTask(taskId, { status: 'working', started_at: now, claimed_at: now });
         const title = tasks.get(taskId)!.title;
         patchAgent(a.id, { status: 'working', current_task_id: taskId, idle_activity: null, idle_since: null });
         setScreen({

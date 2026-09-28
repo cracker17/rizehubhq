@@ -19,6 +19,8 @@ export const config = {
   reportsEveryMs: num('REPORTS_CHECK_MS', 60_000),
   maxParallelTasks: num('MAX_PARALLEL_TASKS', 2),
   monthlyBudgetUsd: num('MONTHLY_BUDGET_USD', 0),
+  /** Daily AI spend cap across all agents + planning + QA (Asia/Manila day). null = settings.daily_budget_usd / none. */
+  dailyAiBudgetUsd: process.env.DAILY_AI_BUDGET_USD ? Number(process.env.DAILY_AI_BUDGET_USD) : null,
   modelProfile: process.env.MODEL_PROFILE,
   qaThreshold: num('QA_THRESHOLD', 85),
   httpPort: num('WORKER_HTTP_PORT', 4000),

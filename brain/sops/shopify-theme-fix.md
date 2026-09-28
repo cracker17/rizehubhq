@@ -1,6 +1,6 @@
 # SOP: shopify-theme-fix
 
-Owner: shopify-dev. Output: a minimal, verified fix on an UNPUBLISHED copy of the live theme, with root cause, before/after evidence and a PR.
+Owner: web-dev. Output: a minimal, verified fix on an UNPUBLISHED copy of the live theme, with root cause, before/after evidence and a PR.
 
 ## Inputs to confirm
 Exact symptom (what, where: URL, device, browser), expected behaviour, when it started (after an app install or theme edit?), screenshots/recording from the reporter. Can't reproduce from the info given → `ask_ceo` with specific questions.

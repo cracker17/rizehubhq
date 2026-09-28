@@ -1,10 +1,11 @@
-// QA review (docs/05 [5]): the QA Lead sees only the brief, criteria, checklists and the output —
+// QA review (docs/05 [5]): QA (agent qa-lead) sees only the brief, criteria, checklists and the output —
 // never the maker's conversation — and returns a QaVerdict that record_qa_verdict applies.
 import { generateObject, NoObjectGeneratedError } from 'ai';
 import { isQaPass, QaVerdict } from '@rizehubhq/shared';
 import type { TaskRow } from './hqdb';
 import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
-import { addUsage, costUsd, isQuotaError, type PickedModel } from './models/usage';
+import { addUsage, costUsd, isQuotaError, normalizeUsage, type PickedModel, type TokenUsage } from './models/usage';
+import { cachedPrompt } from './models/cache';
 import { researchEnvFrom } from './research/env';
 import { attachEvidence, collectQaEvidence, type QaEvidence } from './research/qaEvidence';
 
@@ -86,7 +87,7 @@ export async function reviewNext(deps: WorkerDeps): Promise<QaOutcome> {
 export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOutcome> {
   const db = deps.db;
   let picked: PickedModel | null = null;
-  let usage = {};
+  let usage: TokenUsage = {};
   let calls = 0;
   let cost = 0;
   // Every screen update is also a heartbeat, so the stale sweep never takes a live review away.
@@ -108,13 +109,13 @@ export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOut
     for (let attempt = 1; attempt <= 2 && !verdict; attempt++) {
       const prompt = attempt === 1 ? basePrompt : `${basePrompt}\n\n# Your previous verdict was invalid\n${lastError}\nReturn a valid verdict.`;
       try {
-        const res = await generateObject({ model: picked.model, schema: QaVerdict, schemaName: 'qa_submit_verdict', system, prompt });
-        calls++; usage = addUsage(usage, res.usage); cost += picked.recordCall(res.usage);
+        const res = await generateObject({ model: picked.model, schema: QaVerdict, schemaName: 'qa_submit_verdict', ...cachedPrompt(picked.provider, system, prompt) });
+        calls++; usage = addUsage(usage, normalizeUsage(picked.provider, res.usage, res.providerMetadata)); cost += picked.recordCall(res.usage, res.providerMetadata);
         verdict = res.object;
       } catch (e) {
         if (isQuotaError(e)) throw e;
         calls++;
-        if (NoObjectGeneratedError.isInstance(e) && e.usage) { usage = addUsage(usage, e.usage); cost += picked.recordCall(e.usage); }
+        if (NoObjectGeneratedError.isInstance(e) && e.usage) { usage = addUsage(usage, normalizeUsage(picked.provider, e.usage)); cost += picked.recordCall(e.usage); }
         lastError = errMsg(e);
         log(deps, `[qa-lead] verdict attempt ${attempt} invalid: ${lastError}`);
       }
@@ -142,7 +143,7 @@ export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOut
     });
   } finally {
     if (picked && calls > 0) {
-      const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
+      const u = usage;
       await db.recordUsage({
         actor: QA_REVIEWER, kind: 'qa', taskId: task.id, requestId: task.request_id,
         tokensIn: u.inputTokens ?? 0, tokensOut: u.outputTokens ?? 0, costUsd: cost || costUsd(picked.provider, picked.modelId, u),

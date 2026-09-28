@@ -1,6 +1,6 @@
 # SOP: shopify-speed
 
-Owner: shopify-dev. Output: measurable speed improvements on an UNPUBLISHED copy of the live theme, a before/after report, and a list of app/content changes for CEO approval.
+Owner: web-dev. Output: measurable speed improvements on an UNPUBLISHED copy of the live theme, a before/after report, and a list of app/content changes for CEO approval.
 
 ## Inputs to confirm
 Target pages (default: home, top collection, top product, cart drawer), target metric (Lighthouse mobile score and/or Core Web Vitals), any apps the client refuses to remove. Store access. We never promise a specific score to the client.

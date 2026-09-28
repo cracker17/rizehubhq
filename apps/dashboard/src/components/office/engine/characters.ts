@@ -26,8 +26,11 @@ export interface CharacterFactory {
 export const FIGURE_SCALE = 1.2;
 class ProceduralView implements CharacterView {
   readonly object: Phaser.GameObjects.Graphics;
-  constructor(scene: Phaser.Scene, private look: CharacterLook) {
+  constructor(scene: Phaser.Scene, private look: CharacterLook, private scale = FIGURE_SCALE) {
     this.object = scene.add.graphics();
+    // A soft dark rim so the figures sit in the painted, ink-outlined art style of the background.
+    this.object.postFX?.addGlow(0x1d1510, 2.2, 0, false, 0.1, 6);
+    this.object.postFX?.addShadow(0, 2, 0.06, 0.6, 0x000000, 4, 0.35);
   }
   place(wx: number, wy: number, depth: number) {
     this.object.setPosition(wx, wy);
@@ -35,7 +38,7 @@ class ProceduralView implements CharacterView {
   }
   render(m: Motion, ctx: PoseCtx, time: number) {
     const pose = computePose(m, ctx);
-    this.object.setScale(pose.flip ? -FIGURE_SCALE : FIGURE_SCALE, FIGURE_SCALE);
+    this.object.setScale(pose.flip ? -this.scale : this.scale, this.scale);
     drawFigure(this.object, this.look, pose, time);
   }
   setVisible(v: boolean) { this.object.setVisible(v); }
@@ -45,6 +48,10 @@ class ProceduralView implements CharacterView {
 export const proceduralFactory: CharacterFactory = {
   create: (scene, _id, look) => new ProceduralView(scene, look),
 };
+
+export function scaledProceduralFactory(scale: number): CharacterFactory {
+  return { create: (scene, _id, look) => new ProceduralView(scene, look, scale) };
+}
 
 // ---------------------------------------------------------------- sprite sheets (manifest)
 /**
@@ -124,14 +131,15 @@ export function loadManifestSheets(scene: Phaser.Scene, manifest: OfficeManifest
 }
 
 /** Factory that uses sprite sheets when the manifest has an entry (or a "default"), else procedural. */
-export function manifestFactory(manifest: OfficeManifest | null): CharacterFactory {
+export function manifestFactory(manifest: OfficeManifest | null, figureScale = FIGURE_SCALE): CharacterFactory {
+  const procedural = scaledProceduralFactory(figureScale);
   return {
     create(scene, id, look) {
       const chars = manifest?.characters ?? {};
       const key = chars[id] ? id : chars.default ? 'default' : null;
       const entry = key ? chars[key] : null;
       const texKey = `char-${key}`;
-      if (!entry || !scene.textures.exists(texKey)) return proceduralFactory.create(scene, id, look);
+      if (!entry || !scene.textures.exists(texKey)) return procedural.create(scene, id, look);
       for (const [name, clip] of Object.entries(entry.clips)) {
         const animKey = `${texKey}:${name}`;
         if (!scene.anims.exists(animKey)) {

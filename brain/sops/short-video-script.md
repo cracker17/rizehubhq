@@ -1,6 +1,6 @@
 # SOP: short-video-script
 
-Owner: social-1 or social-2. Output: a shootable script for Reels, TikTok or Shorts (15–60 s) that the Video Editor and Sound & Voice Specialist can execute without questions.
+Owner: writer. Output: a shootable script for Reels, TikTok or Shorts (15–60 s) that the client's creator or editor can shoot and cut without questions.
 
 ## Inputs to confirm
 Client, platform, target length, goal, product/service facts, who appears on camera (founder, creator, voiceover only), available footage, offer and CTA, disclosure needs. A real person's voice or likeness: written consent must be confirmed in the brief, else `ask_ceo`.

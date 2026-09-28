@@ -11,7 +11,7 @@ await build({
   entryPoints: [path.join(here, 'office-preview.tsx')],
   bundle: true, minify: true, format: 'iife', target: 'es2020', jsx: 'automatic',
   outfile: path.join(out, 'office.js'),
-  define: { 'process.env.NODE_ENV': '"production"' },
+  define: { 'process.env.NODE_ENV': '"production"', 'process.env.NEXT_PUBLIC_OFFICE_ASSETS': '"./office"' },
   alias: {
     'next/link': path.join(here, 'shims/next-link.tsx'),
     'next/dynamic': path.join(here, 'shims/next-dynamic.tsx'),
@@ -24,6 +24,8 @@ await build({
 const cssDir = path.join(app, '.next/static/css');
 const css = fs.readdirSync(cssDir).filter((f) => f.endsWith('.css')).map((f) => fs.readFileSync(path.join(cssDir, f), 'utf8')).join('\n');
 fs.writeFileSync(path.join(out, 'office.css'), css);
+fs.mkdirSync(path.join(out, 'office'), { recursive: true });
+for (const f of ['office-bg.webp', 'manifest.json']) fs.copyFileSync(path.join(app, 'public/office', f), path.join(out, 'office', f));
 fs.writeFileSync(path.join(out, 'index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RizeHub HQ Office</title>

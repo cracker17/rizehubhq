@@ -9,7 +9,19 @@ export const PROVIDERS = ['google', 'groq', 'openrouter', 'anthropic', 'openai']
 export type Provider = (typeof PROVIDERS)[number];
 
 const Specs = z.array(z.string()).min(1);
-const ProfileSchema = z.object({ lead: Specs, specialist: Specs, dev: Specs, reports: Specs, qa: Specs, light: Specs });
+// design/writer/sales arrived with the six-agent roster: optional so older profiles still load (they fall back).
+const ProfileSchema = z.object({
+  lead: Specs, specialist: Specs, dev: Specs, reports: Specs, qa: Specs, light: Specs,
+  design: Specs.optional(), writer: Specs.optional(), sales: Specs.optional(),
+});
+
+/** A role a profile doesn't define uses this role's models instead. */
+export const ROLE_FALLBACK: Partial<Record<ModelRole, ModelRole>> = { design: 'specialist', writer: 'specialist', sales: 'specialist' };
+/** Profiles the worker accepts in MODEL_PROFILE / active_profile (config/models.yaml). */
+export const MODEL_PROFILES = ['free', 'paid', 'hybrid', 'claude', 'openai'] as const;
+
+/** Env var that overrides a role's model: MODEL_ID_LEAD, MODEL_ID_DEV, MODEL_ID_DESIGN, … (format provider:model). */
+export const roleEnvVar = (role: ModelRole) => `MODEL_ID_${role.toUpperCase()}`;
 
 const ModelsFile = z.object({
   active_profile: z.string(),
@@ -23,6 +35,23 @@ export function loadModelsConfig(file = config.modelsFile): ModelsConfig {
 }
 
 export interface Candidate { provider: Provider; modelId: string }
+
+/** The model specs of a role in a profile (with the design/writer/sales → specialist fallback). */
+export function profileSpecs(profile: z.infer<typeof ProfileSchema>, role: ModelRole): string[] {
+  return profile[role] ?? profile[ROLE_FALLBACK[role] ?? 'specialist'] ?? [];
+}
+
+/**
+ * Ordered, de-duplicated model specs for a role: agent override (Agents page) → env MODEL_ID_<ROLE> → profile list.
+ * The env override wins over config/models.yaml; the file's list stays as the fallback.
+ */
+export function roleSpecs(role: ModelRole, cfg: ModelsConfig, opts: { profile?: string; env: Record<string, string | undefined>; override?: string | null }): string[] {
+  const profileName = opts.profile ?? cfg.active_profile;
+  const profile = cfg.profiles[profileName];
+  if (!profile) throw new Error(`Unknown model profile "${profileName}"`);
+  const fromEnv = opts.env[roleEnvVar(role)]?.trim();
+  return [...new Set([opts.override, fromEnv, ...profileSpecs(profile, role)].filter((x): x is string => !!x))];
+}
 
 export function parseCandidate(spec: string): Candidate {
   const i = spec.indexOf(':');
@@ -46,7 +75,7 @@ export interface UsageSnapshot {
 }
 
 /**
- * Picks the first usable model for a role: provider key present, under 90% of its
+ * Picks the first usable model for a role (order: roleSpecs): provider key present, under 90% of its
  * free daily cap, and (for paid providers) within the monthly budget.
  * Pure function so it's easy to test; the caller supplies env + usage.
  */
@@ -55,10 +84,7 @@ export function chooseCandidate(
   cfg: ModelsConfig,
   opts: { profile?: string; env: Record<string, string | undefined>; usage: UsageSnapshot; monthlyBudgetUsd: number; override?: string | null },
 ): Candidate {
-  const profileName = opts.profile ?? cfg.active_profile;
-  const profile = cfg.profiles[profileName];
-  if (!profile) throw new Error(`Unknown model profile "${profileName}"`);
-  const specs = opts.override ? [opts.override, ...profile[role]] : profile[role];
+  const specs = roleSpecs(role, cfg, opts);
   const reasons: string[] = [];
   for (const spec of specs) {
     const c = parseCandidate(spec);

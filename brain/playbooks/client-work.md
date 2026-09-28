@@ -7,7 +7,7 @@
 ## Steps
 | # | Owner | Step | Output |
 |---|---|---|---|
-| 1 | coo | Read client brain files + RizeHub workspace (services, open projects). In scope? If not → flag + pipeline `proposal` task for a quote | Scope decision |
+| 1 | coo | Read client brain files + RizeHub workspace (services, open projects). In scope? If not → flag + sales `proposal` task for a quote | Scope decision |
 | 2 | coo | Break into ≤ 2 h tasks, one owner each, 3–7 testable criteria, dependencies (copy → wireframe → build; ads after copy; media parallel) | Plan |
 | 3 | CEO | Approve plan (questions answered first if any) | ✅ |
 | 4 | specialists | Work in task workspace: devs on unpublished theme / `agent/<task-id>` branch / staging / Webflow drafts; designers and writers in files; `report_progress` at milestones; `submit_output` with criteria map | Deliverables |
@@ -15,7 +15,7 @@
 | 5b | specialist | On fail: fixes every item in `qa_feedback`, resubmits; after max revisions → CEO decides | Revision |
 | 6 | CEO | Reviews deliverable + QA report; approve or request changes | ✅ |
 | 7 | worker | Executes approved external actions only (publish theme, merge PR, publish Webflow site, push WP to live, send to client) exactly as approved | Live |
-| 8 | coo / worker | Logs finished deliverables into the client's RizeHub workspace project so the client sees progress; ea includes it in the 18:00 digest | Logged |
+| 8 | coo / worker | Logs finished deliverables into the client's RizeHub workspace project so the client sees progress; the COO includes it in the 18:00 digest | Logged |
 
 ## Approvals
 Plan · each deliverable · every publish/merge/deploy/send · any spend (ads, stock assets, apps).

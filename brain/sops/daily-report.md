@@ -1,11 +1,11 @@
-# SOP: daily-report (EA & Report Desk)
+# SOP: daily-report (COO)
 
 Two scheduled reports, both Asia/Manila time: **Morning brief 08:00** (what needs attention today) and **CEO digest 18:00** (what happened today). Target: readable in 60 seconds on Telegram.
 
 ## 1. Gather (read only)
 - HQ: tasks due today/overdue, tasks done today, QA verdicts, failed/blocked agents, approvals waiting (with age), spend today vs daily budget.
 - RizeHub (`rizehub_readonly`): new leads, lead stage moves, reports due in next 3 days, new sign-ups/payments.
-- `gmail_read`: P1/P2 client threads without a reply; job matches from Job Scout.
+- `gmail_read`: P1/P2 client threads without a reply; job matches from the Sales Agent.
 - `calendar_read`: today's meetings with times in Manila + client time zone.
 - 18:00 digest also collects each active agent's standup (done / next / blocked).
 

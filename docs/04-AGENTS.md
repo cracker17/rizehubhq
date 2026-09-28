@@ -1,21 +1,23 @@
 # 04 · Agents
 
-## The team (22 agents + you)
+## The team (6 agents + you)
 
 ```
                          CEO (Julev) — approves everything
                                    │
-                                  COO  ── plans, routes, escalates
-                                   │
-   ┌────────────┬─────────────┬────┴───────┬──────────────┬──────────────┐
-  Ops          Growth          Dev          Design          Content         QA
-  EA &         Pipeline Desk   Shopify      UI/UX ×2        Social Mktg ×2  QA Lead
-  Report Desk  Social          Webflow      Graphic ×2      SEO Writer ×2   (verifies all work
-  Client       Prospecting     WordPress                                     before it reaches you)
-  Success      Social+Inbound  Full-Stack
-               Job Scout
-                                                             Multimedia: Video Editor · Sound & Voice Specialist
+                                  COO  ── plans, routes, escalates; also runs onboarding,
+                                   │      client reports, the inbox and the daily/weekly briefs
+       ┌──────────────┬────────────┴───┬────────────────┬──────────────┐
+  Web Developer   Graphic Designer  Content Writer    Sales Agent       QA
+  (Shopify,       (UI/UX + ads,     (SEO, social,     (leads, outreach, (verifies all work
+   Webflow, WP,    social graphics,  short-video       replies, proposals, before it reaches you)
+   full-stack)     brand assets)     scripts)          job search)
 ```
+
+Ids: `coo`, `web-dev`, `designer`, `writer`, `sales`, `qa-lead`. `runtime` (role front-matter + `agents.runtime`): `worker` = the
+AI SDK runner in `apps/worker` (COO, QA); `hermes` = a Hermes Agent instance (Web Developer, Graphic Designer, Content Writer, Sales
+Agent; until that runtime lands they run on the worker runner too). The team was 22 agents until migration
+`20260928080000_six_agent_roster.sql`, which moved their work to these six. Video editing and sound/voice work types were dropped.
 
 ## Role file format — `agents/<id>.md`
 
@@ -23,19 +25,20 @@ Each agent is a markdown file with YAML front-matter. The worker loads it as the
 
 ```markdown
 ---
-id: shopify-dev
-name: Shopify Dev
+id: web-dev
+name: Web Developer
 department: dev
-model_role: dev            # lead | specialist | dev | reports | qa | light → resolved via config/models.yaml (see 14)
+model_role: dev            # lead | dev | design | writer | sales | qa → resolved via config/models.yaml (see 14)
+runtime: hermes            # worker | hermes
 max_turns: 60
 budget_usd_per_task: 1.50
 tools: [brain_read, workspace_fs, bash_sandboxed, github, shopify_theme, report_progress, submit_output, ask_ceo]
-work_types: [shopify-section, shopify-page, shopify-theme-fix, shopify-speed]
+work_types: [shopify-section, shopify-page, shopify-theme-fix, shopify-speed, webflow-page, …]
 ---
 
 # Role
-You are the Shopify Developer at RizeHub, a growth agency. You build and fix Shopify
-Online Store 2.0 themes: Liquid sections, blocks, schema settings, metafields, JS/CSS.
+You are the Web Developer at RizeHub, a growth agency. You build and fix Shopify
+Online Store 2.0 themes, Webflow sites, WordPress sites and custom full-stack apps.
 
 # How you work
 1. Read the task, its acceptance criteria, and `brain/clients/<client>/profile.md` + `brand.md`.
@@ -62,86 +65,48 @@ text that should be a schema setting, Lighthouse performance not worse than befo
 
 ## `agents/roster.yaml` — what the COO routes on
 
+`agents/roster.yaml` is the source of truth (`pnpm check:roles` validates it against the role files). In short:
+
 ```yaml
-# work_type → default agent (COO can override with reasons)
+# work_type → owning agent (COO can override with reasons)
 routing:
+  # COO: planning, weekly-summary, inbox-triage, daily-report, client-report, meeting-prep,
+  #      client-onboarding, workspace-setup, access-checklist
+  # sales: lead-finder-search, lead-report, outreach-draft, dm-reply-draft, lead-qualification,
+  #        proposal, follow-up-email, job-search, job-application
+  # web-dev: shopify-section, shopify-page, shopify-theme-fix, shopify-speed, webflow-page, webflow-cms,
+  #          webflow-interaction, wordpress-page, wordpress-plugin, wordpress-fix, web-app, api-integration, automation
+  # designer: wireframe, ui-mockup, ux-audit, ad-creative, social-graphic, brand-asset
+  # writer: seo-article, landing-copy, meta-tags, keyword-research, content-calendar, social-captions, short-video-script
   planning:             coo
-  inbox-triage:         ea
-  daily-report:         ea
-  proposal:             pipeline
-  follow-up-email:      pipeline
-  lead-research:        prospector
-  outreach-draft:       prospector
-  dm-reply-draft:       inbound
-  lead-finder-search:   prospector
-  lead-report:          prospector
-  job-search:           job-scout
-  job-application:      job-scout
-  client-onboarding:    client-success
-  workspace-setup:      client-success
-  access-checklist:     client-success
-  client-report:        ea
-  video-edit:           video-editor
-  reel:                 video-editor
-  subtitles:            video-editor
-  voiceover:            sound-engineer
-  voice-design:         sound-engineer
-  audio-cleanup:        sound-engineer
-  music-sfx:            sound-engineer
-  shopify-section:      shopify-dev
-  shopify-page:         shopify-dev
-  shopify-theme-fix:    shopify-dev
-  webflow-page:         webflow-dev
-  webflow-cms:          webflow-dev
-  wordpress-page:       wordpress-dev
-  wordpress-plugin:     wordpress-dev
-  web-app:              fullstack-dev
-  api-integration:      fullstack-dev
-  wireframe:            [uiux-1, uiux-2]        # list = load-balance by queue length
-  ui-mockup:            [uiux-1, uiux-2]
-  ad-creative:          [graphic-1, graphic-2]
-  social-graphic:       [graphic-1, graphic-2]
-  content-calendar:     [social-1, social-2]
-  social-captions:      [social-1, social-2]
-  seo-article:          [seo-1, seo-2]
-  landing-copy:         [seo-1, seo-2]
-  meta-tags:            [seo-1, seo-2]
+  lead-finder-search:   sales
+  shopify-section:      web-dev
+  wireframe:            designer
+  seo-article:          writer
+  # …
 
 # every deliverable goes through QA
 qa:
   default: qa-lead
-  # later split: dev work → qa-dev, everything else → qa-content
 
-# client platform hints — lets "fix the Madam Muse store" route to shopify-dev without saying Shopify
+# client platform hints — lets "fix the Madam Muse store" route to the developer without saying Shopify
 platform_to_dev:
-  shopify: shopify-dev
-  webflow: webflow-dev
-  wordpress: wordpress-dev
-  custom: fullstack-dev
+  shopify: web-dev
+  webflow: web-dev
+  wordpress: web-dev
+  custom: web-dev
 ```
 
 ## Agent capabilities (what each can actually do)
 
 | Agent | Produces | Tools | Needs your approval for |
 |---|---|---|---|
-| **COO** | Plans, task breakdowns, escalations, weekly summary | brain_read, create_plan, ask_ceo | Every plan (until you enable auto-approve for low-risk) |
-| **EA & Report Desk** | Inbox triage, reply drafts, daily digest, meeting prep, client reports via RizeHub report tools | brain_read, gmail_read, gmail_draft, calendar_read, rizehub_reports | Sending any email, publishing reports |
-| **Pipeline Desk** | Proposals, quotes, follow-up drafts, lead stage updates | brain_read, rizehub_leads, docs_write | Sending proposals / pricing |
-| **Social Prospecting** | Lead Finder searches, researched lead lists, lead reports, outreach drafts | rizehub_leads, web_fetch, pagespeed, brain_read | You send every message yourself |
-| **Job Scout** | Job shortlists, tailored application drafts, follow-up reminders | gmail_read (job alerts), web_fetch (allowed boards/RSS), brain_read (career files) | You submit every application yourself |
-| **Client Success** | RizeHub accounts + workspaces, client brain files, access checklists, welcome/invite drafts | rizehub_onboarding, rizehub_readonly, brain_write (clients/), gmail_draft | Creating accounts/workspaces, sending invites and welcome emails |
-| **Video Editor** | Reels/shorts cuts, ad edits, subtitles, colour grade, B-roll, motion titles, thumbnails with Graphic team | Magnific video tools (cut, concatenate, crop, color grade, upscale, generate), ffmpeg (sandboxed), brain_read (brand) | Sending to client / publishing |
-| **Sound & Voice Specialist** | Voiceovers (TTS), custom voice direction, voice changing, dialogue isolation/cleanup, music beds, SFX, final mix & loudness | Magnific audio tools (tts, voice change, isolate, music, sfx), ffmpeg/sox (sandboxed) | Using a real person's voice (needs their written consent), sending to client |
-| **Social + Inbound** | Comment/DM reply drafts, lead qualification | brain_read, (platform read APIs later) | Posting any reply |
-| **Shopify Dev** | Sections, pages, fixes on unpublished theme | workspace, git, shopify_theme, playwright | Publishing theme, merging |
-| **Webflow Dev** | CMS items, page edits, custom code | webflow_api, workspace, playwright | Publishing site |
-| **WordPress Dev** | Pages, Elementor templates, plugin code | workspace, git, wp_rest (staging) | Pushing to live |
-| **Full-Stack Dev** | Features, APIs, integrations | workspace, git, bash_sandboxed, supabase (dev projects) | Merging, deploying |
-| **UI/UX ×2** | Wireframes, flows, HTML mockups, UX audits | figma_read, image_gen, workspace | Sending to client |
-| **Graphic ×2** | Ad creatives, social graphics, banners | image_gen (Magnific), brain_read | Sending to client / running ads |
-| **Social Mktg ×2** | Calendars, captions, hooks, repurposing | brain_read, web_search | Scheduling/posting |
-| **SEO Writer ×2** | Articles, landing copy, meta, briefs, report commentary | semrush, web_search, brain_read, rizehub_reports (notes only) | Publishing |
-| **QA Lead** | Verdicts, scores, evidence | playwright, lighthouse, web_fetch, brain_read (checklists), link_checker, rizehub_readonly | — (QA only passes/fails) |
+| **COO** | Plans, task breakdowns, escalations, weekly summary; inbox triage, meeting prep, daily digest / morning brief; client onboarding (RizeHub accounts + workspaces, access checklists) and client reports | brain_read/write, create_plan, gmail_read, gmail_draft, calendar_read, rizehub_onboarding, rizehub_reports, rizehub_readonly, ask_ceo | Every plan (until you enable auto-approve for low-risk), sending any email, creating accounts/workspaces, publishing reports |
+| **Web Developer** | Shopify sections/pages/fixes on an unpublished theme, Webflow CMS + pages + interactions, WordPress pages/plugins (staging), full-stack features, APIs, integrations, automations | workspace, git/github, bash_sandboxed, shopify_theme, webflow_api, wp_rest, playwright, lighthouse, vault tools | Publishing a theme/site, pushing to live, merging, deploying |
+| **Graphic Designer** | Wireframes, UI mockups, UX audits, ad creatives, social graphics, brand assets (always a design spec + assets) | figma_read, image_gen (Magnific), workspace, playwright, lighthouse | Sending to client / running ads |
+| **Content Writer** | SEO articles, landing copy, meta tags, keyword research, content calendars, social captions, short-video scripts, report commentary | semrush, web_search, web_fetch, link_checker, rizehub_reports (notes only) | Publishing / scheduling / posting |
+| **Sales Agent** | Lead Finder searches, lead reports, outreach and DM reply drafts, lead qualification, proposals, follow-ups; job shortlists + application drafts | rizehub_leads, gmail_read, gmail_draft, web_fetch, web_search, pagespeed, semrush, job_tracker | You send every message and submit every application yourself; sending proposals / pricing |
+| **QA** | Verdicts, scores, evidence | playwright, lighthouse, pagespeed, link_checker, web_fetch, figma_read, rizehub_readonly, qa_submit_verdict | — (QA only passes/fails) |
 
 ## Client Vault tools (see 09)
 
@@ -159,10 +124,10 @@ Agents only get the vault tools if their role lists them, and only for credentia
 
 | Tool group | Key | Given to |
 |---|---|---|
-| `rizehub_leads` (search, get, notes, lists, stage) | `RIZEHUB_KEY_LEADS` | Social Prospecting, Pipeline Desk |
-| `rizehub_onboarding` (accounts, workspaces, config, invites) | `RIZEHUB_KEY_ONBOARDING` | Client Success |
-| `rizehub_reports` (metrics, generate, notes, publish) | `RIZEHUB_KEY_REPORTS` | EA & Report Desk (all), SEO/Social (notes only) |
-| `rizehub_readonly` | `RIZEHUB_KEY_READONLY` | COO, QA Lead |
+| `rizehub_leads` (search, get, notes, lists, stage) | `RIZEHUB_KEY_LEADS` | Sales Agent |
+| `rizehub_onboarding` (accounts, workspaces, config, invites) | `RIZEHUB_KEY_ONBOARDING` | COO |
+| `rizehub_reports` (metrics, generate, notes, publish) | `RIZEHUB_KEY_REPORTS` | COO (all), Content Writer (notes only) |
+| `rizehub_readonly` | `RIZEHUB_KEY_READONLY` | COO, QA |
 
 Write tools marked external (account/workspace creation, invites, report publishing, lead stage "contacted") always go through an approval first.
 
@@ -185,13 +150,16 @@ Agents never name a model. Each role file sets a `model_role`; the active profil
 | Role | Agents | Free profile (now) | Claude profile (later) |
 |---|---|---|---|
 | `lead` | COO | Gemini Flash → Groq fallback | Opus 5.5 or Sonnet 5 |
-| `qa` | QA Lead | Gemini Flash → Groq fallback | Opus 5.5 or Sonnet 5 |
-| `dev` | Shopify, Webflow, WordPress, Full-Stack | Gemini Flash (draft-for-review mode) | Sonnet 5 |
-| `reports` | EA & Report Desk | Gemini Flash | Sonnet 5 |
-| `specialist` | Everyone else | Gemini Flash → Groq → OpenRouter free | Sonnet 5 |
+| `qa` | QA | Gemini Flash → Groq fallback | Opus 5.5 or Sonnet 5 |
+| `dev` | Web Developer | Gemini Flash (draft-for-review mode) | Sonnet 5 |
+| `design` | Graphic Designer | Gemini Flash → Groq → OpenRouter free | Sonnet 5 |
+| `writer` | Content Writer | Gemini Flash → Groq → OpenRouter free | Sonnet 5 |
+| `sales` | Sales Agent | Gemini Flash → Groq → OpenRouter free | Sonnet 5 |
 | `light` | Agent chat, summaries, digests, routing | Groq small model | Haiku 4.5 |
 
-You can override any single agent from the Agents page (e.g. try the Shopify Dev on Claude for a week and compare QA scores and cost).
+(`specialist` and `reports` remain in `config/models.yaml` as fallbacks: a profile without `design`/`writer`/`sales` uses `specialist`.)
+
+You can override any single agent from the Agents page (e.g. try the Web Developer on Claude for a week and compare QA scores and cost).
 
 Limits enforced by the worker: `max_turns` per task, `budget_usd_per_task`, agent `daily_budget_usd`, global `daily_budget_usd`. On hitting a limit → task `failed`, agent `blocked`, Telegram alert.
 
@@ -209,7 +177,7 @@ brain/qa-checklists/<work_type>.md# one per work type (QA grades against these)
 brain/clients/<slug>/profile.md   # who they are, platform, goals, contacts (no secrets)
 brain/clients/<slug>/brand.md     # colors, fonts, voice, do/don't
 brain/playbooks/*.md              # workflows from 13 (lead-gen, job-hunt, onboarding, monthly-report)
-brain/career/job-filters.md       # roles, rates, hours, red flags (Job Scout)
+brain/career/job-filters.md       # roles, rates, hours, red flags (Sales Agent: job search)
 brain/career/portfolio.md         # portfolio links by platform + resume links
 brain/career/application-style.md # tone rules + example applications that got replies
 brain/company/services.md         # RizeHub packages → which workspace template each uses

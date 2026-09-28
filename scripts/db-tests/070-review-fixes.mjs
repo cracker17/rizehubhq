@@ -24,7 +24,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
   // ---------- 1. only the pausing approval resumes the task ----------
   await step('fix 1: approving a non-pausing external action never re-queues a task waiting on its deliverable', async () => {
     const req = await newRequest('Publish flow');
-    const t = await newTask(req, 'wordpress-dev');
+    const t = await newTask(req, 'web-dev');
     const action = await val(`select request_external_action($1, 'publish', '{"description":"Publish the post"}'::jsonb)`, [t]);
     assert.equal(await status('tasks', t), 'working');
     assert.equal(await val(`select paused_by_approval from tasks where id = $1`, [t]), null);
@@ -40,7 +40,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
 
   await step('fix 1: pausing functions record their approval; an older question cannot resume a failed task', async () => {
     const req = await newRequest('Question flow');
-    const t = await newTask(req, 'webflow-dev');
+    const t = await newTask(req, 'web-dev');
     const q = await val(`select ask_ceo($1, 'Which CMS collection?', '["A","B"]'::jsonb)`, [t]);
     assert.equal(await val(`select paused_by_approval from tasks where id = $1`, [t]), q);
     assert.equal(await val(`select payload->>'pauses_task' from approvals where id = $1`, [q]), 'true');
@@ -57,7 +57,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
 
   await step('fix 1: request_rizehub_action pauses (and resumes) only with p_pause', async () => {
     const req = await newRequest('RizeHub flow');
-    const t = await newTask(req, 'client-success');
+    const t = await newTask(req, 'coo');
     const ap = await val(`select request_rizehub_action($1, 'rizehub.invite', '{"description":"Invite"}'::jsonb, true)`, [t]);
     assert.equal(await status('tasks', t), 'awaiting_ceo');
     assert.equal(await val(`select paused_by_approval from tasks where id = $1`, [t]), ap);
@@ -68,20 +68,20 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
   // ---------- 2. reject a failure = cancel; request closes after every decision kind ----------
   await step('fix 2: rejecting a task_failed approval cancels the task and closes the request', async () => {
     const req = await newRequest('Doomed');
-    const t = await newTask(req, 'social-1');
+    const t = await newTask(req, 'sales');
     await db.query(`select fail_task($1, 'No brand assets')`, [t]);
     const f = await val(`select id from approvals where task_id = $1 and payload->>'type' = 'task_failed'`, [t]);
     assert.equal(await val(`select decide_approval($1, 'reject')`, [f]), 'action_rejected');
     assert.equal(await status('tasks', t), 'cancelled');
     assert.equal(await status('requests', req), 'cancelled');
-    assert.equal(await agent('social-1'), 'idle');
+    assert.equal(await agent('sales'), 'idle');
   });
 
   await step('fix 2: a rejected QA escalation closes the request; blocked dependents are cancelled; done work keeps it "done"', async () => {
     const req = await newRequest('Escalation');
-    const done = await newTask(req, 'uiux-2', 'done');
-    const t = await newTask(req, 'graphic-2');
-    const dep = await newTask(req, 'social-2', 'pending', `{${t}}`);
+    const done = await newTask(req, 'designer', 'done');
+    const t = await newTask(req, 'designer');
+    const dep = await newTask(req, 'writer', 'pending', `{${t}}`);
     await db.exec(`update tasks set max_revisions = 0 where id = '${t}'`);
     await db.query(`select submit_task_output($1, '{"summary":"try"}'::jsonb)`, [t]);
     await db.exec(`update tasks set status = 'qa_reviewing' where id = '${t}'`);
@@ -98,7 +98,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
   // ---------- 3. crash recovery ----------
   await step('fix 3: claims stamp their start; the sweep recovers stalled QA reviews and plans and frees the agents', async () => {
     const req = await newRequest('Stalled review');
-    const t = await newTask(req, 'video-editor', 'qa_pending');
+    const t = await newTask(req, 'designer', 'qa_pending');
     await db.exec(`update tasks set status = 'pending' where status = 'qa_pending' and id <> '${t}'`);
     await db.exec(`update tasks set heartbeat_at = null where id = '${t}'`);
     assert.equal((await one(`select (claim_qa_review()).id`)).id, t);
@@ -119,30 +119,30 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
     // the worker died: 11 minutes later
     await db.exec(`update tasks set heartbeat_at = now() - interval '11 minutes' where id = '${t}';
                    update requests set planning_started_at = now() - interval '11 minutes' where status = 'planning';
-                   update agents set status = 'working', current_task_id = '${t}' where id = 'sound-engineer';`);
+                   update agents set status = 'working', current_task_id = '${t}' where id = 'sales';`);
     assert.ok(await val(`select requeue_stale_tasks()`) >= 2);
     assert.equal(await status('tasks', t), 'qa_pending');
     assert.equal(await status('requests', r), 'staged');
     assert.equal(await val(`select planning_started_at from requests where id = $1`, [r]), null);
     assert.equal(await agent('qa-lead'), 'idle');
     assert.equal(await agent('coo'), 'waiting'); // pending planning_failed approvals from earlier suites
-    assert.equal(await agent('sound-engineer'), 'idle');
-    assert.equal(await val(`select current_task_id from agents where id = 'sound-engineer'`), null);
+    assert.equal(await agent('sales'), 'idle');
+    assert.equal(await val(`select current_task_id from agents where id = 'sales'`), null);
     assert.equal(await val(`select count(*)::int from activity_log where task_id = $1 and action = 'qa.deferred'`, [t]), 1);
     await db.exec(`update requests set status = 'failed' where id = '${r}'`);
   });
 
   // ---------- 4. internal helpers are not callable from a browser session ----------
   await step('fix 4: anon and authenticated (even the CEO) cannot call hq_log / refresh_agent_status / finish_agent_turn / guards', async () => {
-    const calls = [`select hq_log('ceo','approval.approved',null,null,'{"forged":true}'::jsonb)`, `select refresh_agent_status('seo-1')`,
-      `select finish_agent_turn('seo-1')`, `select hq_guard()`, `select hq_can_operate()`];
+    const calls = [`select hq_log('ceo','approval.approved',null,null,'{"forged":true}'::jsonb)`, `select refresh_agent_status('sales')`,
+      `select finish_agent_turn('sales')`, `select hq_guard()`, `select hq_can_operate()`];
     for (const [role, uid] of [['anon', null], ['authenticated', OTHER], ['authenticated', CEO]]) {
       await as(role, uid, async () => {
         for (const sql of calls) await assert.rejects(db.query(sql), /permission denied/, `${role} ${uid ?? ''}: ${sql}`);
       });
     }
     await as('service_role', null, async () => {
-      assert.equal(await val(`select finish_agent_turn('seo-1')`), 'idle');
+      assert.equal(await val(`select finish_agent_turn('sales')`), 'idle');
       assert.equal(await val(`select hq_can_operate()`), true);
     });
     assert.equal(await val(`select count(*)::int from activity_log where detail->>'forged' = 'true'`), 0);
@@ -159,13 +159,13 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
   // ---------- 5. vault 2FA ----------
   let cred;
   const hex = (n) => new Uint8Array(n).fill(0xcd);
-  await step('fix 5: fixture (credential granted to wordpress-dev)', () => as('service_role', null, async () => {
+  await step('fix 5: fixture (credential granted to web-dev)', () => as('service_role', null, async () => {
     cred = await val(`select vault_insert_credential(null, $1, 'wordpress', 'Review WP', 'https://review.example.com/wp-admin', 'hq', 'password',
-                      $2::bytea, $3::bytea, 1, 'app', null, '{https://review.example.com/wp-json}', null, 'ceo', '{wordpress-dev}')`, [CL, hex(40), hex(12)]);
+                      $2::bytea, $3::bytea, 1, 'app', null, '{https://review.example.com/wp-json}', null, 'ceo', '{web-dev}')`, [CL, hex(40), hex(12)]);
   }));
   const ask2fa = async (t) => {
     let id;
-    await as('service_role', null, async () => { id = await val(`select vault_request_2fa($1, 'wordpress-dev', $2, 'Reply with the code')`, [cred, t]); });
+    await as('service_role', null, async () => { id = await val(`select vault_request_2fa($1, 'web-dev', $2, 'Reply with the code')`, [cred, t]); });
     return id;
   };
   const noCodeAnywhere = async (code) => {
@@ -176,7 +176,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
   let t2fa;
   await step('fix 5: a typed answer ("changes") is recorded as approve + code, never logged, handed over once, then scrubbed', async () => {
     const req = await newRequest('2FA flow');
-    t2fa = await newTask(req, 'wordpress-dev');
+    t2fa = await newTask(req, 'web-dev');
     const ap = await ask2fa(t2fa);
     assert.equal(await val(`select paused_by_approval from tasks where id = $1`, [t2fa]), null, '2FA does not pause the task');
     await as('authenticated', CEO, async () => {
@@ -243,11 +243,11 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
     let id;
     await as('service_role', null, async () => {
       id = await val(`select vault_insert_credential(null, $1, 'shopify', 'Review Shopify API', null, null, 'api_token', $2::bytea, $3::bytea, 1,
-                      'none', null, '{https://review.myshopify.com/admin/api}', null, 'ceo', '{shopify-dev}',
+                      'none', null, '{https://review.myshopify.com/admin/api}', null, 'ceo', '{web-dev}',
                       '{"PUT /admin/api/2025-07/themes/123/assets.json"}')`, [CL, hex(40), hex(12)]);
-      const row = (await db.query(`select * from vault_get_for_agent($1, 'shopify-dev')`, [id])).rows[0];
+      const row = (await db.query(`select * from vault_get_for_agent($1, 'web-dev')`, [id])).rows[0];
       assert.deepEqual(row.write_allowlist, ['PUT /admin/api/2025-07/themes/123/assets.json']);
-      const list = await val(`select vault_list_for_agent('shopify-dev', $1)`, [CL]);
+      const list = await val(`select vault_list_for_agent('web-dev', $1)`, [CL]);
       assert.deepEqual(list.granted.find((c) => c.id === id).write_allowlist, ['PUT /admin/api/2025-07/themes/123/assets.json']);
       await assert.rejects(db.query(`select vault_insert_credential(null, $1, 'shopify', 'Bad', null, null, 'api_token', $2::bytea, $3::bytea, 1,
                       'none', null, '{}', null, 'ceo', '{}', '{"DELETE /admin/api/x"}')`, [CL, hex(4), hex(4)]), /write allowlist/);
@@ -269,8 +269,8 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
   // ---------- 7. QA that never produces a verdict ----------
   await step('fix 7: the 3rd QA attempt without a verdict escalates ("qa_stuck"); approve retries QA, reject cancels', async () => {
     const req = await newRequest('QA stuck');
-    const t = await newTask(req, 'fullstack-dev', 'qa_reviewing');
-    const other = await newTask(req, 'seo-2', 'qa_reviewing');
+    const t = await newTask(req, 'sales', 'qa_reviewing');
+    const other = await newTask(req, 'writer', 'qa_reviewing');
     assert.equal(await val(`select qa_review_failed($1, 'bad JSON')`, [t]), 'retry');
     assert.equal(await status('tasks', t), 'qa_pending');
     await db.exec(`update tasks set status = 'qa_reviewing' where id = '${t}'`);
@@ -280,7 +280,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
     assert.equal(await status('tasks', t), 'failed');
     const ap = await val(`select paused_by_approval from tasks where id = $1`, [t]);
     assert.equal(await val(`select payload->>'type' from approvals where id = $1`, [ap]), 'qa_stuck');
-    assert.equal(await agent('fullstack-dev'), 'waiting');
+    assert.equal(await agent('sales'), 'waiting');
     assert.equal(await val(`select qa_review_failed($1, 'x')`, [t]), 'not_under_qa');
     assert.equal(await val(`select decide_approval($1, 'approve')`, [ap]), 'action_approved');
     assert.equal(await status('tasks', t), 'qa_pending');
@@ -295,7 +295,7 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
 
   await step('fix 7: a recorded verdict resets the attempt counter', async () => {
     const req = await newRequest('QA reset');
-    const t = await newTask(req, 'fullstack-dev', 'qa_reviewing');
+    const t = await newTask(req, 'sales', 'qa_reviewing');
     await val(`select qa_review_failed($1, 'x')`, [t]);
     await db.exec(`update tasks set status = 'qa_reviewing' where id = '${t}'`);
     assert.equal(await val(`select qa_attempts from tasks where id = $1`, [t]), 1);

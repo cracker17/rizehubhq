@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
-import { MODEL_ROLES } from '@rizehubhq/shared';
+import { AGENT_RUNTIME, MODEL_ROLES } from '@rizehubhq/shared';
 import { config } from './config';
 
 export const RoleFrontMatter = z.object({
@@ -10,6 +10,8 @@ export const RoleFrontMatter = z.object({
   name: z.string().min(1),
   department: z.string().min(1),
   model_role: z.enum(MODEL_ROLES),
+  /** worker = AI SDK runner; hermes = Hermes Agent instance (until that runtime ships, hermes roles also run on the worker runner). */
+  runtime: z.enum(AGENT_RUNTIME),
   max_turns: z.number().int().positive().max(200),
   budget_usd_per_task: z.number().nonnegative(),
   tools: z.array(z.string()).min(1),

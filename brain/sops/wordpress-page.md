@@ -1,6 +1,6 @@
 # SOP: wordpress-page
 
-Owner: wordpress-dev. Output: a page or template built on STAGING (block editor/FSE or Elementor Pro, matching the site), saved as draft, tested, with a push-to-live plan for CEO approval.
+Owner: web-dev. Output: a page or template built on STAGING (block editor/FSE or Elementor Pro, matching the site), saved as draft, tested, with a push-to-live plan for CEO approval.
 
 ## Inputs to confirm
 Site + staging URL, builder in use, page purpose/slug, design (Figma/reference), approved copy, licensed assets, CTA/form destinations, SEO plugin in use (Yoast/Rank Math) and meta values. No staging → `ask_ceo`. Missing copy/CTA URL → `ask_ceo`.

@@ -5,19 +5,24 @@ import type { ModelRole } from '@rizehubhq/shared';
 import { chooseCandidate, createModel, QuotaExhaustedError, type Candidate, type ModelsConfig, type Provider } from './router';
 import { manilaDay, manilaMonth } from '../budget';
 
-/** USD per million tokens. Anthropic prices from docs/14 (Sep 2026). */
-export interface Price { input: number; output: number; cacheRead?: number }
+/**
+ * USD per million tokens. Anthropic prices from docs/14 (Sep 2026): cache writes cost 1.25× input, cache reads 0.1×
+ * input (Opus 5.5: 0.05×). `cacheWrite`/`cacheRead` default to the input price when a provider has no cache pricing.
+ */
+export interface Price { input: number; output: number; cacheRead?: number; cacheWrite?: number }
 export const PRICES: { match: RegExp; price: Price }[] = [
-  { match: /^claude-opus/, price: { input: 4, output: 20, cacheRead: 0.2 } },
-  { match: /^claude-sonnet/, price: { input: 2, output: 10, cacheRead: 0.2 } },
-  { match: /^claude-haiku/, price: { input: 1, output: 5, cacheRead: 0.1 } },
-  // OpenAI: placeholder tiers until real prices are copied from OpenAI's pricing page.
-  { match: /nano/, price: { input: 0.1, output: 0.4 } },
-  { match: /mini/, price: { input: 0.4, output: 1.6 } },
-  { match: /^gpt-/, price: { input: 2, output: 10 } },
+  { match: /^claude-opus-5/, price: { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 } },
+  { match: /^claude-opus/, price: { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 } },
+  { match: /^claude-sonnet/, price: { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 } },
+  { match: /^claude-haiku/, price: { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 } },
+  // OpenAI: PLACEHOLDER tiers, not official prices. Copy the real per-model prices from OpenAI's pricing page
+  // before relying on cost numbers for QA (paid profile). OpenAI caches prompts automatically (reads ~0.1× input).
+  { match: /nano/, price: { input: 0.1, output: 0.4, cacheRead: 0.01 } },
+  { match: /mini/, price: { input: 0.4, output: 1.6, cacheRead: 0.04 } },
+  { match: /^gpt-/, price: { input: 2, output: 10, cacheRead: 0.2 } },
 ];
 /** Unknown model on a paid provider: price it like a mid-tier model rather than as free. */
-export const FALLBACK_PAID_PRICE: Price = { input: 2, output: 10, cacheRead: 0.2 };
+export const FALLBACK_PAID_PRICE: Price = { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 };
 export const PAID_PROVIDERS: readonly string[] = ['anthropic', 'openai'];
 
 export function priceFor(provider: string, modelId: string): Price | null {
@@ -25,13 +30,40 @@ export function priceFor(provider: string, modelId: string): Price | null {
   return PRICES.find((p) => p.match.test(modelId))?.price ?? FALLBACK_PAID_PRICE;
 }
 
-export function costUsd(provider: string, modelId: string, usage: Partial<LanguageModelUsage>): number {
+/**
+ * Token usage in one shape for every provider. inputTokens is ALL input (fresh + cache reads + cache writes);
+ * cachedInputTokens are cache reads; cacheWriteTokens are tokens written to the prompt cache (Anthropic).
+ */
+export interface TokenUsage { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; cacheWriteTokens?: number }
+
+type ProviderMetadata = Record<string, Record<string, unknown> | undefined> | undefined;
+
+/**
+ * SDK usage → TokenUsage. The Anthropic provider reports inputTokens WITHOUT cache reads/writes (Anthropic's
+ * input_tokens); the write count is in providerMetadata.anthropic.cacheCreationInputTokens. OpenAI, Google and
+ * Groq already include cached tokens in inputTokens.
+ */
+export function normalizeUsage(provider: string, usage: Partial<LanguageModelUsage> | undefined, providerMetadata?: ProviderMetadata): TokenUsage {
+  const input = usage?.inputTokens ?? 0;
+  const output = usage?.outputTokens ?? 0;
+  const read = usage?.cachedInputTokens ?? 0;
+  if (provider === 'anthropic') {
+    const write = Number(providerMetadata?.anthropic?.cacheCreationInputTokens ?? 0) || 0;
+    return { inputTokens: input + read + write, outputTokens: output, cachedInputTokens: read, cacheWriteTokens: write };
+  }
+  return { inputTokens: input, outputTokens: output, cachedInputTokens: Math.min(read, input), cacheWriteTokens: 0 };
+}
+
+/** Cost of normalized usage (TokenUsage: inputTokens includes cache reads and writes). */
+export function costUsd(provider: string, modelId: string, usage: TokenUsage): number {
   const p = priceFor(provider, modelId);
   if (!p) return 0;
   const input = usage.inputTokens ?? 0;
-  const cached = Math.min(usage.cachedInputTokens ?? 0, input);
+  const read = Math.min(usage.cachedInputTokens ?? 0, input);
+  const write = Math.min(usage.cacheWriteTokens ?? 0, input - read);
+  const fresh = input - read - write;
   const output = usage.outputTokens ?? 0;
-  const usd = ((input - cached) * p.input + cached * (p.cacheRead ?? p.input) + output * p.output) / 1_000_000;
+  const usd = (fresh * p.input + read * (p.cacheRead ?? p.input) + write * (p.cacheWrite ?? p.input) + output * p.output) / 1_000_000;
   return Math.round(usd * 1e6) / 1e6;
 }
 
@@ -39,8 +71,8 @@ export interface PickedModel {
   model: LanguageModel;
   provider: string;
   modelId: string;
-  /** Records one model call (a step). Returns the call's cost in USD. */
-  recordCall(usage: Partial<LanguageModelUsage>): number;
+  /** Records one model call (a step): SDK usage + the call's providerMetadata (cache writes). Returns the cost in USD. */
+  recordCall(usage: Partial<LanguageModelUsage>, providerMetadata?: ProviderMetadata): number;
 }
 
 export type PickModel = (role: ModelRole, opts?: { override?: string | null }) => Promise<PickedModel>;
@@ -122,10 +154,10 @@ export class ModelPicker {
     const model = await (this.opts.create ?? createModel)(c);
     return {
       model, provider: c.provider, modelId: c.modelId,
-      recordCall: (usage) => {
+      recordCall: (usage, providerMetadata) => {
         this.rollDay();
         this.requestsToday[c.provider] = (this.requestsToday[c.provider] ?? 0) + 1;
-        const usd = costUsd(c.provider, c.modelId, usage);
+        const usd = costUsd(c.provider, c.modelId, normalizeUsage(c.provider, usage, providerMetadata));
         this.spentThisMonthUsd += usd;
         return usd;
       },
@@ -133,11 +165,12 @@ export class ModelPicker {
   };
 }
 
-/** Sums SDK usage objects (undefined counts as 0). */
-export function addUsage(a: Partial<LanguageModelUsage>, b: Partial<LanguageModelUsage>) {
+/** Sums normalized usage (undefined counts as 0). */
+export function addUsage(a: TokenUsage, b: TokenUsage): Required<TokenUsage> {
   return {
     inputTokens: (a.inputTokens ?? 0) + (b.inputTokens ?? 0),
     outputTokens: (a.outputTokens ?? 0) + (b.outputTokens ?? 0),
     cachedInputTokens: (a.cachedInputTokens ?? 0) + (b.cachedInputTokens ?? 0),
+    cacheWriteTokens: (a.cacheWriteTokens ?? 0) + (b.cacheWriteTokens ?? 0),
   };
 }

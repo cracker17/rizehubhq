@@ -1,6 +1,6 @@
-# Job filters (Job Scout reads this before every job-search)
+# Job filters (the Sales Agent reads this before every job-search)
 
-> Starter template. Lines marked `{{…}}` are placeholders the CEO must fill. If a placeholder affects a decision (e.g. rate floor), Job Scout asks the CEO instead of guessing.
+> Starter template. Lines marked `{{…}}` are placeholders the CEO must fill. If a placeholder affects a decision (e.g. rate floor), the Sales Agent asks the CEO instead of guessing.
 
 ## Target roles
 - Shopify / Shopify Liquid Developer (OS 2.0 themes, sections, speed, CRO pages)

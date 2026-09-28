@@ -1,6 +1,6 @@
 # SOP: shopify-page
 
-Owner: shopify-dev. Output: a new page, landing page, product or collection template (JSON template + sections) on an UNPUBLISHED theme, ready for CEO review.
+Owner: web-dev. Output: a new page, landing page, product or collection template (JSON template + sections) on an UNPUBLISHED theme, ready for CEO review.
 
 ## Inputs to confirm
 Page purpose and target URL, template type (page/product/collection/custom), approved copy (from `landing-copy` task or client), wireframe/mockup, assets, primary CTA and its destination, SEO title/description, tracking needs. Missing copy/CTA URL → `ask_ceo`; do not write marketing copy yourself.
