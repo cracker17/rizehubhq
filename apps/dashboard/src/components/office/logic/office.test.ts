@@ -10,7 +10,7 @@ import { createMotion, setGoal, tick, trigger, isAtGoal, MICRO_MAX, type Goal, t
 import { deriveOffice, diffEvents, handoverTarget, planningInfo } from './director';
 import { applyOverlay, emptyOverlay, simStep } from './demoSim';
 import { mulberry32 } from './rng';
-import { pickPose } from '../engine/characters';
+import { gameState, pickPose, RALLY_HIT } from '../engine/characters';
 import { demoSnapshot } from '../../../lib/mock';
 import type { HqSnapshot } from '../../../lib/data/types';
 
@@ -372,4 +372,16 @@ test('gym: reachable from the lobby, equipment spots have their loops', () => {
   assert.equal(OFFICE.spots.find((s) => s.id === out.get('a'))!.kind, 'gym');
   assert.equal(OFFICE.spots.find((s) => s.id === out.get('b'))!.kind, 'gym');
   assert.notEqual(OFFICE.spots.find((s) => s.id === out.get('c'))!.kind, 'gym'); // two machines: the third falls back
+});
+
+test('games: players swing when the ball reaches them, then one celebrates and one groans', () => {
+  // side 0 hits at the start of a crossing, side 1 half a back-and-forth later
+  const a0 = gameState(0.01, 0); const b0 = gameState(0.01, 1);
+  assert.equal(a0.state, 'play'); assert.ok(a0.swing > 0.9 && b0.swing < 0.1);
+  const a1 = gameState(RALLY_HIT, 0); const b1 = gameState(RALLY_HIT, 1);
+  assert.ok(b1.swing > 0.9 && a1.swing < 0.1);
+  // the point: exactly one winner, both sides agree
+  const end = 7 * RALLY_HIT + 0.5;
+  const w = gameState(end, 0); const l = gameState(end, 1);
+  assert.deepEqual([w.state, l.state].sort(), ['lose', 'win']);
 });

@@ -201,8 +201,8 @@ export class FurnitureLayer {
     const frac = Math.abs(turn - Math.round(turn));
     c.img.setScale(1 - frac * 0.35, 1);
     // Someone sitting with their back to us is behind the backrest; facing us, the chair is behind them.
-    const backToUs = c.seat.face === 'up' || c.seat.face === 'left';
-    c.img.setDepth(p.y + (occupied ? (backToUs ? 3 : 1) : 0.5));
+    // The seated person is always drawn over the chair (their back covers the backrest seen from behind).
+    c.img.setDepth(p.y + (occupied ? 1 : 0.5));
   }
 
   destroy() {

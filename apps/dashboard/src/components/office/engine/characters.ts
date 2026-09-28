@@ -116,14 +116,25 @@ class PoseView implements CharacterView {
   private shadow: Phaser.GameObjects.Ellipse;
   private base: number;
   private current = '';
+  private emote: Phaser.GameObjects.Text;
+  private emoteText = '';
   constructor(scene: Phaser.Scene, private who: string, private c: PoseCharacter, standHeight: number, private isCeo: boolean) {
     this.base = standHeight / c.heightPx;
     this.shadow = scene.add.ellipse(0, 0, standHeight * 0.34, standHeight * 0.1, 0x1b1209, 0.22);
     this.img = scene.add.image(0, 0, poseKey(who, 'stand'));
-    this.object = scene.add.container(0, 0, [this.shadow, this.img]);
+    this.emote = scene.add.text(0, -standHeight * 1.12, '', {
+      fontFamily: '"Inter", ui-sans-serif, system-ui, sans-serif', fontSize: `${Math.round(standHeight * 0.2)}px`, fontStyle: '800',
+      color: '#ffffff', backgroundColor: 'rgba(15,12,40,0.82)', padding: { x: 10, y: 5 },
+    }).setOrigin(0.5, 1).setVisible(false);
+    this.object = scene.add.container(0, 0, [this.shadow, this.img, this.emote]);
+  }
+  private setEmote(text: string) {
+    if (text === this.emoteText) return;
+    this.emoteText = text;
+    this.emote.setText(text).setVisible(!!text);
   }
   place(wx: number, wy: number, depth: number) { this.object.setPosition(wx, wy); this.object.setDepth(depth); }
-  render(m: Motion, _ctx: PoseCtx, time: number) {
+  render(m: Motion, ctx: PoseCtx, time: number) {
     const has = (p: PoseName) => !!this.c.poses[p];
     let { pose, flip } = pickPose(m, has, this.isCeo);
     if (!has(pose)) pose = 'stand';
@@ -141,13 +152,39 @@ class PoseView implements CharacterView {
     else if (m.loop === 'treadmill' && m.at) { bob = -Math.abs(Math.sin(m.clock * 9)) * 0.03 * s * this.c.heightPx - 0.035 * s * this.c.heightPx; rot = Math.sin(m.clock * 9) * 0.025; }
     else if (m.loop === 'curl' && pose === 'curl') { sy += Math.sin(t * 3.2) * 0.01; rot = Math.sin(t * 3.2) * 0.012; }
     else if (seated && ['type', 'write', 'draw', 'review', 'call', 'ceo_desk'].includes(m.loop)) { bob = Math.sin(t * 13) * 0.006 * s * this.c.heightPx; }
+    // Games: swing when the ball comes to you, then celebrate or groan at the end of each point.
+    let dx = 0;
+    let emote = '';
+    const game = (m.loop === 'pingpong' || m.loop === 'foosball') && m.at && ctx.pairPhase !== undefined;
+    if (game) {
+      const g = gameState(time, ctx.pairSide ?? 0, m.loop === 'foosball');
+      const H = s * this.c.heightPx;
+      if (g.state === 'play') {
+        const dir = flip ? -1 : 1;
+        rot = g.swing * 0.2 * dir - (1 - g.swing) * 0.03 * dir;
+        dx = g.swing * 0.08 * H * dir;
+        bob = -g.swing * 0.03 * H + Math.sin(time * 6 + m.seed * 5) * 0.008 * H; // ready bounce
+        sy += Math.sin(time * 6 + m.seed * 5) * 0.012;
+      } else if (g.state === 'win') {
+        bob = -Math.abs(Math.sin(g.k * Math.PI * 3)) * 0.12 * H;
+        rot = Math.sin(g.k * Math.PI * 6) * 0.07;
+        sy += 0.04;
+        emote = g.k < 0.95 ? ['Yes!! 🎉', 'Point! 🔥', 'Let’s go! 💪'][g.n % 3] : '';
+      } else if (g.state === 'lose') {
+        sy -= 0.05 * Math.sin(Math.min(1, g.k * 2) * Math.PI / 2);
+        rot = (flip ? 1 : -1) * 0.1 * Math.min(1, g.k * 3);
+        bob = 0.02 * H;
+        emote = g.k < 0.95 ? ['Argh 😩', 'Noo! 😫', 'Lucky… 😤'][g.n % 3] : '';
+      }
+    }
+    this.setEmote(emote);
     if (m.gesture) { const g = m.gesture.t / m.gesture.dur; bob -= Math.sin(g * Math.PI * 3) * (m.gesture.name === 'done' ? 0.07 : 0.03) * s * this.c.heightPx; }
     if (m.micro?.name === 'stretch') sy += Math.sin((m.micro.t / m.micro.dur) * Math.PI) * 0.05;
     if (m.phase === 'sitting_down' || m.phase === 'standing_up') sy *= 0.94;
     const sitLift = (seated ? (pose === 'sit_type' ? 0.28 : pose === 'sofa_back' ? 0.2 : 0.25) : 0) * s * this.c.heightPx;
     this.img.setOrigin(flip ? 1 - e.ax : e.ax, e.ay);
     this.img.setScale(flip ? -s : s, s * sy);
-    this.img.setPosition(0, bob - sitLift);
+    this.img.setPosition(dx, bob - sitLift);
     this.img.setRotation(rot);
     const walkingShadow = m.phase === 'walking' ? 0.85 + Math.abs(Math.sin(m.walkCycle)) * 0.1 : 1;
     this.shadow.setScale(seated ? 1.3 : walkingShadow, seated ? 1.1 : 1);
@@ -155,6 +192,25 @@ class PoseView implements CharacterView {
   }
   setVisible(v: boolean) { this.object.setVisible(v); }
   destroy() { this.object.destroy(); }
+}
+
+/**
+ * Shared clock of a paired game (both players and the ball derive from it, so they stay in sync):
+ * a rally of hits, then ~2.2 s where one side won the point. Pure (tested).
+ */
+export const RALLY_HIT = 0.8; // seconds per crossing (half of the 1.6 s back-and-forth)
+export function gameState(time: number, side: 0 | 1, foosball = false) {
+  const hits = 7 + 0; const rally = hits * RALLY_HIT; const pause = 2.2; const period = rally + pause;
+  const n = Math.floor(time / period); const tt = time - n * period;
+  if (tt >= rally) {
+    const winner = ((n * 2654435761) >>> 0) % 2;
+    return { state: winner === side ? 'win' as const : 'lose' as const, k: (tt - rally) / pause, swing: 0, n };
+  }
+  // ball phase 0..1 over a back-and-forth; side 0 hits at 0, side 1 at 0.5
+  const ph = (tt / (2 * RALLY_HIT)) % 1;
+  const d = side === 0 ? Math.min(ph, 1 - ph) : Math.abs(ph - 0.5);
+  const swing = foosball ? Math.exp(-((d / 0.12) ** 2)) : Math.exp(-((d / 0.07) ** 2));
+  return { state: 'play' as const, k: ph, swing, n };
 }
 
 /** Painted pose sprites when the manifest has them for this character, else the procedural figure. */

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { AlertTriangle, Expand, Hand, Hourglass, Maximize2, MessageSquareMore, Minimize, Minus, Moon, Plus, Scan, Sun, SunMoon, Volume2, VolumeX } from 'lucide-react';
+import { AlertTriangle, Expand, Hand, Hourglass, Maximize2, MessageSquareMore, Minimize, Minus, Moon, Plus, Scan, Sun, SunMoon, Tag, Volume2, VolumeX } from 'lucide-react';
 import type { HqSnapshot } from '@/lib/data/types';
 import { deriveOffice, diffEvents, type AgentView, type OfficeModel } from './logic/director';
 import { LAYOUT, type XY } from './logic/layout';
@@ -64,6 +64,8 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
   const [minute, setMinute] = useState(() => manilaMinutes());
   const [lightMode, setLightMode] = useState<LightMode>('auto');
   const [music, setMusic] = useState(() => officeAudio.musicOn);
+  // Room signs are off by default (the rooms read on their own); the toolbar can show them.
+  const [labels, setLabels] = useState(false);
   useEffect(() => officeAudio.onChange(setMusic), []);
   const light = lightMode === 'day' ? DAY_LIGHT : lightMode === 'night' ? NIGHT_LIGHT : ambientAt(minute);
   const [near, setNear] = useState<string | null>(null);
@@ -233,7 +235,7 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
           </div>
 
           {/* room signs */}
-          {LAYOUT.rooms.map((r) => (
+          {labels && LAYOUT.rooms.map((r) => (
             <div key={r.id} className="absolute" style={{ ...at(r.label), transform: 'translate(-50%, -50%) scale(var(--inv))' }}>
               <span className={clsx('block whitespace-nowrap rounded-full border border-black/10 bg-[#fbf8f2]/95 font-semibold text-[#2b2750] shadow-[0_2px_6px_rgba(0,0,0,.28)]',
                 compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-[12px]')}>
@@ -290,6 +292,9 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
         </select>
         <ToolButton label={isFs ? 'Exit full screen' : 'Full screen'} onClick={toggleFs}>
           {isFs ? <Minimize size={16} /> : <Expand size={16} />}
+        </ToolButton>
+        <ToolButton label={labels ? 'Hide room names' : 'Show room names'} onClick={() => setLabels((v) => !v)}>
+          <Tag size={16} className={labels ? 'text-white' : undefined} />
         </ToolButton>
         <ToolButton label={music ? 'Mute music' : 'Play music'} onClick={() => officeAudio.setMusic(!music)}>
           {music ? <Volume2 size={16} /> : <VolumeX size={16} />}

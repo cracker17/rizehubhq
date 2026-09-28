@@ -11,7 +11,7 @@ import { createMotion, setGoal, tick, trigger, type Goal, type Motion } from '..
 import { deskGoal, type AgentView, type OfficeEvent, type OfficeModel, type ScreenApp } from '../logic/director';
 import { hashString, mulberry32 } from '../logic/rng';
 import { CEO_LOOK, lookFor } from './looks';
-import { loadManifestSheets, manifestFactory, type CharacterFactory, type CharacterView, type OfficeManifest } from './characters';
+import { gameState, loadManifestSheets, manifestFactory, type CharacterFactory, type CharacterView, type OfficeManifest } from './characters';
 import type { Item } from './pose';
 import { FurnitureLayer, loadFurniture, type SeatUser } from './furniture';
 import { OccluderLayer } from './occluders';
@@ -478,7 +478,8 @@ export class OfficeScene extends Phaser.Scene {
     const vy1 = this.camY + Hd / (2 * z) + 260;
 
     const t = time / 1000;
-    const rally = (t / 1.6) % 1;
+    const rallyState = gameState(t, 0);
+    const rally = rallyState.state === 'play' ? rallyState.k : -1;
     let near: string | null = null;
     let nearD = 1.6;
     const ceo = this.chars.get(CEO_ID);
@@ -510,9 +511,9 @@ export class OfficeScene extends Phaser.Scene {
       if (!onScreen) continue;
       const spot = m.goal?.key.startsWith('spot:') ? m.goal.key.slice(5) : '';
       const side: 0 | 1 = spot.endsWith('-b') ? 1 : 0;
-      const pairPhase = m.loop === 'pingpong' ? rally : m.loop === 'chat' ? ((t / 7 + (hashString(spot.slice(0, -2)) % 100) / 100) % 1) : undefined;
+      const pairPhase = m.loop === 'pingpong' || m.loop === 'foosball' ? Math.max(0, rally) : m.loop === 'chat' ? ((t / 7 + (hashString(spot.slice(0, -2)) % 100) / 100) % 1) : undefined;
       const lf = m.loop === 'raise_hand' || m.micro?.name === 'look_ceo' ? this.facingOnScreen(m.pos, this.map.ceoSeat) : undefined;
-      c.view.render(m, { pairPhase, pairSide: side, lookFacing: lf, carry: c.carry }, t);
+      c.view.render(m, { pairPhase, pairSide: side, lookFacing: lf, carry: c.carry }, time / 1000);
       if (ceo && c.id !== CEO_ID && this.opts.avatar) {
         const d = Math.hypot(m.pos.x - ceo.motion.pos.x, m.pos.y - ceo.motion.pos.y);
         if (d < nearD) { nearD = d; near = c.id; }
@@ -548,7 +549,7 @@ export class OfficeScene extends Phaser.Scene {
     this.fire.setAlpha(0.16 + this.ambient.lamps * 0.5 + Math.sin(t * 7.3) * 0.03 + Math.sin(t * 13.1) * 0.02);
     // ping-pong ball when both players are at the table
     const at = (key: string) => [...this.chars.values()].find((c) => !c.hidden && c.motion.goal?.key === key && c.motion.at === key);
-    if (at('spot:pp-a') && at('spot:pp-b')) {
+    if (rally >= 0 && at('spot:pp-a') && at('spot:pp-b')) {
       const s = rally < 0.5 ? rally * 2 : 2 - rally * 2;
       const A = W(988, 612);
       const B = W(866, 700);
