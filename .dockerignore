@@ -1,6 +1,21 @@
+# Keep the build context small and secret-free. agents/, brain/, config/ stay IN (images copy them as a fallback).
 **/node_modules
 **/.next
+**/dist
+**/dist-preview
+**/*.tsbuildinfo
+**/.turbo
 .git
+.github
 .env
 .env.*
+!.env.example
 workspaces
+backups
+supabase/.temp
+supabase/.branches
+rizehub-agent-api
+deploy
+docs
+*.log
+.DS_Store

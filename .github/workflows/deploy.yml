@@ -1,0 +1,66 @@
+# Auto-deploy to the VPS after CI passes on main. OFF until you set the repository VARIABLE
+# DEPLOY_ENABLED=true (Settings → Secrets and variables → Actions → Variables).
+# Secrets needed: VPS_HOST (IP or hostname), VPS_USER (rizehq), VPS_SSH_KEY (private key whose .pub is in
+# ~rizehq/.ssh/authorized_keys). Optional: VPS_PORT (default 22), VPS_KNOWN_HOSTS (output of
+# `ssh-keyscan -t ed25519 <host>`; without it the host key is trusted on first use for every run),
+# variable VPS_APP_DIR (default /home/rizehq/rizehub-hq).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          HOST: ${{ secrets.VPS_HOST }}
+          PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          if [ -n "$KNOWN_HOSTS" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else ssh-keyscan -p "$PORT" -t ed25519 "$HOST" > ~/.ssh/known_hosts 2>/dev/null; fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Run deploy/update.sh on the VPS
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USER_NAME: ${{ secrets.VPS_USER }}
+          PORT: ${{ secrets.VPS_PORT || '22' }}
+          APP_DIR: ${{ vars.VPS_APP_DIR || '/home/rizehq/rizehub-hq' }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          echo "Deploying ${SHA} to ${USER_NAME}@${HOST}:${APP_DIR}"
+          ssh -i ~/.ssh/id_deploy -p "$PORT" -o BatchMode=yes -o ServerAliveInterval=30 \
+            "${USER_NAME}@${HOST}" "cd '${APP_DIR}' && ./deploy/update.sh"
+
+      - name: Public health check
+        run: |
+          for _ in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 10 https://hq.rizehub.ph/api/health; then echo; exit 0; fi
+            sleep 10
+          done
+          echo "https://hq.rizehub.ph/api/health did not answer (proxy/DNS/TLS?)"; exit 1

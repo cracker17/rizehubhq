@@ -4,5 +4,6 @@ import { vaultTools } from './vault';
 import { rizehubTools } from './rizehub';
 import { devTools } from './dev';
 import { researchTools } from './research';
+import { brainWriteTools } from './brainWrite';
 
-export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools, devTools, researchTools];
+export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools, devTools, researchTools, brainWriteTools];

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { APICallError } from 'ai';
-import { buildTaskPrompt, runTask } from './runner';
+import { buildTaskPrompt, buildTools, runTask } from './runner';
 import { FakeHqDb } from './fakeHqDb';
 import { loadRole } from './roles';
 import { makeDeps, mockModel, promptText, textResponse, toolCalls } from './testing';
@@ -54,13 +54,26 @@ test('tool calls → report_progress + submit_output recorded; run stops after s
 
 test('tools not built yet are stubs that tell the agent to degrade gracefully', async () => {
   const { db, task } = setup();
-  const model = mockModel([
-    toolCalls([{ name: 'semrush', input: { request: 'keyword volume for shopify speed' } }]),
-    toolCalls([{ name: 'submit_output', input: { summary: 'done without semrush' } }]),
-  ]);
-  const r = await runTask(task, makeDeps({ db, model }));
-  assert.equal(r.status, 'submitted');
-  assert.match(promptText(model.doGenerateCalls[1]!), /Tool \\"semrush\\" is not connected yet \(milestone M10\)/);
+  const role = { ...loadRole('seo-1'), tools: [...loadRole('seo-1').tools, 'future_tool'] };
+  const tools = buildTools({ task, role, deps: makeDeps({ db, model: mockModel([]) }), state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } });
+  const exec = tools.future_tool?.execute as ((input: unknown, opts: unknown) => Promise<string>) | undefined;
+  assert.ok(exec, 'unknown tool is registered as a stub');
+  const msg = await exec({ request: 'x' }, { toolCallId: 't1', messages: [] });
+  assert.match(msg, /Tool "future_tool" is not connected yet/);
+});
+
+test('every tool named in a role file has a real implementation', () => {
+  const { db, task } = setup();
+  const deps = makeDeps({ db, model: mockModel([]) });
+  const known = new Set(['create_plan', 'qa_submit_verdict']); // handled outside task runs (planner / QA)
+  for (const id of ['coo','ea','client-success','pipeline','prospector','inbound','job-scout','shopify-dev','webflow-dev','wordpress-dev','fullstack-dev','uiux-1','graphic-1','social-1','seo-1','video-editor','sound-engineer','qa-lead']) {
+    const role = loadRole(id);
+    const tools = buildTools({ task, role, deps, state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } });
+    for (const name of role.tools) {
+      if (known.has(name)) continue;
+      assert.ok(!String(tools[name]?.description ?? '').includes('(not connected yet)'), `${id}: ${name} is still a stub`);
+    }
+  }
 });
 
 test('model ends without submit_output → final text saved as output', async () => {

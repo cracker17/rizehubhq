@@ -1,4 +1,6 @@
-# Minimal Supabase CLI config for local dev (`supabase start`). Run `supabase init` to regenerate the full file if needed.
+# Supabase CLI config for local dev (`supabase start`). Production settings are applied by hand in the
+# dashboard (deploy/supabase-setup.md); this file mirrors them locally. Run `supabase init` to regenerate
+# the full file if needed; unspecified keys use the CLI defaults.
 project_id = "rizehubhq"
 
 [db]
@@ -7,3 +9,18 @@ major_version = 17
 [db.seed]
 enabled = true
 sql_paths = ["./seed.sql"]
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+# Like production: only the CEO user exists (create it in Studio → Authentication → Add user).
+enable_signup = false
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+# Private bucket for QA evidence (screenshots, Lighthouse). The worker also creates it on first use.
+[storage.buckets.evidence]
+public = false
+file_size_limit = "20MiB"

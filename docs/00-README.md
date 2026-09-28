@@ -20,8 +20,8 @@ Read in order. Each file is self-contained enough to hand to a developer — or 
 | `07-VIRTUAL-OFFICE.md` | The Gather-style office (top-down + isometric views): rooms, status behaviours, idle life, live POV screens, chat with agents, art pipeline |
 | `08-TELEGRAM-BOT.md` | Commands, approval buttons, notifications |
 | `09-SECURITY-CONNECTIONS.md` | Client Vault (client info + logins agents can use without seeing them), platform tokens, guardrails |
-| `10-DEPLOY-VPS.md` | Moving from localhost to a Hostinger VPS |
-| `11-ROADMAP.md` | Milestones with acceptance criteria — the build order |
+| `10-DEPLOY-VPS.md` | Moving from localhost to the Hostinger VPS at `hq.rizehub.ph`; the scripts live in `deploy/` (setup, update with rollback, backups, nginx/Caddy, Supabase setup) |
+| `11-ROADMAP.md` | Milestones with acceptance criteria (the build order) and the current status of each |
 | `12-RIZEHUB-INTEGRATION.md` | How HQ connects to RizeHub on the same VPS: the Agent API RizeHub exposes, keys, webhooks, testing |
 | `14-MODELS-AND-COSTS.md` | Free AI setup now (Gemini, Groq, OpenRouter), switching to Claude or OpenAI later, and monthly cost estimates |
 | `13-WORKFLOWS.md` | Playbooks: find leads (Lead Finder), find jobs + draft applications, onboard clients (account + workspace), monthly reports, proposals |

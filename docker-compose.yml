@@ -1,32 +1,67 @@
-# Production on the Hostinger VPS (docs/10-DEPLOY-VPS.md). Dashboard → https://hq.rizehub.ph via reverse proxy.
+# RizeHub HQ production stack on the Hostinger VPS (docs/10-DEPLOY-VPS.md).
+#   dashboard → 127.0.0.1:3100, published at https://hq.rizehub.ph by the host reverse proxy (deploy/nginx or deploy/Caddyfile)
+#   worker    → no public port; reachable as http://hq-worker:4000 from the dashboard (default network)
+#               and from RizeHub (shared external network `rizehub-internal`, webhooks → /hooks/rizehub)
+#   bot       → Telegram long polling, no inbound port
+# Before the first `up`: `docker network create rizehub-internal` (deploy/setup-vps.sh does it) and a filled .env
+# (`pnpm check:env -- --production`). Images are tagged :latest; deploy/update.sh keeps :previous for rollback.
+name: rizehubhq
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
 services:
   dashboard:
+    image: rizehubhq-dashboard:latest
     build: { context: ., dockerfile: apps/dashboard/Dockerfile }
     env_file: .env
-    ports: ["127.0.0.1:3100:3000"]
     environment:
-      HQ_WORKER_URL: http://hq-worker:4000
+      HQ_WORKER_URL: http://hq-worker:4000     # overrides the localhost value used in dev
+      AGENTS_DIR: /app/agents
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    ports: ["127.0.0.1:3100:3000"]             # loopback only: the reverse proxy is the only way in
+    volumes:
+      - ./agents:/app/agents:ro                # Agents page reads agents/<id>.md
+    init: true
     restart: unless-stopped
     mem_limit: 512m
+    logging: *logging
 
   worker:
+    image: rizehubhq-worker:latest
     build: { context: ., dockerfile: apps/worker/Dockerfile }
-    container_name: hq-worker
+    container_name: hq-worker                  # stable DNS name for the dashboard and RizeHub webhooks
     env_file: .env
+    environment:
+      AGENTS_DIR: /app/agents
+      BRAIN_DIR: /app/brain
+      WORKSPACES_DIR: /app/workspaces
+      MODELS_FILE: /app/config/models.yaml
+      WORKER_HTTP_PORT: "4000"
+    expose: ["4000"]                           # internal networks only, never `ports:`
     volumes:
       - ./agents:/app/agents:ro
-      - ./brain:/app/brain
+      - ./brain:/app/brain                     # writable by uid 1001 (pwuser) only if you chown it; reads work as-is
       - ./config:/app/config:ro
       - workspaces:/app/workspaces
     networks: [default, rizehub-internal]
+    shm_size: 1gb                              # headless Chromium (QA screenshots, vault_login)
+    init: true
+    stop_grace_period: 60s                     # running tasks are re-queued on SIGTERM
     restart: unless-stopped
     mem_limit: 2g
+    logging: *logging
 
   bot:
+    image: rizehubhq-bot:latest
     build: { context: ., dockerfile: apps/bot/Dockerfile }
     env_file: .env
+    init: true
     restart: unless-stopped
     mem_limit: 256m
+    logging: *logging
 
 volumes:
   workspaces:

@@ -11,14 +11,9 @@ import { addUsage, isQuotaError, type PickedModel } from './models/usage';
 
 /** Where not-yet-built tools arrive (docs/11-ROADMAP.md). */
 export const TOOL_MILESTONES: Record<string, string> = {
-  workspace_fs: 'M9', bash_sandboxed: 'M9', github: 'M9', shopify_theme: 'M9', playwright: 'M9', lighthouse: 'M9',
-  pagespeed: 'M9', link_checker: 'M9',
-  vault_list: 'M9a', vault_login: 'M9a', vault_api: 'M9a', vault_request_2fa: 'M9a', vault_report_problem: 'M9a',
-  rizehub_leads: 'M9b', rizehub_reports: 'M9b', rizehub_readonly: 'M9b', rizehub_onboarding: 'M9c', job_tracker: 'M9b',
-  web_fetch: 'M9b', web_search: 'M10', semrush: 'M10', figma_read: 'M10', image_gen: 'M10', video_tools: 'M10',
-  audio_tools: 'M10', webflow_api: 'M10', wp_rest: 'M10', gmail_read: 'M10', gmail_draft: 'M10', calendar_read: 'M10',
-  brain_write: 'M9c', create_plan: 'M5 (planning runs in the COO planner, not in tasks)',
-  qa_submit_verdict: 'M6 (QA verdicts run in the QA reviewer, not in tasks)',
+  // All role-file tools are implemented (tools/*). Planning and QA verdicts run outside task runs.
+  create_plan: 'M5 (planning runs in the COO planner, not in tasks)',
+  qa_submit_verdict: 'M6 (QA verdicts are recorded by the QA reviewer, not in tasks)',
 };
 
 export const BUILTIN_TOOLS = ['report_progress', 'submit_output', 'ask_ceo', 'brain_read', 'brain_search', 'request_external_action'] as const;

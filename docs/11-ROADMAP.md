@@ -2,6 +2,29 @@
 
 Each milestone ends with something you can **see working locally**. Don't start the next until the current one passes. Times assume part-time work with Claude Code assisting.
 
+## Status (2026-09-28)
+
+"Built" means the code exists and its checks pass offline (`pnpm typecheck`, `pnpm test`, `pnpm db:test` on in-memory Postgres, `check:roles`, the mock RizeHub). Nothing has run against live keys, the hosted Supabase or the VPS yet.
+
+| Milestone | Status | What's left |
+|---|---|---|
+| M0 Foundation | ✅ Done: built and tested offline | |
+| M1 Database + seed | ✅ Done: built and tested offline (`pnpm db:test`) | `supabase db push` to the production project |
+| M2 Dashboard shell | ✅ Done: built and tested offline | |
+| M3 Live data | ✅ Done: built and tested offline | Confirm Realtime against hosted Supabase |
+| M4 Intake (modal + `/assign`) | ✅ Done: built and tested offline | Production bot token + your Telegram id |
+| M5 COO planner + plan approval | ✅ Done: built and tested offline | Live run with free AI keys |
+| M6 First specialist + QA loop | ✅ Done: built and tested offline | Live end-to-end `/assign` test |
+| M7 Reports | ✅ Done: built and tested offline | First real 08:00 brief / 18:00 digest |
+| M8 Virtual Office | ✅ Done: built and tested offline | Final isometric art pass |
+| M9a Client Vault | ✅ Done: built and tested offline | `VAULT_MASTER_KEY` on the VPS; test-store login |
+| M9 Dev agents + connections | ✅ Done: built and tested offline | Test Shopify store, GitHub token in the vault |
+| M9b RizeHub Agent API | ✅ Done: built and tested offline (mock + reference kit `rizehub-agent-api/`) | RizeHub implements `/agent-api/v1` (staging), then real keys |
+| M9c Onboarding automation | ✅ Done: built and tested offline (mock) | Staging RizeHub test client |
+| **Go-live** (M11 deploy kit) | 🟡 Kit ready: `deploy/`, Dockerfiles, compose, CI image builds, `pnpm check:env` | **Pending:** hosted Supabase, DNS, `.env` with live keys, `setup-vps.sh`, CEO user, Telegram bot, `/assign` end-to-end (README "Go-live checklist") |
+| M10 Remaining roles | ⏳ Pending: role files, SOPs and tools exist | Real-task tuning per role: 3 real tasks with QA ≥ 85 each, one role at a time |
+| M12 Hardening & scale | ⏳ Pending | TOTP in the dashboard, auto-approve rules, cost dashboards, … |
+
 ## M0 · Foundation (Day 1)
 - Monorepo, pnpm workspaces, local Supabase running, `.env.example`, `CLAUDE.md`.
 - ✅ `pnpm dev` starts empty dashboard/worker/bot without errors; Studio opens.
@@ -66,7 +89,7 @@ Each milestone ends with something you can **see working locally**. Don't start 
 - ✅ Each new role completes 3 real tasks with QA pass ≥ 85 before the next role is added.
 
 ## M11 · Deploy to `hq.rizehub.ph` (Days 40–42)
-- Per 10-DEPLOY-VPS. Production Supabase, production bot, snapshots, monitoring.
+- Per 10-DEPLOY-VPS (scripted in `deploy/`): production Supabase (`deploy/supabase-setup.md`), `deploy/setup-vps.sh`, production bot, snapshots, backups, monitoring. Updates via `deploy/update.sh` (auto-rollback) or the optional GitHub deploy workflow.
 - ✅ Checklist in 10 all green; one week of real use.
 
 ## M12 · Hardening & scale (ongoing)

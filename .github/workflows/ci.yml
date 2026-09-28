@@ -1,5 +1,13 @@
 name: CI
 on: [push, pull_request]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -14,3 +22,68 @@ jobs:
       - run: pnpm db:test
       - run: pnpm --filter worker check:roles
       - run: pnpm --filter dashboard build
+
+  # Reference Agent API kit for the RizeHub side (zero runtime deps, Node's built-in test runner).
+  rizehub-agent-api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rizehub-agent-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Install
+        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - run: npm test
+      - run: npm run typecheck
+
+  # Deploy kit: env template complete, scripts lint-clean, compose + workflows parse.
+  deploy-kit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: .env.example documents every variable the code reads
+        run: node scripts/check-env.mjs --example
+      - name: shellcheck deploy scripts
+        run: shellcheck -S style deploy/*.sh
+      - name: docker compose config
+        run: |
+          cp .env.example .env
+          docker network create rizehub-internal >/dev/null 2>&1 || true
+          docker compose config --quiet
+          rm .env
+
+  # Builds the three production images exactly as the VPS does (no push). Catches Dockerfile / lockfile drift.
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [dashboard, worker, bot]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          load: ${{ matrix.app != 'worker' }}
+          tags: rizehubhq-${{ matrix.app }}:ci
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+      - name: Smoke-test the dashboard image
+        if: matrix.app == 'dashboard'
+        run: |
+          docker run -d --name dash -p 127.0.0.1:3100:3000 rizehubhq-dashboard:ci
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:3100/api/health && exit 0; sleep 2; done
+          docker logs dash; exit 1
+      - name: Smoke-test the bot image (fails fast without a token, proving deps + tsx load)
+        if: matrix.app == 'bot'
+        run: |
+          out="$(docker run --rm rizehubhq-bot:ci 2>&1 || true)"
+          echo "$out" | tail -5
+          echo "$out" | grep -q "TELEGRAM_BOT_TOKEN is required"
