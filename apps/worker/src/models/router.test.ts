@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseCandidate, loadModelsConfig, MODEL_PROFILES, QuotaExhaustedError, roleEnvVar, roleSpecs } from './router';
+import { chooseCandidate, hasFreeProviderKey, loadModelsConfig, MODEL_PROFILES, QuotaExhaustedError, roleEnvVar, roleSpecs } from './router';
 
 const cfg = loadModelsConfig();
 const usage = { requestsToday: {}, spentThisMonthUsd: 0 };
@@ -62,6 +62,21 @@ test('MODEL_ID_<ROLE> env overrides win over the file; the agent override still 
     { provider: 'anthropic', modelId: 'claude-sonnet-5' });
   assert.equal(roleEnvVar('design'), 'MODEL_ID_DESIGN');
   assert.throws(() => chooseCandidate('dev', cfg, { profile: 'paid', env: { ...paidEnv, MODEL_ID_DEV: 'sonnet' }, usage, monthlyBudgetUsd: 50 }), /Bad model spec "sonnet"/);
+});
+
+test('daily AI budget reached (paidBlocked): paid providers stop, the free profile takes over when its keys exist', () => {
+  const env = { ...paidEnv, GROQ_API_KEY: 'g' };
+  assert.deepEqual(chooseCandidate('dev', cfg, { profile: 'paid', env, usage, monthlyBudgetUsd: 50, paidBlocked: true }),
+    { provider: 'groq', modelId: 'openai/gpt-oss-120b' });
+  // env and agent overrides that point at paid models are skipped too
+  assert.equal(chooseCandidate('qa', cfg, { profile: 'paid', env: { ...env, MODEL_ID_QA: 'openai:gpt-5.4' }, usage, monthlyBudgetUsd: 50, paidBlocked: true, override: 'anthropic:claude-sonnet-5' }).provider, 'groq');
+  // no free keys → nothing usable: the caller waits (QuotaExhaustedError) and the reason says why
+  assert.throws(() => chooseCandidate('writer', cfg, { profile: 'paid', env: paidEnv, usage, monthlyBudgetUsd: 50, paidBlocked: true }),
+    (e: unknown) => e instanceof QuotaExhaustedError && /daily AI budget reached/.test(e.message));
+  // not blocked: the paid profile never silently falls back to free models
+  assert.throws(() => chooseCandidate('dev', cfg, { profile: 'paid', env: { GROQ_API_KEY: 'g' }, usage, monthlyBudgetUsd: 50 }), QuotaExhaustedError);
+  assert.equal(hasFreeProviderKey(env), true);
+  assert.equal(hasFreeProviderKey({ ...paidEnv, GOOGLE_GENERATIVE_AI_API_KEY: '  ' }), false);
 });
 
 test('roles missing from an older profile fall back to specialist; unknown profile throws', () => {

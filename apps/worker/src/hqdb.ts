@@ -34,6 +34,8 @@ export interface TaskRow {
   qa_feedback: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   cost_usd?: number | string;
+  /** tasks.depends_on: upstream task ids (released to 'queued' only when all are 'done'). */
+  depends_on?: string[];
 }
 
 export interface AgentRow {
@@ -148,6 +150,8 @@ export interface HqDb {
   updateAgentScreen(agentId: string, taskId: string | null, screen: ScreenUpdate & { step_note?: string; progress?: number }): Promise<void>;
   recordUsage(u: UsageRecord): Promise<void>;
   addAgentMessage(agentId: string, sender: 'ceo' | 'agent', body: string, taskId?: string | null): Promise<void>;
+  /** One activity_log row through hq_log() (e.g. hermes.fallback, mcp.tool_call). */
+  logActivity(actor: string, action: string, requestId: string | null, taskId: string | null, detail?: Record<string, unknown>): Promise<void>;
   // reads
   listAgents(): Promise<AgentRow[]>;
   getAgent(id: string): Promise<AgentRow | null>;
@@ -242,6 +246,9 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
         p_actor: u.actor, p_task: u.taskId ?? null, p_request: u.requestId ?? null, p_kind: u.kind,
         p_tokens_in: u.tokensIn, p_tokens_out: u.tokensOut, p_cost: u.costUsd, p_detail: u.detail,
       });
+    },
+    logActivity: async (actor, action, requestId, taskId, detail = {}) => {
+      await rpc('hq_log', { p_actor: actor, p_action: action, p_request: requestId, p_task: taskId, p_detail: detail });
     },
     addAgentMessage: async (agentId, sender, body, taskId = null) => {
       const { error } = await sb.from('agent_messages').insert({ agent_id: agentId, sender, body, task_id: taskId });

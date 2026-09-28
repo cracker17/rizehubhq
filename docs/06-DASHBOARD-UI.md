@@ -137,6 +137,12 @@ Status → color mapping (use everywhere: dots, bubbles, progress bars):
 - Roster table: avatar, name, department, model, status, tasks today, QA pass %, cost today, enabled toggle.
 - Agent page: role file editor (markdown with front-matter), budget, model select, skills, stats, recent tasks.
 
+### 8a. Costs `/costs`
+- Meter: today's AI spend vs `DAILY_AI_BUDGET_USD` (else `settings.daily_budget_usd`; 0 = no cap) with the 80% alert mark; teal < 80%, warning ≥ 80%, danger at 100% (paid models stopped, free profile takes over). Status always shown as icon + label, not colour alone.
+- Stats: last 7/30 days, month to date, model runs, prompt-cache read share. Range tabs: last 7 / last 30 days.
+- Spend by day (bars, cap as a dashed line, table view), by agent, by client ("Internal" for no client), top tasks by cost (task run + its QA reviews), model mix (runs, tokens, spend, share; paid vs free).
+- Data: `ai_usage` view (one row per model run, Manila day; migration `20260928100000_costs_handoff.sql`). DEMO mode: generated paid-profile usage (`lib/data/costsModel.ts`).
+
 ### 9. Connections `/connections`
 - Per client × platform grid: status (active / expiring / revoked / missing), scopes, last used. Revoke button (marks revoked + instructions to revoke at the platform). Shows every API token and login from the Client Vault in one grid, plus system-level keys from the server env. Secrets are entered through the vault form and never displayed again without re-authentication (see 09).
 

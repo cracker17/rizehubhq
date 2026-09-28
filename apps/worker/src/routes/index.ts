@@ -2,5 +2,6 @@
 import type { Route } from './types';
 import { vaultRoutes } from './vault';
 import { rizehubRoutes } from './rizehub';
+import { mcpRoutes } from './mcp';
 
-export const EXTRA_ROUTES: Route[] = [...vaultRoutes, ...rizehubRoutes];
+export const EXTRA_ROUTES: Route[] = [...vaultRoutes, ...rizehubRoutes, ...mcpRoutes];

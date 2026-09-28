@@ -74,28 +74,45 @@ export interface UsageSnapshot {
   spentThisMonthUsd: number;
 }
 
+export const isPaidProvider = (p: string) => p === 'anthropic' || p === 'openai';
+/** Profile whose models are tried after the daily AI budget (DAILY_AI_BUDGET_USD) stops paid providers. */
+export const FREE_FALLBACK_PROFILE = 'free';
+
 /**
  * Picks the first usable model for a role (order: roleSpecs): provider key present, under 90% of its
  * free daily cap, and (for paid providers) within the monthly budget.
+ * `paidBlocked` (the daily AI budget is used up): paid providers are skipped and the role's models from the
+ * `free` profile are tried after the active profile's list, so work continues on free models when their keys exist.
  * Pure function so it's easy to test; the caller supplies env + usage.
  */
 export function chooseCandidate(
   role: ModelRole,
   cfg: ModelsConfig,
-  opts: { profile?: string; env: Record<string, string | undefined>; usage: UsageSnapshot; monthlyBudgetUsd: number; override?: string | null },
+  opts: {
+    profile?: string; env: Record<string, string | undefined>; usage: UsageSnapshot; monthlyBudgetUsd: number; override?: string | null;
+    paidBlocked?: boolean;
+  },
 ): Candidate {
-  const specs = roleSpecs(role, cfg, opts);
+  let specs = roleSpecs(role, cfg, opts);
+  const free = cfg.profiles[FREE_FALLBACK_PROFILE];
+  if (opts.paidBlocked && free) specs = [...new Set([...specs, ...profileSpecs(free, role)])];
   const reasons: string[] = [];
   for (const spec of specs) {
     const c = parseCandidate(spec);
+    const paid = isPaidProvider(c.provider);
+    if (paid && opts.paidBlocked) { reasons.push(`${spec}: daily AI budget reached`); continue; }
     if (!opts.env[KEY_ENV[c.provider]]) { reasons.push(`${spec}: no ${KEY_ENV[c.provider]}`); continue; }
     const cap = cfg.daily_request_caps[c.provider];
     if (cap && (opts.usage.requestsToday[c.provider] ?? 0) >= cap * 0.9) { reasons.push(`${spec}: daily free cap nearly used`); continue; }
-    const paid = c.provider === 'anthropic' || c.provider === 'openai';
     if (paid && opts.usage.spentThisMonthUsd >= opts.monthlyBudgetUsd) { reasons.push(`${spec}: monthly budget reached`); continue; }
     return c;
   }
   throw new QuotaExhaustedError(role, reasons);
+}
+
+/** True when at least one free provider (google / groq / openrouter) has an API key: work can go on after the daily cap. */
+export function hasFreeProviderKey(env: Record<string, string | undefined>): boolean {
+  return PROVIDERS.some((p) => !isPaidProvider(p) && !!env[KEY_ENV[p]]?.trim());
 }
 
 export class QuotaExhaustedError extends Error {

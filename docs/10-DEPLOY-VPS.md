@@ -136,6 +136,24 @@ Open https://hq.rizehub.ph and you should see the login page. https://hq.rizehub
 - Then set `RIZEHUB_API_URL=http://rizehub-app:8080/agent-api/v1` and the four `RIZEHUB_KEY_*` values in `.env`. The webhook URL for RizeHub is `http://hq-worker:4000/hooks/rizehub`, signed with `RIZEHUB_WEBHOOK_SECRET`. Until RizeHub exposes the API, leave `RIZEHUB_API_URL=mock`.
 - RizeHub not in Docker? Bind its API to `127.0.0.1:8080`, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the worker, and use `RIZEHUB_API_URL=http://host.docker.internal:8080/agent-api/v1`.
 
+## 6b. Hermes Agent runtime (optional)
+The Web Developer, Graphic Designer, Content Writer and Sales Agent can run on their own Hermes Agent containers
+(docs/05 "Hermes runtime"). Without them those agents simply run on the worker's built-in runner (and each task logs
+`hermes.fallback`). Full steps: **`deploy/hermes/README.md`**. In short:
+1. In the master `.env`, per agent: `HERMES_URL_<AGENT>=http://hermes-<agent>:8642`, `HERMES_KEY_<AGENT>` and
+   `HQ_MCP_TOKEN_<AGENT>` (`openssl rand -hex 32` each), plus `HERMES_MODEL` (Anthropic model id) and `ANTHROPIC_API_KEY`.
+2. `node scripts/split-env.mjs` → also writes `.env.hermes-<agent>` (mode 600: API server key, MCP token, model id,
+   provider key, TZ; nothing else) for every agent with a key and token.
+3. `docker compose --profile hermes up -d --build` then `docker compose up -d worker`.
+
+| Service | Image | Ports | Notes |
+|---|---|---|---|
+| `hermes-web-dev`, `hermes-designer`, `hermes-writer`, `hermes-sales` | `rizehubhq-hermes` (`deploy/hermes/Dockerfile`, Debian slim + Hermes install.sh, user 10001) | none (8642 on the private `hermes` network) | profile `hermes` (opt-in); own volumes `hermes-<agent>-home` (HERMES_HOME) + `hermes-<agent>-work` (`/workspace`); `deploy/hermes/<agent>/config.yaml` mounted read-only; API server only, no messaging platforms, local terminal backend, no Docker socket; `read_only`, `cap_drop: ALL`, `no-new-privileges`, 1 GB; healthcheck `/health` |
+
+The worker joins the `hermes` network and serves `POST /mcp` (Bearer `HQ_MCP_TOKEN_<AGENT>`) there; that path is for
+Hermes only and is never proxied publicly. RAM: budget about 1 GB more per Hermes container you start.
+`deploy/update.sh` does not rebuild the Hermes profile: re-run step 3 after changing `deploy/hermes/`.
+
 ## 7. Firewall & hardening
 ```bash
 sudo ufw status                        # if already active, just make sure 80/443/OpenSSH are allowed

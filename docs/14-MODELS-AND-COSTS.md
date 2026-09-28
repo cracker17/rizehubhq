@@ -50,6 +50,13 @@ profiles:
 ```
 Exact model IDs change often. Put the current IDs from each provider's docs into this file; the code never hard-codes them.
 
+## Paid profile, per-role model IDs and the daily cap (six-agent roster)
+
+- `MODEL_PROFILE=paid`: Anthropic for COO (lead), Web Developer (dev), Sales (sales) on Sonnet and Graphic Designer (design), Content Writer (writer), chat/reports on Haiku; QA on OpenAI (a different provider on purpose), Sonnet only if OpenAI is unavailable. Needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `MONTHLY_BUDGET_USD > 0`.
+- Model IDs are not hard-coded: `MODEL_ID_LEAD`, `MODEL_ID_DEV`, `MODEL_ID_DESIGN`, `MODEL_ID_WRITER`, `MODEL_ID_SALES`, `MODEL_ID_QA`, `MODEL_ID_LIGHT` (format `provider:model`) win over `config/models.yaml`; the yaml lists are the documented defaults and fallbacks. Order: agent override (Agents page) → env → profile list.
+- Prompt caching: every Anthropic call sends the system prompt as a cached system message (`models/cache.ts` `cachedPrompt`, used by the planner, runner and QA) and the runner adds a rolling breakpoint on the newest message.
+- `DAILY_AI_BUDGET_USD` (0 = no cap; else `settings.daily_budget_usd`): every model run is logged with its cost per task (`tasks.cost_usd`), agent (`activity_log.actor`) and client (`activity_log.client_id`); query them through the `ai_usage` view. At 80% of today's (Asia/Manila) spend the worker records one alert (`budget_alerts`, once per day and level) and the bot sends it to Telegram; at 100% another alert, and **paid providers stop**: new planning, tasks and QA run on the `free` profile when a free provider key is set, otherwise nothing new starts until midnight Manila time. Running work finishes. The dashboard `/costs` page shows the meter and the breakdowns.
+
 ## Environment keys (only fill what you use)
 
 ```
@@ -58,8 +65,10 @@ GROQ_API_KEY=...                   # Groq (free tier)
 OPENROUTER_API_KEY=...             # OpenRouter (free models as fallback)
 ANTHROPIC_API_KEY=                 # later: Claude
 OPENAI_API_KEY=                    # later: OpenAI
-MODEL_PROFILE=free
+MODEL_PROFILE=free                 # free | paid | hybrid | claude | openai
 MONTHLY_BUDGET_USD=0               # 0 = free providers only; raise when you switch to paid
+DAILY_AI_BUDGET_USD=0              # 0 = no daily cap; at 100% paid providers stop for the day
+MODEL_ID_QA=                       # optional per-role override, e.g. openai:gpt-5.5 (also LEAD, DEV, DESIGN, WRITER, SALES, LIGHT)
 ```
 
 ## Free-tier rules the router enforces

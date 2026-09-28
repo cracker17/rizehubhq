@@ -10,7 +10,7 @@ export const RoleFrontMatter = z.object({
   name: z.string().min(1),
   department: z.string().min(1),
   model_role: z.enum(MODEL_ROLES),
-  /** worker = AI SDK runner; hermes = Hermes Agent instance (until that runtime ships, hermes roles also run on the worker runner). */
+  /** worker = AI SDK runner; hermes = the agent's Hermes Agent instance (hermes/runner.ts; falls back to the AI SDK runner). */
   runtime: z.enum(AGENT_RUNTIME),
   max_turns: z.number().int().positive().max(200),
   budget_usd_per_task: z.number().nonnegative(),

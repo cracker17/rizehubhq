@@ -10,6 +10,8 @@ import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
 import { addUsage, isQuotaError, normalizeUsage, type PickedModel, type TokenUsage } from './models/usage';
 import { cachedPrompt, withRollingCache } from './models/cache';
 import { WORKER_EXECUTED_ACTIONS } from './rizehub/background';
+import { config } from './config';
+import { runHermesTask, type HermesRunOptions } from './hermes/runner';
 
 /** Where not-yet-built tools arrive (docs/11-ROADMAP.md). */
 export const TOOL_MILESTONES: Record<string, string> = {
@@ -37,9 +39,17 @@ export type RunResult =
   | { status: 'budget_exceeded'; costUsd: number }
   | { status: 'requeued'; reason: string; costUsd: number };
 
-interface RunState { ended: null | 'submitted' | 'asked'; costUsd: number; overBudget: boolean; toolErrors: number }
+export interface RunState { ended: null | 'submitted' | 'asked'; costUsd: number; overBudget: boolean; toolErrors: number }
 
-/** Failure reasons for the per-task limits (role max_turns / budget_usd_per_task). Shown on the task and to the CEO. */
+/** Global per-task caps (MAX_STEPS_PER_TASK / MAX_COST_PER_TASK_USD). */
+export interface TaskLimits { maxSteps: number; maxCostUsd: number }
+
+/** Effective caps for one run: the stricter of the role file (max_turns / budget_usd_per_task) and the global env caps. */
+export function taskLimits(role: Pick<Role, 'max_turns' | 'budget_usd_per_task'>, global: TaskLimits = { maxSteps: config.maxStepsPerTask, maxCostUsd: config.maxCostPerTaskUsd }): TaskLimits {
+  return { maxSteps: Math.max(1, Math.min(role.max_turns, global.maxSteps)), maxCostUsd: Math.min(role.budget_usd_per_task, global.maxCostUsd) };
+}
+
+/** Failure reasons for the per-task limits (see taskLimits). Shown on the task and to the CEO. */
 export const maxStepsReason = (maxTurns: number) => `stopped: exceeded max steps ${maxTurns}`;
 export const taskBudgetReason = (budgetUsd: number, spentUsd: number) =>
   `stopped: exceeded $${budgetUsd.toFixed(2)} task budget ($${spentUsd.toFixed(4)} spent)`;
@@ -204,9 +214,29 @@ export function buildTools(ctx: ToolContext): ToolSet {
   return tools;
 }
 
-export interface RunOptions { heartbeatMs?: number; abortSignal?: AbortSignal }
+export interface RunOptions {
+  heartbeatMs?: number;
+  abortSignal?: AbortSignal;
+  /** Global caps (default MAX_STEPS_PER_TASK / MAX_COST_PER_TASK_USD from the env). */
+  limits?: TaskLimits;
+  /** Hermes runtime overrides (tests); defaults come from the env (hermes/config.ts). */
+  hermes?: HermesRunOptions;
+}
 
+/**
+ * Runs one claimed task on the agent's runtime: roles with `runtime: hermes` go to their Hermes Agent instance
+ * (hermes/runner.ts, which falls back to the built-in runner when Hermes is unavailable); everyone else runs on the
+ * built-in AI SDK runner.
+ */
 export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions = {}): Promise<RunResult> {
+  let role: Role | null = null;
+  try { role = deps.loadRole(task.agent_id); } catch { /* runBuiltinTask reports the broken role file */ }
+  if (role?.runtime === 'hermes') return runHermesTask(task, deps, role, opts, runBuiltinTask);
+  return runBuiltinTask(task, deps, opts);
+}
+
+/** The built-in runner: generateText agent loop with the role's tools. */
+export async function runBuiltinTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions = {}): Promise<RunResult> {
   const db = deps.db;
   const state: RunState = { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 };
   let picked: PickedModel | null = null;
@@ -221,9 +251,10 @@ export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions 
     const client = task.client_id ? await db.getClient(task.client_id) : null;
     picked = await deps.pickModel(role.model_role, { override: agent?.model_override });
     const pm = picked;
+    const limits = taskLimits(role, opts.limits);
 
     const tools = buildTools({ task, role, deps, state });
-    const stopWhen: StopCondition<ToolSet>[] = [stepCountIs(role.max_turns), () => state.ended !== null || state.overBudget || state.toolErrors >= 3];
+    const stopWhen: StopCondition<ToolSet>[] = [stepCountIs(limits.maxSteps), () => state.ended !== null || state.overBudget || state.toolErrors >= 3];
     await db.reportProgress(task.id, 5, 'Reading the brief', { app: 'doc', title: task.title });
 
     const result = await generateText({
@@ -239,20 +270,20 @@ export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions 
         usage = addUsage(usage, normalizeUsage(pm.provider, step.usage, step.providerMetadata));
         state.costUsd += pm.recordCall(step.usage, step.providerMetadata);
         state.toolErrors = step.content.some((c) => c.type === 'tool-error') ? state.toolErrors + 1 : 0;
-        if (state.costUsd > role.budget_usd_per_task) state.overBudget = true;
+        if (state.costUsd > limits.maxCostUsd) state.overBudget = true;
       },
     });
 
     if (state.ended === 'submitted') return { status: 'submitted', costUsd: state.costUsd, fallback: false };
     if (state.ended === 'asked') return { status: 'asked_ceo', costUsd: state.costUsd };
     if (state.overBudget) {
-      const reason = taskBudgetReason(role.budget_usd_per_task, state.costUsd);
+      const reason = taskBudgetReason(limits.maxCostUsd, state.costUsd);
       await db.failTask(task.id, reason);
       return { status: 'budget_exceeded', costUsd: state.costUsd };
     }
-    // The step cap (role max_turns) cut the loop while the model still wanted to call tools.
-    if (steps >= role.max_turns && result.finishReason === 'tool-calls') {
-      const reason = maxStepsReason(role.max_turns);
+    // The step cap (min of role max_turns and MAX_STEPS_PER_TASK) cut the loop while the model still wanted to call tools.
+    if (steps >= limits.maxSteps && result.finishReason === 'tool-calls') {
+      const reason = maxStepsReason(limits.maxSteps);
       await db.failTask(task.id, reason);
       return { status: 'failed', reason, costUsd: state.costUsd };
     }

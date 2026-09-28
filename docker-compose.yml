@@ -13,6 +13,34 @@ x-logging: &logging
   driver: json-file
   options: { max-size: "10m", max-file: "5" }
 
+# Shared settings of the four opt-in Hermes containers (services hermes-*; deploy/hermes/README.md).
+x-hermes: &hermes
+  image: rizehubhq-hermes:latest
+  build: { context: deploy/hermes }
+  profiles: [hermes]
+  environment:
+    HERMES_HOME: /data/hermes
+    HQ_MCP_URL: http://hq-worker:4000/mcp       # the worker's HQ MCP tool server
+    API_SERVER_HOST: 0.0.0.0
+    API_SERVER_PORT: "8642"
+  expose: ["8642"]                             # reached as http://hermes-<agent>:8642 by the worker; never `ports:`
+  networks: [hermes]
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 512
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS -H \"Authorization: Bearer $$API_SERVER_KEY\" http://127.0.0.1:8642/health >/dev/null || exit 1"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 60s
+  init: true
+  restart: unless-stopped
+  mem_limit: 1g
+  logging: *logging
+
 services:
   dashboard:
     image: rizehubhq-dashboard:latest
@@ -54,7 +82,7 @@ services:
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
     security_opt: ["no-new-privileges:true"]
-    networks: [default, rizehub-internal]
+    networks: [default, rizehub-internal, hermes] # hermes: private network to the opt-in Hermes containers
     shm_size: 1gb                              # headless Chromium (QA screenshots, vault_login)
     init: true
     stop_grace_period: 60s                     # running tasks are re-queued on SIGTERM
@@ -71,10 +99,58 @@ services:
     mem_limit: 256m
     logging: *logging
 
+  # ---------- Hermes Agent runtime (opt-in: docker compose --profile hermes up -d; deploy/hermes/README.md) ----------
+  # One container per agent, own HERMES_HOME volume, API server only (no messaging platforms), no published ports,
+  # no Docker socket (local terminal backend), read-only root. Only the worker reaches them (network `hermes`).
+  hermes-web-dev:
+    <<: *hermes
+    container_name: hermes-web-dev
+    env_file: [{ path: .env.hermes-web-dev, required: false }]
+    volumes:
+      - hermes-web-dev-home:/data/hermes
+      - hermes-web-dev-work:/workspace
+      - ./deploy/hermes/web-dev/config.yaml:/etc/hermes-hq/config.yaml:ro
+
+  hermes-designer:
+    <<: *hermes
+    container_name: hermes-designer
+    env_file: [{ path: .env.hermes-designer, required: false }]
+    volumes:
+      - hermes-designer-home:/data/hermes
+      - hermes-designer-work:/workspace
+      - ./deploy/hermes/designer/config.yaml:/etc/hermes-hq/config.yaml:ro
+
+  hermes-writer:
+    <<: *hermes
+    container_name: hermes-writer
+    env_file: [{ path: .env.hermes-writer, required: false }]
+    volumes:
+      - hermes-writer-home:/data/hermes
+      - hermes-writer-work:/workspace
+      - ./deploy/hermes/writer/config.yaml:/etc/hermes-hq/config.yaml:ro
+
+  hermes-sales:
+    <<: *hermes
+    container_name: hermes-sales
+    env_file: [{ path: .env.hermes-sales, required: false }]
+    volumes:
+      - hermes-sales-home:/data/hermes
+      - hermes-sales-work:/workspace
+      - ./deploy/hermes/sales/config.yaml:/etc/hermes-hq/config.yaml:ro
+
 volumes:
   workspaces:
+  hermes-web-dev-home:
+  hermes-web-dev-work:
+  hermes-designer-home:
+  hermes-designer-work:
+  hermes-writer-home:
+  hermes-writer-work:
+  hermes-sales-home:
+  hermes-sales-work:
 
 networks:
   default: {}
   rizehub-internal:
     external: true   # create once: docker network create rizehub-internal
+  hermes: {}         # worker ↔ hermes-* only. Not `internal: true`: Hermes needs HTTPS egress to the model provider API

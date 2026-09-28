@@ -99,7 +99,12 @@ export interface ModelPickerOptions {
   monthSpend?: () => Promise<number>;
   refreshEveryMs?: number;
   now?: () => Date;
+  /** DAILY_AI_BUDGET_USD (null / 0 = no cap). Once today's spend reaches it, paid providers stop (free profile fallback). */
+  dailyBudgetUsd?: number | null;
 }
+
+/** What the worker loop learned about today's total spend (GlobalDailyBudget.check()). */
+export interface DailySpendUpdate { day: string; spentUsd: number; budgetUsd: number | null }
 
 export class ModelPicker {
   private day: string;
@@ -107,6 +112,9 @@ export class ModelPicker {
   private refreshedAt: number;
   private requestsToday: Partial<Record<Provider, number>> = {};
   spentThisMonthUsd: number;
+  /** Today's (Asia/Manila) spend across all agents: loop updates + every call this process records. */
+  spentTodayUsd = 0;
+  dailyBudgetUsd: number | null;
 
   constructor(private opts: ModelPickerOptions) {
     const now = this.now();
@@ -114,6 +122,21 @@ export class ModelPicker {
     this.month = manilaMonth(now);
     this.refreshedAt = now.getTime();
     this.spentThisMonthUsd = opts.spentThisMonthUsd ?? 0;
+    this.dailyBudgetUsd = opts.dailyBudgetUsd ?? null;
+  }
+
+  /** True when the daily AI budget is used up: paid providers are skipped until the next Manila day. */
+  get paidBlocked(): boolean {
+    this.rollDay();
+    const b = this.dailyBudgetUsd;
+    return b !== null && Number.isFinite(b) && b > 0 && this.spentTodayUsd >= b;
+  }
+
+  /** Feeds today's DB total (and the resolved cap) from the loop's budget check. Never lowers today's figure. */
+  setDailySpend(u: DailySpendUpdate): void {
+    this.rollDay();
+    this.dailyBudgetUsd = u.budgetUsd;
+    if (u.day === this.day && Number.isFinite(u.spentUsd)) this.spentTodayUsd = Math.max(this.spentTodayUsd, u.spentUsd);
   }
 
   private now() { return this.opts.now?.() ?? new Date(); }
@@ -121,7 +144,7 @@ export class ModelPicker {
   private rollDay() {
     const now = this.now();
     const d = manilaDay(now);
-    if (d !== this.day) { this.day = d; this.requestsToday = {}; }
+    if (d !== this.day) { this.day = d; this.requestsToday = {}; this.spentTodayUsd = 0; }
     const m = manilaMonth(now);
     if (m !== this.month) { this.month = m; this.spentThisMonthUsd = 0; this.refreshedAt = -Infinity; } // new budget month
   }
@@ -149,6 +172,7 @@ export class ModelPicker {
     }
     const c = chooseCandidate(role, this.opts.cfg, {
       profile: this.opts.profile, env: this.opts.env, monthlyBudgetUsd: this.opts.monthlyBudgetUsd, override: o.override ?? null,
+      paidBlocked: this.paidBlocked,
       usage: { requestsToday: this.requestsToday, spentThisMonthUsd: this.spentThisMonthUsd },
     });
     const model = await (this.opts.create ?? createModel)(c);
@@ -159,6 +183,7 @@ export class ModelPicker {
         this.requestsToday[c.provider] = (this.requestsToday[c.provider] ?? 0) + 1;
         const usd = costUsd(c.provider, c.modelId, normalizeUsage(c.provider, usage, providerMetadata));
         this.spentThisMonthUsd += usd;
+        this.spentTodayUsd += usd;
         return usd;
       },
     };

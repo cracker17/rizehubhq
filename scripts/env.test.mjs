@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from './env-schema.mjs';
-import { splitEnv } from './split-env.mjs';
+import { splitEnv, splitHermesEnv } from './split-env.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const MASTER = [
@@ -43,4 +43,19 @@ test('check-env: a dashboard file with SUPABASE_SERVICE_ROLE_KEY or VAULT_MASTER
     assert.match(bad.stdout, new RegExp(`${leak.split('=')[0]}\\s+must NOT be in \\.env\\.dashboard`));
     execFileSync(process.execPath, [path.join(DIR, 'split-env.mjs'), '--in', path.join(dir, '.env')]);
   }
+});
+
+test('split: .env.hermes-<agent> only for configured agents, with only its own key/token + model provider key', () => {
+  const master = `${MASTER}\nANTHROPIC_API_KEY=sk-ant-${'x'.repeat(30)}\nHERMES_MODEL=claude-sonnet-5\nHERMES_MODEL_WEB_DEV=claude-opus-5-5\n`
+    + `HERMES_URL_WEB_DEV=http://hermes-web-dev:8642\nHERMES_KEY_WEB_DEV=${'k'.repeat(64)}\nHQ_MCP_TOKEN_WEB_DEV=${'t'.repeat(64)}\n`
+    + `HERMES_KEY_WRITER=${'w'.repeat(64)}\nHQ_MCP_TOKEN_SALES=${'s'.repeat(64)}\n`;
+  const env = parseEnv(master);
+  const files = splitHermesEnv(env);
+  assert.deepEqual(Object.keys(files), ['.env.hermes-web-dev'], 'writer/sales lack a key or token');
+  const h = parseEnv(files['.env.hermes-web-dev']);
+  assert.deepEqual([...h.keys()].sort(), ['ANTHROPIC_API_KEY', 'API_SERVER_KEY', 'HERMES_MODEL', 'HQ_MCP_TOKEN', 'TZ']);
+  assert.equal(h.get('API_SERVER_KEY'), 'k'.repeat(64));
+  assert.equal(h.get('HERMES_MODEL'), 'claude-opus-5-5');
+  const w = parseEnv(splitEnv(env).worker);
+  for (const k of ['HERMES_URL_WEB_DEV', 'HERMES_KEY_WEB_DEV', 'HQ_MCP_TOKEN_WEB_DEV', 'HERMES_MODEL']) assert.ok(w.has(k), k);
 });

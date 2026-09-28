@@ -1,0 +1,29 @@
+# RizeHub HQ · Hermes config for the Sales Agent (sales). Source of truth: deploy/hermes/sales/config.yaml in the repo.
+# Mounted read-only into the hermes-sales container and copied to $HERMES_HOME/config.yaml on every start
+# (changes made with `hermes config set` inside the container are overwritten: edit this file instead).
+# ${VAR} placeholders are resolved by Hermes from the container env (.env.hermes-sales, made by scripts/split-env.mjs).
+# Secrets are NOT in this file: API_SERVER_KEY and the provider key go to $HERMES_HOME/.env (entrypoint.sh).
+
+# Model: Anthropic, model id from HERMES_MODEL_SALES or HERMES_MODEL (e.g. claude-sonnet-5).
+model:
+  provider: anthropic
+  default: ${HERMES_MODEL}
+
+# Commands run inside this container only (local backend). No Docker backend: the container has no Docker socket.
+terminal:
+  backend: local
+  cwd: /workspace
+  timeout: 300
+
+# HQ tools (report_progress, brain_*, ask_ceo, request_external_action, submit_output, vault/rizehub tools of this
+# role, …) come from the worker's MCP endpoint. The token identifies this agent: the worker only exposes the
+# sales role's tools, runs them against its current HQ task, and turns anything that publishes, sends, merges,
+# deploys or spends into a CEO approval.
+mcp_servers:
+  hq:
+    url: ${HQ_MCP_URL}
+    headers:
+      Authorization: "Bearer ${HQ_MCP_TOKEN}"
+
+# API server: enabled through $HERMES_HOME/.env (API_SERVER_ENABLED/KEY/PORT/HOST, written by entrypoint.sh).
+# Messaging platforms (Telegram, Discord, Slack, …) stay OFF: no platform tokens exist in this container.

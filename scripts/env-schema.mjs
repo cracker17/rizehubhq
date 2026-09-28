@@ -50,6 +50,10 @@ function supabaseKey(kind) {
   };
 }
 
+/** Agents that can run on Hermes (agents/roster.yaml runtime: hermes) → env suffix; see apps/worker/src/hermes/config.ts. */
+export const HERMES_AGENTS = { 'web-dev': 'WEB_DEV', designer: 'DESIGNER', writer: 'WRITER', sales: 'SALES' };
+const HERMES_AGENT_SUFFIXES = Object.values(HERMES_AGENTS);
+
 // ---------- schema: every variable the code reads ----------
 // req: services where it is required ('*prod' suffix = only required with --production)
 const S = (o) => o;
@@ -60,13 +64,18 @@ export const VARS = [
   S({ key: 'NEXT_PUBLIC_SUPABASE_URL', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use https in production'), note: 'empty = DEMO mode (mock data)' }),
   S({ key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: supabaseKey('anon') }),
   // AI
-  S({ key: 'MODEL_PROFILE', group: 'AI', svc: ['worker'], check: (v) => (['free', 'hybrid', 'claude', 'openai'].includes(v) ? null : 'must be free | hybrid | claude | openai') }),
+  S({ key: 'MODEL_PROFILE', group: 'AI', svc: ['worker'], check: (v) => (['free', 'paid', 'hybrid', 'claude', 'openai'].includes(v) ? null : 'must be free | paid | hybrid | claude | openai') }),
+  ...['LEAD', 'DEV', 'DESIGN', 'WRITER', 'SALES', 'QA', 'LIGHT'].map((r) => S({ key: `MODEL_ID_${r}`, group: 'AI', svc: ['worker'],
+    check: (v) => (/^(google|groq|openrouter|anthropic|openai):\S+$/.test(v) ? null : 'must be provider:model, e.g. anthropic:claude-sonnet-5 (providers: google, groq, openrouter, anthropic, openai)') })),
+  S({ key: 'DAILY_AI_BUDGET_USD', group: 'AI', svc: ['worker', 'dashboard'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0 (0 = no cap)') }),
   S({ key: 'MONTHLY_BUDGET_USD', group: 'AI', svc: ['worker', 'bot'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0') }),
   ...['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
     .map((key) => S({ key, group: 'AI', svc: ['worker'], secret: true, check: (v) => (v.length >= 20 && !/\s/.test(v) ? null : 'looks too short / has spaces') })),
   // Worker
   S({ key: 'POLL_INTERVAL_MS', group: 'Worker', svc: ['worker'], check: intIn(250) }),
   S({ key: 'MAX_PARALLEL_TASKS', group: 'Worker', svc: ['worker'], check: intIn(1, 16) }),
+  S({ key: 'MAX_STEPS_PER_TASK', group: 'Worker', svc: ['worker'], check: intIn(1, 200) }),
+  S({ key: 'MAX_COST_PER_TASK_USD', group: 'Worker', svc: ['worker'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0 (USD)') }),
   S({ key: 'REPORTS_CHECK_MS', group: 'Worker', svc: ['worker'], check: intIn(1000) }),
   S({ key: 'QA_THRESHOLD', group: 'Worker', svc: ['worker'], check: intIn(0, 100) }),
   S({ key: 'TZ', group: 'Worker', svc: ['worker', 'bot'], check: (v) => { try { new Intl.DateTimeFormat('en', { timeZone: v }); return null; } catch { return 'unknown IANA time zone (e.g. Asia/Manila)'; } } }),
@@ -114,6 +123,16 @@ export const VARS = [
   S({ key: 'RIZEHUB_JOB_POLL_MS', group: 'RizeHub', svc: ['worker'], check: intIn(1000) }),
   S({ key: 'JOB_FEEDS_EVERY_MS', group: 'RizeHub', svc: ['worker'], check: intIn(0) }),
   S({ key: 'JOB_FEEDS', group: 'RizeHub', svc: ['worker'], check: (v) => { const bad = v.split(',').map((s) => s.trim()).filter((u) => u && !isUrl(u)); return bad.length ? `not URLs: ${bad.join(', ')}` : null; } }),
+  // Hermes Agent runtime (deploy/hermes/README.md): per-agent API server + the token its Hermes uses for the worker's /mcp
+  ...HERMES_AGENT_SUFFIXES.flatMap((s) => [
+    S({ key: `HERMES_URL_${s}`, group: 'Hermes', svc: ['worker'], check: (v) => (isUrl(v) ? null : 'must be a URL, e.g. http://hermes-web-dev:8642') }),
+    S({ key: `HERMES_KEY_${s}`, group: 'Hermes', svc: ['worker'], secret: true, check: (v) => (v.length >= 32 && !/\s/.test(v) ? null : 'too short: use openssl rand -hex 32') }),
+    S({ key: `HQ_MCP_TOKEN_${s}`, group: 'Hermes', svc: ['worker'], secret: true, check: (v) => (v.length >= 32 && !/\s/.test(v) ? null : 'too short: use openssl rand -hex 32') }),
+    S({ key: `HERMES_MODEL_${s}`, group: 'Hermes', svc: ['worker'], check: (v) => (/^[\w./:-]+$/.test(v) ? null : 'must be a model id like claude-sonnet-5') }),
+  ]),
+  S({ key: 'HERMES_MODEL', group: 'Hermes', svc: ['worker'], check: (v) => (/^[\w./:-]+$/.test(v) ? null : 'must be a model id like claude-sonnet-5') }),
+  S({ key: 'HERMES_FALLBACK', group: 'Hermes', svc: ['worker'], check: (v) => (['on', 'off'].includes(v.toLowerCase()) ? null : 'must be on | off') }),
+  S({ key: 'HERMES_TIMEOUT_MS', group: 'Hermes', svc: ['worker'], check: intIn(10_000) }),
   // Telegram
   S({ key: 'TELEGRAM_BOT_TOKEN', group: 'Telegram', svc: ['bot'], req: ['bot'], secret: true, check: (v) => (/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(v) ? null : 'does not look like a BotFather token (123456:ABC…)') }),
   S({ key: 'TELEGRAM_ALLOWED_USER_IDS', group: 'Telegram', svc: ['bot'], req: ['bot'], check: telegramIds }),

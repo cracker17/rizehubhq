@@ -6,6 +6,7 @@ import type { ClientRow, RequestRow } from './hqdb';
 import { errMsg, log, manilaToday, readRoster, readRosterText, usageDetail, type WorkerDeps } from './deps';
 import { addUsage, isQuotaError, normalizeUsage, type PickedModel, type TokenUsage } from './models/usage';
 import { cachedPrompt } from './models/cache';
+import { HANDOFF_DESIGN_WORK_TYPES } from './handoff';
 
 const PLAYBOOK_RULES: [string, RegExp][] = [
   ['onboarding', /\bonboard/i],
@@ -44,6 +45,51 @@ export function validatePlan(raw: unknown, ctx: PlanContext): { ok: true; plan: 
     if (!ctx.workTypes.includes(t.work_type)) problems.push(`task ${t.key}: work_type "${t.work_type}" is not in roster.yaml`);
   }
   return problems.length ? { ok: false, error: problems.join('; ') } : { ok: true, plan: parsed.data };
+}
+
+/** Plan task keys that `key` depends on, directly or through other tasks. */
+function ancestors(plan: Plan, key: string): Set<string> {
+  const byKey = new Map(plan.tasks.map((t) => [t.key, t]));
+  const seen = new Set<string>();
+  const stack = [...(byKey.get(key)?.depends_on ?? [])];
+  while (stack.length) {
+    const k = stack.pop()!;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    stack.push(...(byKey.get(k)?.depends_on ?? []));
+  }
+  return seen;
+}
+
+/**
+ * Design → dev handoff (docs/05): when a plan has both design work a developer builds from (wireframe, ui-mockup,
+ * brand-asset, ux-audit by the designer) and Web Developer tasks, every dev task must wait for that design, so it is
+ * released only after the design task is QA-passed and CEO-approved ('done') and gets the spec as input.
+ * Missing dependencies are added (never ones that would create a cycle). Returns the fixed plan + what was added.
+ */
+export function enforceDesignHandoff(plan: Plan): { plan: Plan; added: { task: string; design: string }[] } {
+  const designKeys = plan.tasks
+    .filter((t) => t.agent_id === 'designer' && (HANDOFF_DESIGN_WORK_TYPES as readonly string[]).includes(t.work_type))
+    .map((t) => t.key);
+  const added: { task: string; design: string }[] = [];
+  if (!designKeys.length) return { plan, added };
+  const tasks = plan.tasks.map((t) => ({ ...t, depends_on: [...t.depends_on] }));
+  const fixed: Plan = { ...plan, tasks };
+  for (const t of tasks) {
+    if (t.agent_id !== 'web-dev') continue;
+    const before = ancestors(fixed, t.key);
+    if (designKeys.some((d) => before.has(d))) continue; // already waits for a design task
+    for (const d of designKeys) {
+      if (ancestors(fixed, d).has(t.key)) continue; // the design waits for this dev task: adding it would loop
+      t.depends_on.push(d);
+      added.push({ task: t.key, design: d });
+    }
+  }
+  if (added.length) {
+    fixed.assumptions = [...plan.assumptions,
+      ...added.map((a) => `Task ${a.task} waits for design task ${a.design}: it starts after the design is QA-passed and approved, and gets the design spec as input.`)];
+  }
+  return { plan: fixed, added };
 }
 
 function clientSlugs(deps: WorkerDeps): string[] {
@@ -98,6 +144,10 @@ export async function buildPlanPrompt(req: RequestRow, deps: WorkerDeps): Promis
     'You are running in planning mode: return ONLY the plan object (schema given by the caller). It becomes the create_plan call.',
     'Use only agent ids from the enabled list and work_type values from roster.yaml routing. Each task: 3–7 binary, testable acceptance_criteria.',
     'depends_on lists task keys from this same plan. Never plan an external action without saying it needs CEO approval via request_external_action.',
+    'Design → dev handoff: when a request needs both design (designer: wireframe, ui-mockup, brand-asset or ux-audit) and building (web-dev), '
+      + 'plan the design task first and put its key in depends_on of every web-dev task that builds it. The developer starts only after the design '
+      + 'is QA-passed and approved, and receives the design spec (colours, fonts, spacing, layout notes, asset list) and assets as input. '
+      + 'Never ask the Web Developer to design, and never ask the designer to build.',
   ].join('\n\n');
 
   const prompt = [
@@ -186,8 +236,11 @@ export async function planRequest(req: RequestRow, deps: WorkerDeps): Promise<Pl
         continue;
       }
 
-      const v = validatePlan(candidate, ctx);
-      if (!v.ok) { lastError = v.error; log(deps, `[coo] plan attempt ${attempt} invalid: ${lastError}`); continue; }
+      const checked = validatePlan(candidate, ctx);
+      if (!checked.ok) { lastError = checked.error; log(deps, `[coo] plan attempt ${attempt} invalid: ${lastError}`); continue; }
+      const handoff = enforceDesignHandoff(checked.plan);
+      if (handoff.added.length) log(deps, `[coo] design → dev handoff: ${handoff.added.map((a) => `${a.task} waits for ${a.design}`).join(', ')}`);
+      const v = { ok: true as const, plan: handoff.plan };
 
       await screen('Plan ready for CEO', 100, v.plan.tasks.map((t) => `${t.key} → ${t.agent_id}: ${t.title}`).join('\n'));
       try {

@@ -6,6 +6,10 @@ function num(name: string, fallback: number) {
   const v = process.env[name];
   return v === undefined || v === '' ? fallback : Number(v);
 }
+/** n when it is a finite number > 0, else fallback. */
+function positive(n: number, fallback: number) {
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 
 export const config = {
   root,
@@ -18,6 +22,9 @@ export const config = {
   pollIntervalMs: num('POLL_INTERVAL_MS', 3000),
   reportsEveryMs: num('REPORTS_CHECK_MS', 60_000),
   maxParallelTasks: num('MAX_PARALLEL_TASKS', 2),
+  /** Per-task caps on the built-in runner; the stricter of these and the role file's max_turns / budget_usd_per_task wins. */
+  maxStepsPerTask: positive(num('MAX_STEPS_PER_TASK', 25), 25),
+  maxCostPerTaskUsd: positive(num('MAX_COST_PER_TASK_USD', 1.5), 1.5),
   monthlyBudgetUsd: num('MONTHLY_BUDGET_USD', 0),
   /** Daily AI spend cap across all agents + planning + QA (Asia/Manila day). null = settings.daily_budget_usd / none. */
   dailyAiBudgetUsd: process.env.DAILY_AI_BUDGET_USD ? Number(process.env.DAILY_AI_BUDGET_USD) : null,

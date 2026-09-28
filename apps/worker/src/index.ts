@@ -8,11 +8,12 @@ import { createSupabaseHqDb } from './hqdb';
 import { createHttpServer } from './http';
 import { WorkerLoop } from './loop';
 import { listRoleIds, loadRole } from './roles';
-import { loadModelsConfig, MODEL_PROFILES, parseCandidate, roleEnvVar } from './models/router';
+import { hasFreeProviderKey, loadModelsConfig, MODEL_PROFILES, parseCandidate, roleEnvVar } from './models/router';
 import { MODEL_ROLES } from '@rizehubhq/shared';
 import { ModelPicker } from './models/usage';
 import { answerChat } from './chat';
 import type { WorkerDeps } from './deps';
+import { setMcpDeps } from './hermes/mcp';
 
 async function main() {
   if (!config.supabaseUrl || !config.supabaseServiceKey) {
@@ -42,12 +43,14 @@ async function main() {
     cfg: models, profile, env: workerEnv(), monthlyBudgetUsd: config.monthlyBudgetUsd,
     spentThisMonthUsd: await db.monthSpendUsd().catch(() => 0),
     monthSpend: () => db.monthSpendUsd(),
+    dailyBudgetUsd: config.dailyAiBudgetUsd,
   });
   const deps: WorkerDeps = {
     db, brain: createBrain(), pickModel: picker.pick, loadRole: (id) => loadRole(id),
     agentsDir: config.agentsDir, qaThreshold: config.qaThreshold,
     onProviderQuota: (p) => picker.markExhausted(p),
   };
+  setMcpDeps(deps); // HQ MCP tool server for Hermes agents (POST /mcp)
   console.log(`[worker] ${roles.length} agents · profile "${profile}" · budget $${config.monthlyBudgetUsd}/month`
     + `${config.dailyAiBudgetUsd !== null ? ` · $${config.dailyAiBudgetUsd}/day` : ''}`
     + ` · spent $${picker.spentThisMonthUsd.toFixed(2)} · parallel ${config.maxParallelTasks} · QA ≥ ${config.qaThreshold}`);
@@ -55,6 +58,9 @@ async function main() {
   const loop = new WorkerLoop(deps, {
     pollIntervalMs: config.pollIntervalMs, maxParallelTasks: config.maxParallelTasks, reportsEveryMs: config.reportsEveryMs,
     dailyBudgetUsd: config.dailyAiBudgetUsd,
+    // At 100% of the daily budget paid providers stop; the free profile takes over when its keys exist.
+    freeFallback: hasFreeProviderKey(workerEnv()) && !!models.profiles.free,
+    onDailySpend: (g) => picker.setDailySpend(g),
   });
   loop.start();
 

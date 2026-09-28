@@ -106,3 +106,65 @@ export function createBrain(root = config.brainDir): Brain {
     search,
   };
 }
+
+// ---------- role-specific context: the Content Writer's voice samples (brain/style/writing-samples/) ----------
+
+export const WRITING_SAMPLES_DIR = 'style/writing-samples';
+export interface WritingSample { path: string; text: string; truncated: boolean }
+export interface WritingSampleLimits { maxFiles: number; maxFileChars: number; maxTotalChars: number }
+export const WRITING_SAMPLE_LIMITS: WritingSampleLimits = { maxFiles: 5, maxFileChars: 6000, maxTotalChars: 20_000 };
+
+/**
+ * The CEO's own writing (.md / .txt dropped into brain/style/writing-samples/, README excluded), in name order,
+ * capped per file and in total so a big sample never floods the prompt. Symlinks and non-files are skipped.
+ */
+export function loadWritingSamples(brain: Pick<Brain, 'root'>, limits: Partial<WritingSampleLimits> = {}): WritingSample[] {
+  const lim = { ...WRITING_SAMPLE_LIMITS, ...limits };
+  const dir = path.join(brain.root, ...WRITING_SAMPLES_DIR.split('/'));
+  let names: string[];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const files = names
+    .filter((n) => /\.(md|txt)$/i.test(n) && !n.startsWith('.') && !/^readme\b/i.test(n))
+    .sort((a, b) => a.localeCompare(b));
+  const out: WritingSample[] = [];
+  let total = 0;
+  for (const name of files) {
+    if (out.length >= lim.maxFiles || total >= lim.maxTotalChars) break;
+    const abs = path.join(dir, name);
+    let st: fs.Stats;
+    try { st = fs.lstatSync(abs); } catch { continue; }
+    if (!st.isFile()) continue; // no symlinks, no directories
+    const cap = Math.min(lim.maxFileChars, lim.maxTotalChars - total);
+    const fd = fs.openSync(abs, 'r');
+    let raw: string;
+    try {
+      const buf = Buffer.alloc(Math.min(st.size, cap * 4));
+      fs.readSync(fd, buf, 0, buf.length, 0);
+      raw = buf.toString('utf8').replace(/�+$/, '').trim();
+    } finally { fs.closeSync(fd); }
+    if (!raw) continue;
+    const text = raw.length > cap ? raw.slice(0, cap) : raw;
+    const truncated = text.length < raw.length || st.size > cap * 4;
+    total += text.length;
+    out.push({ path: `brain/${WRITING_SAMPLES_DIR}/${name}`, text, truncated });
+  }
+  return out;
+}
+
+/** Prompt section with the writing samples, or '' when there are none. */
+export function writingSamplesContext(brain: Pick<Brain, 'root'>, limits?: Partial<WritingSampleLimits>): string {
+  const samples = loadWritingSamples(brain, limits);
+  if (!samples.length) {
+    return `## Writing samples\nNo samples in brain/${WRITING_SAMPLES_DIR}/ yet: follow brain/company/brand-voice.md and your role's style rules.`;
+  }
+  return [
+    `## Writing samples (read before drafting: match this voice, not generic AI copy)`,
+    'These are the CEO\'s own writing. Copy the rhythm, sentence length mix, word choice and warmth; never copy their facts or claims into client work.',
+    ...samples.map((s) => `### ${s.path}${s.truncated ? ' (excerpt)' : ''}\n${s.text}`),
+  ].join('\n\n');
+}
+
+/** Extra brain context a role always gets in its task prompt (agent id → section). Writer: the voice samples. */
+export function roleBrainContext(brain: Pick<Brain, 'root'>, agentId: string): string {
+  return agentId === 'writer' ? writingSamplesContext(brain) : '';
+}

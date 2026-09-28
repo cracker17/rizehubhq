@@ -8,7 +8,7 @@ import { reviewNext } from './qa';
 import { runDueReports } from './reportsJob';
 import { runTask } from './runner';
 import { startRizehubBackground } from './rizehub/background';
-import { DailyBudgetGuard, GlobalDailyBudget, globalBudgetNote, overBudgetNote } from './budget';
+import { DailyBudgetGuard, freeFallbackNote, GlobalDailyBudget, globalBudgetNote, overBudgetNote, type GlobalBudgetCheck } from './budget';
 import type { TaskRow } from './hqdb';
 
 /** settings.paused may be stored as true or "true". */
@@ -30,6 +30,13 @@ export interface LoopOptions {
   budgetBackoffMs?: number;
   /** DAILY_AI_BUDGET_USD: when today's total AI spend reaches it, no new planning, tasks or QA start (null → settings / none). */
   dailyBudgetUsd?: number | null;
+  /**
+   * True when free-provider keys exist (router hasFreeProviderKey): at 100% of the daily budget only paid providers
+   * stop and new work runs on the free profile. False/unset: nothing new starts until the next Manila day.
+   */
+  freeFallback?: boolean;
+  /** Every budget check result (the model picker blocks paid providers from it). */
+  onDailySpend?: (g: GlobalBudgetCheck) => void;
 }
 
 export class WorkerLoop {
@@ -52,15 +59,17 @@ export class WorkerLoop {
     this.globalBudget = new GlobalDailyBudget(deps.db, { budgetUsd: opts.dailyBudgetUsd ?? null, now: deps.now, log: (m) => log(deps, m) });
   }
 
-  /** True when today's total AI spend reached DAILY_AI_BUDGET_USD: nothing new is claimed (logged once per day). */
+  /** True when today's total AI spend reached DAILY_AI_BUDGET_USD and no free models can take over: nothing new is claimed (logged once per day). */
   private async overDailyAiBudget(): Promise<boolean> {
     const g = await this.globalBudget.check().catch((e) => {
       log(this.deps, '[worker] daily AI budget check failed (work continues)', errMsg(e));
       return null;
     });
+    if (g) this.opts.onDailySpend?.(g);
     if (!g?.over) return false;
-    if (this.budgetStopDay !== g.day) { this.budgetStopDay = g.day; log(this.deps, `[worker] ${globalBudgetNote(g)}`); }
-    return true;
+    const fallback = !!this.opts.freeFallback;
+    if (this.budgetStopDay !== g.day) { this.budgetStopDay = g.day; log(this.deps, `[worker] ${fallback ? freeFallbackNote(g) : globalBudgetNote(g)}`); }
+    return !fallback; // with free keys the picker skips paid providers and work goes on
   }
 
   private backoff(kind: keyof WorkerLoop['pausedUntil']) {

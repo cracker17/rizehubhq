@@ -195,6 +195,10 @@ export class FakeHqDb implements HqDb {
     this.activity.push({ actor: u.actor, action: `usage.${u.kind}`, task_id: u.taskId ?? null, request_id: u.requestId ?? null,
       detail: { ...u.detail, tokens_in: u.tokensIn, tokens_out: u.tokensOut }, cost_usd: u.costUsd, created_at: new Date().toISOString() });
   }
+  async logActivity(actor: string, action: string, requestId: string | null, taskId: string | null, detail: Record<string, unknown> = {}) {
+    this.log('logActivity', actor, action, requestId, taskId, detail);
+    this.activity.push({ actor, action, task_id: taskId, request_id: requestId, detail, cost_usd: 0, created_at: new Date().toISOString() });
+  }
   async addAgentMessage(agentId: string, sender: 'ceo' | 'agent', body: string, taskId: string | null = null) {
     this.messages.push({ agent_id: agentId, sender, body, task_id: taskId });
   }

@@ -223,6 +223,6 @@ test('budget alerts: 80% and 100% are sent once each; 80% waits out quiet hours,
   const r = await notifierTick(night.deps, night.state);
   assert.equal(r.budgetAlerts, 1, 'only the 100% alert is sent; the superseded 80% is marked without a message');
   assert.match(night.sender.sent[0]!.text, /^🛑 <b>Daily AI budget reached<\/b> · \$10\.02 of \$10\.00/);
-  assert.match(night.sender.sent[0]!.text, /No new planning, tasks or QA reviews start until midnight Manila time/);
+  assert.match(night.sender.sent[0]!.text, /Paid models \(Anthropic, OpenAI\) stop until midnight Manila time/);
   assert.ok(night.db.budgetAlerts.every((a) => a.telegram_sent_at));
 });

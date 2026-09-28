@@ -82,6 +82,9 @@ If `questions_for_ceo` is not empty, the plan approval shows the questions first
 - Parallelize where there's no dependency.
 - Never plan an external action without marking it as needing CEO approval.
 - If the request is unclear or the client is unknown, ask — don't guess.
+- **Design → dev handoff.** When a request needs design (designer: `wireframe`, `ui-mockup`, `brand-asset`, `ux-audit`) and building (`web-dev`), every web-dev task depends on the design task. The planner enforces it after validation (`enforceDesignHandoff` in `apps/worker/src/planner.ts` adds a missing dependency, never a cycle, and notes it in the plan's assumptions).
+  - Release: `release_ready_tasks()` queues a pending task only when every dependency is `done`, and a task is `done` only after QA passed it **and** the CEO approved the deliverable. A QA pass alone never releases the developer.
+  - Input: the developer's prompt gets the upstream outputs (`apps/worker/src/handoff.ts` `taskHandoffContext` → `upstreamContext`): the designer's `design-spec.md` first (colours, fonts, spacing, layout notes, asset list), then other dependencies' deliverables. The spec and the files listed in the design task's `output.files` are copied into the dev workspace at `upstream/<design-task-id>/` (jail rules, size caps). The Content Writer's prompt gets the samples in `brain/style/writing-samples/` the same way.
 
 ## [4] Worker loop (pseudocode)
 
@@ -149,6 +152,37 @@ async function runTask(task) {
 - Shell access (`bash_sandboxed`) runs inside the task folder with a command allowlist (git, npm/pnpm, node, shopify CLI, lighthouse). No `rm -rf /`, no `curl | sh`, no reading `.env`.
 - Tokens are injected by the tool layer only when a tool call is made — never placed in the prompt or workspace files.
 
+### Per-task caps (built-in runner)
+Every run stops at the stricter of the role file (`max_turns`, `budget_usd_per_task`) and the global env caps
+`MAX_STEPS_PER_TASK` (default 25) and `MAX_COST_PER_TASK_USD` (default 1.50; priced per step via `models/usage.ts`).
+Over a cap the loop stops and the task is failed through `fail_task` with the reason shown to the CEO:
+`stopped: exceeded max steps 25` or `stopped: exceeded $1.50 task budget ($1.5123 spent)`.
+
+### Hermes runtime (Web Developer, Graphic Designer, Content Writer, Sales Agent)
+Agents with `runtime: hermes` (roster + role file) run on their own Hermes Agent instance (`apps/worker/src/hermes/`,
+deploy: `deploy/hermes/README.md`). The worker still claims the task, heartbeats and reports progress:
+1. `GET /health` on `HERMES_URL_<AGENT>`, then `POST /v1/chat/completions` (Bearer `HERMES_KEY_<AGENT>`) with the role body
+   as system prompt and the same task prompt as above (instructions, criteria, QA/CEO feedback, SOP/checklist/brain paths)
+   plus a short "Running on Hermes" note. `X-Hermes-Session-Id` = task id (the transcript continues across revisions),
+   `X-Hermes-Session-Key` = agent id (long-term memory per employee).
+2. Hermes runs its own tool loop. HQ tools come from the worker's MCP endpoint `POST /mcp` (Streamable HTTP, JSON-RPC:
+   initialize, tools/list, tools/call). Bearer `HQ_MCP_TOKEN_<AGENT>` → agent → only that role's tools (`buildTools`).
+   Calls act on the agent's current `working` task (resolved server-side from `agents.current_task_id`, or the
+   `task_id` argument); gated tools create approvals exactly as in the built-in runner. Each call → activity
+   `mcp.tool_call` (tool, ok, ms; never arguments).
+3. Output: if Hermes called `submit_output`/`ask_ceo` over MCP, that stands. Otherwise its final answer is parsed (a
+   fenced ```json block with the `submit_output` fields, or `{"ask_ceo": …}`; plain text → `fallback: true` output) and
+   saved with `submit_task_output`. Usage is recorded as `usage.task` with `detail.runtime = 'hermes'`, priced with the
+   Hermes model (`HERMES_MODEL[_<AGENT>]`). The per-task caps above are enforced only on the built-in runner; a Hermes run
+   that costs more than the role budget is flagged `over_task_budget` in the usage detail.
+4. Fallback (`HERMES_FALLBACK=on`, default): not configured, `/health` failing, or the run failing with down/timeout
+   (`HERMES_TIMEOUT_MS`, default 30 min) → the task runs on the built-in runner and activity `hermes.fallback` says
+   "Hermes unavailable for <agent>, ran on the built-in runner (<reason>)". `off` → re-queued (failed if not configured).
+   401 or a malformed response fails the task (configuration error, no fallback).
+
+Hermes holds no publish/send/platform credentials: vault logins, RizeHub keys and platform tokens stay in the worker
+and are only used by HQ tools.
+
 ## [5] QA
 
 QA runs as its own agent with **only**: the task instructions, acceptance criteria, the QA checklist for that `work_type`, and the output. It does **not** see the specialist's reasoning.
@@ -203,6 +237,8 @@ External actions are executed by **fixed worker code**, not by the agent, using 
 | Worker crash mid-task | Heartbeat stops → task re-queued after 10 min |
 | Tool/API error | Agent retries per its judgment; 3 consecutive tool errors → task failed, agent blocked |
 | Budget exceeded | Task failed, alert, agent blocked until you unblock |
+| Max steps / max cost per task exceeded | Run stopped, task failed with `stopped: exceeded …` (see "Per-task caps") |
+| Hermes down / not configured | Task runs on the built-in runner, activity `hermes.fallback` (or re-queued with `HERMES_FALLBACK=off`) |
 | Missing access (no token) | Agent calls `ask_ceo`; status `blocked`; Connections page highlights it |
 | QA loop exhausted | Escalation approval to you |
 | Anthropic API down | Worker pauses claiming, retries with backoff, Telegram notice |

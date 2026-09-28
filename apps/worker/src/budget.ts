@@ -59,12 +59,15 @@ export const BUDGET_ALERT_LEVELS = [80, 100] as const;
 export interface GlobalBudgetCheck { over: boolean; spentUsd: number; budgetUsd: number | null; day: string; pct: number | null }
 
 /**
- * The daily cap: DAILY_AI_BUDGET_USD when set, else settings.daily_budget_usd, else none. Values that are not a
- * finite number ≥ 0 mean "no cap". 0 = no paid spend at all (free-tier work still runs, see isOverDaily).
+ * The daily cap: DAILY_AI_BUDGET_USD when set, else settings.daily_budget_usd, else none. 0 means "no cap" (an
+ * explicit DAILY_AI_BUDGET_USD=0 also ignores settings); values that are not a finite number ≥ 0 are ignored.
  */
 export function resolveDailyBudget(envValue: number | null | undefined, settings: Record<string, unknown> = {}): number | null {
   const ok = (v: unknown) => { const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN; return Number.isFinite(n) && n >= 0 ? n : null; };
-  return ok(envValue) ?? ok(settings.daily_budget_usd);
+  const env = ok(envValue);
+  if (env !== null) return env > 0 ? env : null;
+  const fromSettings = ok(settings.daily_budget_usd);
+  return fromSettings ? fromSettings : null;
 }
 
 export class GlobalDailyBudget {
@@ -103,6 +106,12 @@ export class GlobalDailyBudget {
 
   /** Forget the cached figure (e.g. a run just recorded its cost). */
   invalidate() { this.cache = null; }
+}
+
+/** Logged once per day when the cap is hit but free models (free profile keys) keep the team working. */
+export function freeFallbackNote(c: GlobalBudgetCheck): string {
+  return `Daily AI budget reached: $${c.spentUsd.toFixed(2)} spent of $${(c.budgetUsd ?? 0).toFixed(2)} today (Asia/Manila ${c.day}). `
+    + 'Paid providers (Anthropic, OpenAI) are stopped until midnight Manila time; new work runs on the free profile models.';
 }
 
 export function globalBudgetNote(c: GlobalBudgetCheck): string {

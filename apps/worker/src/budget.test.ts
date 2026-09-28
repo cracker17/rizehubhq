@@ -115,12 +115,14 @@ test('ModelPicker: month-to-date spend resets on the Manila month change and is 
 // ---------- DAILY_AI_BUDGET_USD: global cap (all agents + planning + QA) with 80% / 100% Telegram alerts ----------
 const NOW = () => new Date('2026-09-28T02:00:00Z'); // 10:00 Manila
 
-test('resolveDailyBudget: env wins, then settings.daily_budget_usd, else no cap', () => {
+test('resolveDailyBudget: env wins, then settings.daily_budget_usd, else no cap; 0 = no cap', () => {
   assert.equal(resolveDailyBudget(12, { daily_budget_usd: '10' }), 12);
   assert.equal(resolveDailyBudget(null, { daily_budget_usd: '10' }), 10);
   assert.equal(resolveDailyBudget(undefined, {}), null);
   assert.equal(resolveDailyBudget(Number.NaN, { daily_budget_usd: 'abc' }), null);
-  assert.equal(resolveDailyBudget(0, {}), 0);
+  assert.equal(resolveDailyBudget(0, {}), null, 'DAILY_AI_BUDGET_USD=0 = no cap');
+  assert.equal(resolveDailyBudget(0, { daily_budget_usd: 5 }), null, 'an explicit 0 in env wins over settings');
+  assert.equal(resolveDailyBudget(null, { daily_budget_usd: 0 }), null);
 });
 
 test('GlobalDailyBudget: counts every actor today (Manila), alerts once at 80% and once at 100%', async () => {
@@ -168,4 +170,48 @@ test('loop: daily AI budget reached → no planning, tasks or QA are claimed (lo
   await loop2.tick();
   assert.ok(db.callsOf('claimNextTask').length > 0);
   await Promise.allSettled([...loop2.running.values()]);
+});
+
+test('ModelPicker: at 100% of the daily budget paid providers stop and the free profile takes over; resets next Manila day', async () => {
+  const cfg = loadModelsConfig();
+  let now = new Date('2026-09-28T02:00:00Z'); // 10:00 Manila
+  const picker = new ModelPicker({
+    cfg, profile: 'paid', env: { ANTHROPIC_API_KEY: 'a', OPENAI_API_KEY: 'o', GROQ_API_KEY: 'g' }, monthlyBudgetUsd: 100,
+    create: async () => ({}) as never, now: () => now, dailyBudgetUsd: 1,
+  });
+  const m = await picker.pick('dev');
+  assert.equal(m.provider, 'anthropic');
+  m.recordCall({ inputTokens: 250_000, outputTokens: 0 }); // Sonnet $2/M → $0.50
+  assert.equal(picker.paidBlocked, false);
+  picker.setDailySpend({ day: '2026-09-28', spentUsd: 1.2, budgetUsd: 1 }); // the DB total (other runs) crossed the cap
+  assert.equal(picker.paidBlocked, true);
+  const free = await picker.pick('dev');
+  assert.deepEqual([free.provider, free.modelId], ['groq', 'openai/gpt-oss-120b']);
+  picker.setDailySpend({ day: '2026-09-28', spentUsd: 0.2, budgetUsd: 1 }); // never lowered within the day
+  assert.equal(picker.paidBlocked, true);
+  now = new Date('2026-09-28T16:00:01Z'); // next Manila day
+  assert.equal(picker.paidBlocked, false);
+  assert.equal((await picker.pick('dev')).provider, 'anthropic');
+  // raising the cap (or 0 / null = no cap) unblocks at once
+  picker.setDailySpend({ day: '2026-09-29', spentUsd: 3, budgetUsd: 2 });
+  assert.equal(picker.paidBlocked, true);
+  picker.setDailySpend({ day: '2026-09-29', spentUsd: 3, budgetUsd: null });
+  assert.equal(picker.paidBlocked, false);
+});
+
+test('loop: with free keys (freeFallback) the daily cap only stops paid providers: work keeps flowing, logged once', async () => {
+  const db = new FakeHqDb(['coo', 'web-dev', 'writer', 'qa-lead']);
+  db.activity.push(usageRow('web-dev', 10, '2026-09-28T01:00:00.000Z'));
+  db.addTask({ agent_id: 'writer', status: 'queued', title: 'Blog outline' });
+  const deps = makeDeps({ db, model: mockModel([]) });
+  const seen: number[] = [];
+  const loop = new WorkerLoop(deps, { pollIntervalMs: 10, maxParallelTasks: 2, dailyBudgetUsd: 10, freeFallback: true, onDailySpend: (g) => seen.push(g.spentUsd) });
+  await loop.tick();
+  await loop.tick();
+  assert.ok(db.callsOf('claimNextTask').length > 0, 'tasks are still claimed');
+  assert.ok(db.callsOf('claimRequestForPlanning').length > 0, 'planning still runs');
+  assert.deepEqual(seen.slice(0, 1), [10], 'the picker is told today’s total');
+  assert.equal(deps.logs.filter((l) => l.includes('Paid providers (Anthropic, OpenAI) are stopped until midnight Manila time')).length, 1);
+  assert.deepEqual(db.budgetAlerts.map((a) => a.level), [80, 100]);
+  await Promise.allSettled([...loop.running.values()]);
 });
