@@ -21,9 +21,9 @@ Each milestone ends with something you can **see working locally**. Don't start 
 | M9 Dev agents + connections | ✅ Done: built and tested offline | Test Shopify store, GitHub token in the vault |
 | M9b RizeHub Agent API | ✅ Done: built and tested offline (mock + reference kit `rizehub-agent-api/`) | RizeHub implements `/agent-api/v1` (staging), then real keys |
 | M9c Onboarding automation | ✅ Done: built and tested offline (mock) | Staging RizeHub test client |
-| **Go-live** (M11 deploy kit) | 🟡 Kit ready: `deploy/`, Dockerfiles, compose, CI image builds, `pnpm check:env` | **Pending:** hosted Supabase, DNS, `.env` with live keys, `setup-vps.sh`, CEO user, Telegram bot, `/assign` end-to-end (README "Go-live checklist") |
-| M10 Remaining roles | ⏳ Pending: role files, SOPs and tools exist | Real-task tuning per role: 3 real tasks with QA ≥ 85 each, one role at a time |
-| M12 Hardening & scale | ⏳ Pending | TOTP in the dashboard, auto-approve rules, cost dashboards, … |
+| **Go-live** (M11 deploy kit) | 🟡 Kit ready: `deploy/`, Dockerfiles, compose, CI image builds, `pnpm check:env`, `pnpm check:deploy`, Go-live runbook in docs/10 | **Pending:** hosted Supabase, DNS, `.env` with live keys, `setup-vps.sh`, CEO user, Telegram bot, `/assign` end-to-end (README "Go-live checklist") |
+| M10 Remaining roles | 🟡 Ready offline: role files, SOPs, tools and `pnpm eval:roles` (18 fixture tasks, all ≥ 85 offline) | AI keys, then `pnpm eval:roles -- --live`, then 3 real tasks with QA ≥ 85 per role |
+| M12 Hardening & scale | 🟡 In progress: TOTP 2FA + step-up, auto-approve rules for low-risk plans, /costs dashboard done | Secrets manager, QA-Dev / QA-Content split, voice notes, client status pages |
 
 ## M0 · Foundation (Day 1)
 - Monorepo, pnpm workspaces, local Supabase running, `.env.example`, `CLAUDE.md`.

@@ -683,6 +683,13 @@ export class OfficeScene extends Phaser.Scene {
       }
       g.fillStyle(0xe6f2ff, 0.18); g.fillRect(p.x - 18 * S, top, 36 * S, bot - top);
     }
+    // washing hands at the vanity: a thin stream from the tap and a few splashes
+    if (bossS && bossS.motion.loop === 'wash' && bossS.motion.at && bossS.motion.phase !== 'walking') {
+      const p = world(bossS.motion.pos.x, bossS.motion.pos.y);
+      const fx = p.x + 7 * S; const fy = p.y - 70 * S;
+      g.lineStyle(1.4 * S, 0xbfe3ff, 0.8); g.lineBetween(fx, fy, fx + Math.sin(t * 20) * 0.4 * S, fy + 7 * S);
+      for (let i = 0; i < 4; i++) { const k = (t * 3 + i / 4) % 1; g.fillStyle(0xdff2ff, 0.7 * (1 - k)); g.fillCircle(fx + (i - 1.5) * 2.2 * S * k, fy + 7 * S - k * 3 * S, 0.8 * S); }
+    }
     // the CEO's coffee: a mug in his hand while he carries it and drinks it on the sofa, with a curl of steam
     const boss = this.chars.get(CEO_ID);
     if (boss && this.ceoLife.mug && boss.view.object.visible && !(boss.motion.phase === 'standing' && boss.motion.loop === 'coffee')) {

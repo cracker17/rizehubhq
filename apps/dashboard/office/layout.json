@@ -818,8 +818,8 @@
    "id": "ceo-bath-toilet",
    "kind": "bath_toilet",
    "at": [
-    1828.9,
-    422.0
+    1821.1,
+    422.4
    ],
    "face": "right",
    "pose": "sit",
@@ -831,8 +831,8 @@
    "id": "ceo-bath-vanity",
    "kind": "bath_vanity",
    "at": [
-    1919.6,
-    430.3
+    1935.6,
+    434.7
    ],
    "face": "up",
    "pose": "stand",
@@ -2380,6 +2380,22 @@
    ],
    "h": 106,
    "swing": 1
+  },
+  {
+   "id": "ceo-bath",
+   "kind": "glass",
+   "mode": "slide",
+   "hinge": [
+    1914.5,
+    482.60999999999996
+   ],
+   "free": [
+    1876.6999999999998,
+    510.60999999999996
+   ],
+   "h": 14,
+   "swing": 1,
+   "frosted": true
   }
  ],
  "glassWalls": [
