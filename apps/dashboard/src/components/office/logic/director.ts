@@ -119,9 +119,10 @@ export function planningInfo(snap: HqSnapshot) {
 }
 
 /** Tasks the COO has just handed out (queued, not yet picked up) → the COO walks over to that desk. */
-export function handoverTarget(snap: HqSnapshot): string | null {
+export function handoverTarget(snap: HqSnapshot, nowMs: number, windowMs = 90_000): string | null {
   const t = snap.tasks
     .filter((x) => x.status === 'queued' && x.agent_id !== COO_ID && x.agent_id !== QA_ID)
+    .filter((x) => nowMs - Date.parse(x.created_at) >= 0 && nowMs - Date.parse(x.created_at) <= windowMs)
     .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))[0];
   return t?.agent_id ?? null;
 }
@@ -164,7 +165,7 @@ export function deriveOffice(snap: HqSnapshot, opts: DeriveOptions): OfficeModel
     }
     // The COO walks over to a desk to hand over a freshly queued task.
     if (t.id === COO_ID && (t.status === 'working' || t.status === 'idle')) {
-      const target = handoverTarget(snap);
+      const target = handoverTarget(snap, opts.nowMs);
       const visit = target ? visitGoal(m, target) : null;
       if (visit) {
         const who = tiles.find((x) => x.id === target)?.name ?? 'the team';

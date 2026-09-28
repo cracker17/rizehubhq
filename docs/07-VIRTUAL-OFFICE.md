@@ -22,54 +22,27 @@ The office opens in **Isometric**. A toggle in the toolbar switches to `Top-down
 | Part | Choice | Why |
 |---|---|---|
 | Game engine | **Phaser 3** inside the Next.js dashboard (client-only component) | Built-in tilemaps (orthogonal **and** isometric), cameras, zoom/pan, sprites, animations, input |
-| Map editor | **Tiled** (free) → exports JSON loaded by Phaser | Draw rooms, place desks and spots visually; one map file per view |
-| Walking | A* pathfinding on the walkable grid (`easystarjs`) | Characters walk around furniture through doorways |
+| Map data | `apps/dashboard/office/layout.json` over the painted background | Rooms, seats, idle spots and walking paths as coordinates on the picture |
+| Walking | Shortest path on the layout's walk graph | Characters use corridors and doors, never walk through glass |
 | Live data | Supabase Realtime → Zustand store → Phaser scene | Same store feeds the grid view, KPIs and badges |
 | UI over the map | React (shadcn) panels on top of the canvas | Name tags, POV panel, chat, tooltips stay crisp and accessible |
 
-## 3. Floor plan (both views)
+## 3. Floor plan (the painted office)
 
-```
-┌──────────────┬─────────────────────────────┬───────────────┬─────────────┐
-│  BOARDROOM   │        DEV TEAM             │    QA LAB     │  CEO OFFICE │
-│ (COO plans,  │ Shopify · Webflow ·         │  QA Lead      │  (you)      │
-│  kickoffs)   │ WordPress · Full-Stack      │  test bench   │             │
-├──────────────┼─────────────────────────────┼───────────────┴─────────────┤
-│ DESIGN       │   GROWTH & SALES            │   CONTENT ROOM               │
-│ STUDIO       │ Pipeline · Prospecting ·    │ SEO ×2 · Social ×2           │
-│ UI/UX ×2     │ Inbound · Job Scout         │                              │
-│ Graphic ×2   │                             │                              │
-├──────────────┼─────────────────────────────┼──────────┬─────────┬────────┤
-│  OPS DESK    │  MULTIMEDIA STUDIO          │  COFFEE  │  GAME   │ LOBBY  │
-│  COO · EA &  │  Video Editor: edit bay     │  LOUNGE  │  ROOM   │ recep- │
-│  Reports ·   │  with timeline screens      │ espresso │ ping-   │ tion,  │
-│  Client      │  Sound & Voice: vocal booth │ bar,     │ pong,   │ couches│
-│  Success     │  (mic, acoustic foam)       │ sofas    │ foosball│        │
-└──────────────┴─────────────────────────────┴──────────┴─────────┴────────┘
-```
-Six agents sit in this office (`agents/roster.yaml`); their desk slots (`agents.desk.id`): `coo` → `board-head`,
-`web-dev` → `dev-1`, `designer` → `design-1`, `writer` → `sales-1`, `sales` → `sales-2`, `qa-lead` → `qa-1`. The room plan
-above predates the six-agent roster; rooms without an agent are scenery.
+The office is the approved reference picture (`assets/office/reference-office.png`), cleaned of people and
+baked-in text (`public/office/office-bg.webp`, see `scripts/office/README.md`). Everything the logic needs is
+coordinate data in **`apps/dashboard/office/layout.json`**, in pixels of the 1x reference picture:
 
-Rooms are Tiled object layers with a `room` property; each has a sign like Gather ("DEV TEAM", "QA LAB"…).
-
-`map.json` (logical, shared by both views):
-```json
-{
-  "grid": { "cols": 64, "rows": 40 },
-  "rooms": { "dev": {"x":14,"y":0,"w":22,"h":12}, "qa_lab": {"x":36,"y":0,"w":12,"h":12}, "...": {} },
-  "desks": { "web-dev": {"x":16,"y":4,"face":"up"}, "qa-lead": {"x":40,"y":5,"face":"up"}, "...": {} },
-  "spots": {
-    "coffee":      [{"x":30,"y":30,"pose":"hold_mug"}, {"x":32,"y":31,"pose":"sit_sofa"}],
-    "lounge_sofa": [{"x":55,"y":33,"pose":"sit_sofa"}],
-    "ping_pong":   [{"x":40,"y":30,"pose":"play","pair":1}, {"x":44,"y":30,"pose":"play","pair":1}],
-    "foosball":    [{"x":41,"y":35,"pose":"play","pair":2}, {"x":43,"y":35,"pose":"play","pair":2}],
-    "lobby":       [{"x":58,"y":34,"pose":"sit_couch"}, {"x":60,"y":30,"pose":"stand_phone"}],
-    "boardroom":   [{"x":3,"y":3,"pose":"sit_meeting"}, "..."],
-    "qa_bench":    [{"x":42,"y":8,"pose":"inspect"}]
-  }
-}
-```
+| Key | What |
+|---|---|
+| `grid` | Affine picture ⇄ tile transform (tile x = down-right, tile y = down-left), so the iso facings still work |
+| `rooms` | Dev Team, Design Studio, Growth & Sales, QA Lab, Boardroom, CEO Office, Reception, Coffee Corner, Lounge (fireplace), Game Hall — each with its sign position (HTML pill) |
+| `desks` | Every desk seat in the picture (4 Dev, 2 Design, 4 Growth & Sales, 2 QA Lab, the Boardroom head seat, the CEO desk) with facing and monitor quads |
+| `assignments` | `web-dev → dev-1`, `designer → design-1` (nearest the Dev Team), `writer → sales-1`, `sales → sales-2`, `qa-lead → qa-1`, `coo → board-head`. An agent's own `agents.desk.id` overrides this, so a new hire gets a desk without a code change. Unassigned desks stay plain furniture. |
+| `spots` | Idle spots: espresso bar, fireside chats, lounge sofas, ping-pong (pair), foosball (pair), arcade, reception; boardroom seats; the CEO chair |
+| `visits` | Where the COO stands when handing a desk a task |
+| `graph` | Walking network (corridors, doors, aisles). Every seat and spot joins at its `via` node; tests check every pair is reachable |
+| `wallScreens` | The Growth & Sales board (live sales pipeline) and the Boardroom TV (today: approvals, agents working, QA, open requests) |
 
 ## 4. Behaviour: status → what you see
 
@@ -166,31 +139,28 @@ Chat tab in the same panel (also `/ask <agent> <question>` in Telegram).
 
 ## 9. Characters
 
-One consistent character style (semi-realistic, friendly office workers), each role with a signature look so you recognise them instantly:
+Painted pose sprites in the same art style as the office (generated with Magnific, one pose sheet per
+character so each face and outfit stays consistent): stand, walk, stand (back), walk (back), seated typing
+(back), holding coffee, sofa, and an action pose (ping-pong swing; pointing for the COO; waving for the CEO).
+Front poses face down-left and back poses up-right; the scene mirrors them for the other two facings.
 
 | Agent | Look |
 |---|---|
-| COO | Blazer, tablet in hand |
-| Sales Agent | Rolled-up sleeves, clipboard |
-| Web Developer | Headphones, green outfit |
-| Graphic Designer | Beret, stylus |
-| Content Writer | Glasses, stack of books |
-| QA | Lab coat, magnifier |
-| You (CEO) | Your likeness: short dark-brown textured quiff, light stubble, small stud earring, black ribbed turtleneck, charcoal trousers, white sneakers (concept: Magnific "CEO character sheet") |
+| COO | Charcoal blazer, white blouse, tablet |
+| Web Developer | Navy hoodie, jeans, headphones round the neck |
+| Graphic Designer | Black bob, sage knit sweater, cream trousers |
+| Content Writer | Curly hair, round glasses, mustard cardigan |
+| Sales Agent | Light-blue shirt, sleeves rolled, headset |
+| QA | Hair bun, round glasses, olive utility jacket, ID lanyard |
+| You (CEO) | Dark-brown textured quiff, light stubble, stud earring, black turtleneck, charcoal trousers, white sneakers |
 
-**Animations per character:** see §4b for the full clip list (main loops, micro-actions and transitions), plus role-specific loops.
+Motion on top of the poses (so nobody is ever frozen): two-frame walk cycle with bounce, breathing, typing
+jiggle when seated, gesture hops (task done, QA pass/fail), stretch micro-actions, and a soft floor shadow.
 
-## 10. Producing the art (consistent across both views)
+## 10. Producing the art
 
-Recommended pipeline so the same characters work in both views:
-
-1. **Design each character** as a turnaround image (Magnific image generation, one base style, per-role outfit prompts).
-2. **Make them 3D:** Magnific `models3d_generate` from the turnaround → `models3d_rig` → `models3d_animate` (walk, sit, type, drink, play…).
-3. **Render sprite sheets in Blender** (free) from the 2:1 isometric camera (main view), with transparent background. Add a top-down camera later for the optional view; the same 3D models keep characters identical in both.
-4. **Office furniture/props:** generate or model the key props (desks with monitors, espresso bar, sofas, ping-pong, foosball, plants), render them from both cameras, and assemble in Tiled.
-5. Match the concept: warm daylight, glass partitions, oak desks, concrete floor, rugs and plants, and a city skyline through the windows (a painted background layer behind the floor).
-
-Budget for art: most of the effort in this milestone is art, not code. Start with placeholder shapes and names (the logic works with coloured circles), and swap in the real art when it's ready.
+See `scripts/office/README.md`: background cleanup (LaMa inpainting of the reference), pose sheets (Magnific),
+sprite matting, and `public/office/manifest.json` (pose images + floor anchors per character).
 
 ## 11. Performance & mobile
 

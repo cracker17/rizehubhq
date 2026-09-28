@@ -1,72 +1,64 @@
 // Pure-logic tests for the virtual office (run: pnpm --filter dashboard test).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { OFFICE, key, roomAt, wallBetween } from './map';
-import { findPath, isWalkable, nearestFree } from './pathfinding';
+import { OFFICE, assignmentsFor, buildOfficeMap, deskFor } from './map';
+import { findPath, nearestNode } from './pathfinding';
+import { LAYOUT, PROJ } from './layout';
 import { assignSpots, partnerSpot } from './spots';
 import { createMotion, setGoal, tick, trigger, isAtGoal, MICRO_MAX, type Goal, type Motion } from './motion';
-import { deriveOffice, diffEvents, planningInfo } from './director';
+import { deriveOffice, diffEvents, handoverTarget, planningInfo } from './director';
 import { applyOverlay, emptyOverlay, simStep } from './demoSim';
 import { mulberry32 } from './rng';
+import { pickPose } from '../engine/characters';
 import { demoSnapshot } from '../../../lib/mock';
 import type { HqSnapshot } from '../../../lib/data/types';
 
-const SEED_AGENTS = [
-  'coo', 'ea', 'pipeline', 'prospector', 'inbound', 'job-scout', 'client-success', 'video-editor', 'sound-engineer',
-  'shopify-dev', 'webflow-dev', 'wordpress-dev', 'fullstack-dev', 'uiux-1', 'uiux-2', 'graphic-1', 'graphic-2',
-  'social-1', 'social-2', 'seo-1', 'seo-2', 'qa-lead',
-];
+const AGENTS = ['coo', 'web-dev', 'designer', 'writer', 'sales', 'qa-lead'];
 const env = { findPath: (a: { x: number; y: number }, b: { x: number; y: number }) => findPath(OFFICE, a, b) };
-const LOBBY = { x: 52, y: 26 };
+const LOBBY = OFFICE.entrance;
+const spot = (id: string) => OFFICE.spots.find((s) => s.id === id)!;
+const close = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
 
-// ---------------------------------------------------------------- map
-test('map: every seeded agent has exactly one desk, inside the right room', () => {
-  assert.equal(OFFICE.desks.length, 22);
-  for (const id of SEED_AGENTS) {
-    const desks = OFFICE.desks.filter((d) => d.agentId === id);
-    assert.equal(desks.length, 1, `desk for ${id}`);
-    assert.equal(roomAt(OFFICE, desks[0].x, desks[0].y)?.id, desks[0].room, `room of ${id}`);
+// ---------------------------------------------------------------- layout + map
+test('layout: the picture ⇄ tile projection round-trips', () => {
+  for (const [x, y] of [[0, 0], [668, 0], [1337, 749], [420, 330]]) {
+    const t = PROJ.toTile(x, y);
+    const back = PROJ.toImage(t.x, t.y);
+    assert.ok(Math.abs(back.x - x) < 1e-6 && Math.abs(back.y - y) < 1e-6, `${x},${y}`);
   }
 });
 
-test('map: floor plan matches docs/07 §3 (rooms and neighbours)', () => {
-  const at = (x: number, y: number) => roomAt(OFFICE, x, y)?.id;
-  assert.equal(at(1, 1), 'boardroom');
-  assert.equal(at(20, 2), 'dev');
-  assert.equal(at(35, 2), 'qa_lab');
-  assert.equal(at(50, 2), 'ceo');
-  assert.equal(at(2, 12), 'design');
-  assert.equal(at(20, 12), 'growth');
-  assert.equal(at(45, 12), 'content');
-  assert.equal(at(2, 25), 'ops');
-  assert.equal(at(20, 25), 'multimedia');
-  assert.equal(at(34, 25), 'coffee');
-  assert.equal(at(44, 25), 'game');
-  assert.equal(at(52, 25), 'lobby');
-  // every tile belongs to exactly one room
-  for (let x = 0; x < OFFICE.cols; x++) for (let y = 0; y < OFFICE.rows; y++) {
-    assert.equal(OFFICE.rooms.filter((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h).length, 1, `tile ${x},${y}`);
-  }
+test('map: the six agents sit where the brief says (seat ids from layout.json)', () => {
+  assert.equal(OFFICE.desks.length, 6);
+  const seat = (id: string) => deskFor(OFFICE, id)?.id;
+  assert.equal(seat('web-dev'), 'dev-1');
+  assert.equal(seat('designer'), 'design-1');
+  assert.equal(seat('writer'), 'sales-1');
+  assert.equal(seat('sales'), 'sales-2');
+  assert.equal(seat('qa-lead'), 'qa-1');
+  assert.equal(seat('coo'), 'board-head');
+  assert.equal(OFFICE.ceoSeat.room, 'ceo');
 });
 
-test('map: room signs sit on free floor inside their room', () => {
-  for (const r of OFFICE.rooms) {
-    assert.equal(roomAt(OFFICE, Math.floor(r.label.x), Math.floor(r.label.y))?.id, r.id, r.id);
-  }
-});
-
-test('map: desks, spots and seats are never on blocked tiles; spots do not share a tile', () => {
-  const tiles = new Set<string>();
-  for (const d of OFFICE.desks) { assert.ok(!OFFICE.blocked.has(key(d.x, d.y)), `desk ${d.agentId}`); tiles.add(key(d.x, d.y)); }
-  for (const s of OFFICE.spots) {
-    assert.ok(!OFFICE.blocked.has(key(s.x, s.y)), `spot ${s.id}`);
-    assert.ok(!tiles.has(key(s.x, s.y)), `spot ${s.id} overlaps`);
-    tiles.add(key(s.x, s.y));
-  }
+test('map: rooms from the reference, spare desks stay as furniture, a new hire gets a desk by seat id', () => {
+  const rooms = OFFICE.rooms.map((r) => r.id).sort();
+  assert.deepEqual(rooms, ['boardroom', 'ceo', 'coffee', 'design', 'dev', 'game', 'growth', 'lobby', 'lounge', 'qa_lab'].sort());
+  const count = (room: string) => OFFICE.seats.filter((s) => s.room === room && s.kind !== 'board' && s.kind !== 'ceo').length;
+  assert.equal(count('dev'), 4);
+  assert.equal(count('design'), 2);
+  assert.ok(count('growth') >= 4);
+  assert.equal(count('qa_lab'), 2);
+  // agents.desk.id overrides the default (and frees the old owner's seat)
+  const a = assignmentsFor([{ id: 'seo', desk: { id: 'dev-2' } }, { id: 'web-dev', desk: { id: 'dev-2' } }]);
+  assert.equal(a['web-dev'], 'dev-2');
+  assert.equal(a.seo, undefined);
+  const m = buildOfficeMap(assignmentsFor([{ id: 'new-hire', desk: { id: 'design-2' } }]));
+  assert.equal(deskFor(m, 'new-hire')?.id, 'design-2');
+  assert.equal(m.desks.length, 7);
 });
 
 test('map: required spot kinds exist (pairs come in twos)', () => {
-  for (const k of ['coffee', 'lounge_sofa', 'lobby', 'ping_pong', 'foosball', 'chat', 'boardroom', 'qa_bench', 'ceo'] as const) {
+  for (const k of ['coffee', 'lounge_sofa', 'lobby', 'ping_pong', 'foosball', 'chat', 'boardroom', 'boardroom_head', 'ceo'] as const) {
     assert.ok(OFFICE.spots.some((s) => s.kind === k), k);
   }
   const pairs = new Map<string, number>();
@@ -75,40 +67,34 @@ test('map: required spot kinds exist (pairs come in twos)', () => {
   assert.equal(partnerSpot(OFFICE, 'pp-a')?.id, 'pp-b');
 });
 
-test('map: interior walls separate rooms except at doors', () => {
-  assert.ok(wallBetween(OFFICE, 10, 9, 10, 10), 'boardroom/design wall');
-  assert.ok(!wallBetween(OFFICE, 4, 9, 4, 10), 'boardroom/design door');
-  assert.ok(wallBetween(OFFICE, 11, 1, 12, 1), 'boardroom/dev wall');
-  assert.ok(!wallBetween(OFFICE, 11, 4, 12, 4), 'boardroom/dev door');
-  assert.ok(!wallBetween(OFFICE, 39, 25, 40, 25), 'coffee/game open plan');
+test('layout: every point sits inside the picture and every seat has a visit spot', () => {
+  const inside = ([x, y]: [number, number]) => x > 0 && y > 0 && x < LAYOUT.image.width && y < LAYOUT.image.height;
+  for (const d of LAYOUT.desks) { assert.ok(inside(d.at), d.id); if (d.kind !== 'board' && d.kind !== 'ceo') assert.ok(LAYOUT.visits[d.id], `visit ${d.id}`); }
+  for (const s of LAYOUT.spots) assert.ok(inside(s.at), s.id);
+  for (const [id, xy] of Object.entries(LAYOUT.graph.nodes)) assert.ok(inside(xy), id);
+  for (const r of LAYOUT.rooms) assert.ok(inside(r.label), r.id);
 });
 
 // ---------------------------------------------------------------- pathfinding
-test('pathfinding: every desk and spot is reachable from the lobby', () => {
-  for (const d of OFFICE.desks) assert.ok(findPath(OFFICE, LOBBY, d), `desk ${d.agentId}`);
-  for (const s of OFFICE.spots) assert.ok(findPath(OFFICE, LOBBY, s), `spot ${s.id}`);
-});
-
-test('pathfinding: paths are 4-connected, avoid furniture, seats and walls', () => {
-  const desk = OFFICE.desks.find((d) => d.agentId === 'shopify-dev')!;
-  const path = findPath(OFFICE, LOBBY, desk)!;
-  assert.deepEqual(path[0], LOBBY);
-  assert.deepEqual(path.at(-1), { x: desk.x, y: desk.y });
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1];
-    const b = path[i];
-    assert.equal(Math.abs(a.x - b.x) + Math.abs(a.y - b.y), 1, 'single step');
-    assert.ok(!wallBetween(OFFICE, a.x, a.y, b.x, b.y), `wall ${a.x},${a.y}→${b.x},${b.y}`);
-    assert.ok(isWalkable(OFFICE, b.x, b.y), 'walkable');
-    if (i < path.length - 1) assert.ok(!OFFICE.seats.has(key(b.x, b.y)), `through a seat at ${b.x},${b.y}`);
+test('pathfinding: every seat and spot is reachable from every other one and from the lobby', () => {
+  const all = [...OFFICE.seats, ...OFFICE.spots];
+  for (const a of all) {
+    assert.ok(findPath(OFFICE, LOBBY, a), `lobby → ${a.id}`);
+    for (const b of all) assert.ok(findPath(OFFICE, a, b), `${a.id} → ${b.id}`);
   }
 });
 
-test('pathfinding: unreachable and out-of-bounds give null; nearestFree finds floor', () => {
-  assert.equal(findPath(OFFICE, LOBBY, { x: 99, y: 3 }), null);
-  const free = nearestFree(OFFICE, 4, 4)!; // meeting table
-  assert.ok(isWalkable(OFFICE, free.x, free.y));
-  assert.ok(!OFFICE.seats.has(key(free.x, free.y)));
+test('pathfinding: paths start and end exactly on the points and follow graph edges', () => {
+  const desk = deskFor(OFFICE, 'sales')!;
+  const path = findPath(OFFICE, spot('coffee-1'), desk)!;
+  assert.ok(close(path[0], spot('coffee-1')));
+  assert.ok(close(path.at(-1)!, desk));
+  const nodes = OFFICE.graph.pos;
+  const isNode = (p: { x: number; y: number }) => nodes.findIndex((q) => close(p, q));
+  const inner = path.slice(1, -1).map(isNode);
+  assert.ok(inner.every((i) => i >= 0), 'inner points are graph nodes');
+  for (let i = 1; i < inner.length; i++) assert.ok(OFFICE.graph.adj[inner[i - 1]].includes(inner[i]), 'consecutive nodes are connected');
+  assert.ok(['gs-a', 'gs-b'].includes(nearestNode(OFFICE, desk).id));
 });
 
 // ---------------------------------------------------------------- spots
@@ -143,13 +129,14 @@ const deskGoalOf = (id: string, loop: Goal['loop'] = 'type'): Goal => {
   const d = OFFICE.desks.find((x) => x.agentId === id)!;
   return { key: `desk:${id}`, x: d.x, y: d.y, face: d.face, seated: true, loop };
 };
-const coffeeGoal: Goal = { key: 'spot:coffee-1', x: 34, y: 22, face: 'up', seated: false, loop: 'coffee' };
+const cs = spot('coffee-1');
+const coffeeGoal: Goal = { key: 'spot:coffee-1', x: cs.x, y: cs.y, face: cs.face, seated: false, loop: 'coffee' };
 function run(m: Motion, seconds: number, onStep?: (m: Motion) => void) {
   for (let t = 0; t < seconds; t += 1 / 30) { tick(m, 1 / 30, env); onStep?.(m); }
 }
 
 test('motion: seated → stand up → walk → arrive (standing loop) with acted-out phases', () => {
-  const m = createMotion(deskGoalOf('seo-1'), mulberry32(1));
+  const m = createMotion(deskGoalOf('writer'), mulberry32(1));
   assert.equal(m.phase, 'seated');
   setGoal(m, coffeeGoal);
   const phases: string[] = [];
@@ -157,13 +144,13 @@ test('motion: seated → stand up → walk → arrive (standing loop) with acted
   assert.deepEqual(phases.slice(0, 3), ['standing_up', 'standing', 'walking']);
   assert.ok(isAtGoal(m));
   assert.equal(m.loop, 'coffee');
-  assert.deepEqual(m.pos, { x: 34, y: 22 });
-  assert.equal(m.facing, 'up');
+  assert.ok(close(m.pos, cs));
+  assert.equal(m.facing, cs.face);
 });
 
 test('motion: walking back to the desk ends with sit down + settle before the main loop', () => {
   const m = createMotion(coffeeGoal, mulberry32(2));
-  setGoal(m, deskGoalOf('seo-1', 'write'));
+  setGoal(m, deskGoalOf('writer', 'write'));
   const phases: string[] = [];
   run(m, 40, (x) => { if (phases.at(-1) !== x.phase) phases.push(x.phase); });
   assert.deepEqual(phases.slice(-3), ['walking', 'sitting_down', 'seated']);
@@ -172,7 +159,7 @@ test('motion: walking back to the desk ends with sit down + settle before the ma
 });
 
 test('motion: micro-actions play every 6–20 s, never frozen', () => {
-  const m = createMotion(deskGoalOf('shopify-dev'), mulberry32(3));
+  const m = createMotion(deskGoalOf('web-dev'), mulberry32(3));
   const starts: number[] = [];
   let t = 0;
   let had = false;
@@ -186,8 +173,8 @@ test('motion: micro-actions play every 6–20 s, never frozen', () => {
 });
 
 test('motion: same place, new loop swaps without walking; gestures play before leaving', () => {
-  const m = createMotion(deskGoalOf('seo-2', 'write'), mulberry32(4));
-  setGoal(m, deskGoalOf('seo-2', 'wait_qa'));
+  const m = createMotion(deskGoalOf('designer', 'draw'), mulberry32(4));
+  setGoal(m, deskGoalOf('designer', 'wait_qa'));
   tick(m, 0.1, env);
   assert.equal(m.phase, 'seated');
   assert.equal(m.loop, 'wait_qa');
@@ -201,8 +188,8 @@ test('motion: same place, new loop swaps without walking; gestures play before l
 });
 
 test('motion: waiting agent stands at the desk (raise hand) without walking away', () => {
-  const m = createMotion(deskGoalOf('client-success', 'write'), mulberry32(5));
-  setGoal(m, { ...deskGoalOf('client-success', 'raise_hand'), seated: false });
+  const m = createMotion(deskGoalOf('sales', 'write'), mulberry32(5));
+  setGoal(m, { ...deskGoalOf('sales', 'raise_hand'), seated: false });
   run(m, 2);
   assert.equal(m.phase, 'standing');
   assert.equal(m.loop, 'raise_hand');
@@ -210,69 +197,102 @@ test('motion: waiting agent stands at the desk (raise hand) without walking away
 });
 
 test('motion: goal change mid-walk re-routes', () => {
-  const m = createMotion(deskGoalOf('seo-1'), mulberry32(6));
+  const m = createMotion(deskGoalOf('writer'), mulberry32(6));
   setGoal(m, coffeeGoal);
   run(m, 2);
   assert.equal(m.phase, 'walking');
-  const lobby: Goal = { key: 'spot:lobby-3', x: 54, y: 25, face: 'up', seated: false, loop: 'lobby_stand' };
+  const l = spot('lobby-1');
+  const lobby: Goal = { key: 'spot:lobby-1', x: l.x, y: l.y, face: l.face, seated: false, loop: 'lobby_stand' };
   setGoal(m, lobby);
   run(m, 40);
   assert.ok(isAtGoal(m));
-  assert.deepEqual(m.pos, { x: 54, y: 25 });
+  assert.ok(close(m.pos, l));
 });
 
 // ---------------------------------------------------------------- director
 const snap = () => demoSnapshot(new Date('2026-09-28T10:00:00+08:00'));
 
-test('director: status → place (desk, break spot, QA bench, boardroom, offline)', () => {
+test('director: status → place (desk, break spot, boardroom, offline)', () => {
   const s = snap();
-  const model = deriveOffice(s, { nowMs: Date.now() });
+  const model = deriveOffice(s, { nowMs: Date.parse(s.loadedAt) });
   const by = new Map(model.agents.map((a) => [a.id, a]));
-  assert.equal(model.agents.length, 22);
-  assert.equal(by.get('shopify-dev')!.goal!.key, 'desk:shopify-dev');
-  assert.equal(by.get('shopify-dev')!.goal!.loop, 'type');
-  assert.equal(by.get('uiux-1')!.goal!.loop, 'draw');
-  assert.equal(by.get('video-editor')!.goal!.loop, 'scrub');
-  assert.equal(by.get('inbound')!.goal!.key.startsWith('spot:coffee'), true);
-  const pp = [by.get('wordpress-dev')!, by.get('social-2')!].map((a) => a.goal!.key);
-  assert.deepEqual(pp.sort(), ['spot:pp-a', 'spot:pp-b']);
-  assert.equal(by.get('qa-lead')!.goal!.key, 'spot:qa-bench');
-  assert.equal(by.get('client-success')!.badge, 'hand');
-  assert.equal(by.get('client-success')!.goal!.seated, false);
-  assert.equal(by.get('graphic-2')!.badge, 'warning');
-  // demo has a request in "planning": the COO runs the meeting
+  assert.deepEqual(model.agents.map((a) => a.id).sort(), [...AGENTS].sort());
+  assert.equal(by.get('web-dev')!.goal!.key, 'desk:web-dev');
+  assert.equal(by.get('web-dev')!.goal!.loop, 'type');
+  assert.equal(by.get('designer')!.goal!.loop, 'draw');
+  assert.equal(by.get('writer')!.goal!.key, 'desk:writer');
+  assert.ok(by.get('sales')!.goal!.key.startsWith('spot:coffee'), 'idle sales agent on a coffee break');
+  assert.equal(by.get('qa-lead')!.goal!.key, 'desk:qa-lead');
+  assert.equal(by.get('qa-lead')!.screen, 'review');
+  // demo has a request in "planning": the COO runs the meeting from the Boardroom head seat
   assert.equal(by.get('coo')!.goal!.key, 'spot:board-head');
   assert.ok(model.meeting?.label.startsWith('Meeting:'));
-
-  const off: HqSnapshot = { ...s, agents: s.agents.map((a) => (a.id === 'seo-2' ? { ...a, enabled: false } : a)) };
-  assert.equal(deriveOffice(off, { nowMs: 0 }).agents.find((a) => a.id === 'seo-2')!.goal, null);
+  const off: HqSnapshot = { ...s, agents: s.agents.map((a) => (a.id === 'writer' ? { ...a, enabled: false } : a)) };
+  assert.equal(deriveOffice(off, { nowMs: 0 }).agents.find((a) => a.id === 'writer')!.goal, null);
 });
 
-test('director: COO returns to work when planning is done', () => {
+test('director: waiting and blocked agents get badges at their desk', () => {
   const s = snap();
-  const done: HqSnapshot = { ...s, requests: s.requests.map((r) => (r.status === 'planning' ? { ...r, status: 'plan_review' } : r)) };
-  assert.equal(planningInfo(done), null);
-  const coo = deriveOffice(done, { nowMs: 0 }).agents.find((a) => a.id === 'coo')!;
-  assert.ok(['desk:coo', 'spot:coo-board'].includes(coo.goal!.key));
+  const next: HqSnapshot = { ...s, agents: s.agents.map((a) => (a.id === 'writer' ? { ...a, status: 'waiting' } : a.id === 'designer' ? { ...a, status: 'blocked' } : a)) };
+  const by = new Map(deriveOffice(next, { nowMs: 0 }).agents.map((a) => [a.id, a]));
+  assert.equal(by.get('writer')!.badge, 'hand');
+  assert.equal(by.get('writer')!.goal!.seated, false);
+  assert.equal(by.get('designer')!.badge, 'warning');
+});
+
+test('director: the COO walks over to brief whoever just got a task, then goes back', () => {
+  const s = snap();
+  const now = Date.parse(s.loadedAt);
+  const noPlan: HqSnapshot = { ...s, requests: s.requests.map((r) => (r.status === 'planning' ? { ...r, status: 'plan_review' } : r)) };
+  assert.equal(planningInfo(noPlan), null);
+  const fresh: HqSnapshot = {
+    ...noPlan,
+    tasks: [...noPlan.tasks, { ...noPlan.tasks[0], id: 't-new', agent_id: 'designer', status: 'queued', title: 'Hero banner', created_at: new Date(now - 5_000).toISOString() }],
+  };
+  assert.equal(handoverTarget(fresh, now), 'designer');
+  const coo = deriveOffice(fresh, { nowMs: now }).agents.find((a) => a.id === 'coo')!;
+  assert.equal(coo.goal!.key, 'visit:designer');
+  assert.ok(coo.tag.startsWith('Briefing Graphic Designer'));
+  // old queued tasks don't pull the COO away from the Boardroom
+  assert.equal(handoverTarget(noPlan, now + 10 * 60_000), null);
+  const later = deriveOffice(noPlan, { nowMs: now + 10 * 60_000 }).agents.find((a) => a.id === 'coo')!;
+  assert.equal(later.goal!.key, 'desk:coo');
 });
 
 test('director: a task in QA shows the author waiting at the desk', () => {
   const s = snap();
-  const t = s.tasks.find((x) => x.id === 't-blog')!;
-  const next: HqSnapshot = { ...s, tasks: s.tasks.map((x) => (x.id === t.id ? { ...x, status: 'qa_pending' } : x)) };
-  const seo2 = deriveOffice(next, { nowMs: 0 }).agents.find((a) => a.id === 'seo-2')!;
-  assert.equal(seo2.goal!.loop, 'wait_qa');
-  assert.equal(seo2.badge, 'hourglass');
+  const next: HqSnapshot = { ...s, tasks: s.tasks.map((x) => (x.id === 't-lvlup' ? { ...x, status: 'qa_pending' } : x)) };
+  const dev = deriveOffice(next, { nowMs: 0 }).agents.find((a) => a.id === 'web-dev')!;
+  assert.equal(dev.goal!.loop, 'wait_qa');
+  assert.equal(dev.badge, 'hourglass');
 });
 
 test('director: diffEvents → done / QA fail head-scratch / QA pass nod', () => {
   const a = snap();
   const set = (s: HqSnapshot, id: string, status: HqSnapshot['tasks'][number]['status']): HqSnapshot =>
     ({ ...s, tasks: s.tasks.map((t) => (t.id === id ? { ...t, status } : t)) });
-  assert.deepEqual(diffEvents(a, set(a, 't-blog', 'qa_pending')), [{ agentId: 'seo-2', gesture: 'done' }]);
-  const r = set(a, 't-blog', 'qa_reviewing');
-  assert.deepEqual(diffEvents(r, set(r, 't-blog', 'revision')), [{ agentId: 'seo-2', gesture: 'scratch' }, { agentId: 'qa-lead', gesture: 'nod' }]);
-  assert.deepEqual(diffEvents(r, set(r, 't-blog', 'awaiting_ceo'))[0], { agentId: 'seo-2', gesture: 'nod' });
+  assert.deepEqual(diffEvents(a, set(a, 't-lvlup', 'qa_pending')), [{ agentId: 'web-dev', gesture: 'done' }]);
+  const r = set(a, 't-lvlup', 'qa_reviewing');
+  assert.deepEqual(diffEvents(r, set(r, 't-lvlup', 'revision')), [{ agentId: 'web-dev', gesture: 'scratch' }, { agentId: 'qa-lead', gesture: 'nod' }]);
+  assert.deepEqual(diffEvents(r, set(r, 't-lvlup', 'awaiting_ceo'))[0], { agentId: 'web-dev', gesture: 'nod' });
+});
+
+// ---------------------------------------------------------------- sprites
+test('sprites: pose follows the motion (walk frames, back views, seated, coffee) and never freezes', () => {
+  const has = () => true;
+  const m = createMotion(deskGoalOf('web-dev'), mulberry32(9));
+  assert.deepEqual(pickPose(m, has), { pose: 'sit_type', flip: false }); // seated, back to us, facing up-right
+  m.phase = 'walking'; m.facing = 'down';
+  const frames = new Set<string>();
+  for (let i = 0; i < 20; i++) { m.walkCycle = i * 0.4; frames.add(pickPose(m, has).pose); }
+  assert.deepEqual([...frames].sort(), ['stand', 'walk']);
+  m.facing = 'left';
+  assert.ok(['walk_back', 'stand_back'].includes(pickPose(m, has).pose));
+  assert.equal(pickPose(m, has).flip, true);
+  m.phase = 'standing'; m.loop = 'coffee'; m.facing = 'left';
+  assert.equal(pickPose(m, has).pose, 'coffee');
+  m.loop = 'sofa'; m.phase = 'seated'; m.facing = 'up';
+  assert.deepEqual(pickPose(m, has), { pose: 'sofa', flip: true });
 });
 
 // ---------------------------------------------------------------- demo simulator

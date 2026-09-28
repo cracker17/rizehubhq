@@ -116,13 +116,13 @@ export class OfficeScene extends Phaser.Scene {
     this.load.image('office-bg', LAYOUT.image.src.replace(/^\/office/, base));
     this.load.json('office-manifest', `${base}/manifest.json`);
     this.load.once('filecomplete-json-office-manifest', (_k: string, _t: string, data: OfficeManifest) => {
-      if (data && Object.keys(data.characters ?? {}).length) loadManifestSheets(this, data);
+      if (data && Object.keys(data.characters ?? {}).length) loadManifestSheets(this, data, (src) => src.replace(/^\/office/, base));
     });
   }
 
   create() {
     const manifest = (this.cache.json.get('office-manifest') as OfficeManifest | undefined) ?? null;
-    this.factory = manifestFactory(manifest, FIGURE_SCALE);
+    this.factory = manifestFactory(manifest, FIGURE_SCALE, S);
     this.cameras.main.setBackgroundColor('#15131f');
     const bg = this.add.image(0, 0, 'office-bg').setOrigin(0, 0).setDepth(-100_000);
     bg.setDisplaySize(WORLD_W, WORLD_H);

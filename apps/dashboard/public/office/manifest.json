@@ -1,5 +1,434 @@
 {
-  "version": 1,
-  "notes": "Sprite sheets from the 3D pipeline (docs/07 §10). Add an entry per agent id (or \"default\") to replace the procedural figure. See src/components/office/engine/characters.ts for the format and clip names.",
-  "characters": {}
+ "version": 2,
+ "notes": "Pose sprites generated with Magnific (one pose sheet per character, same art style as the office background). Front poses face down-left; back poses face up-right; the scene mirrors them for the other two facings. anchor = the point (fraction of width/height) that sits on the floor spot (feet, or the seat for sitting poses). standHeight = how tall a standing figure is, in pixels of the 1x reference picture.",
+ "standHeight": 102,
+ "characters": {
+  "coo": {
+   "poses": {
+    "stand": {
+     "src": "/office/sprites/coo/stand.webp",
+     "w": 140,
+     "h": 380,
+     "ax": 0.721,
+     "ay": 1.0
+    },
+    "walk": {
+     "src": "/office/sprites/coo/walk.webp",
+     "w": 147,
+     "h": 377,
+     "ax": 0.279,
+     "ay": 1.0
+    },
+    "stand_back": {
+     "src": "/office/sprites/coo/stand_back.webp",
+     "w": 121,
+     "h": 367,
+     "ax": 0.529,
+     "ay": 1.0
+    },
+    "walk_back": {
+     "src": "/office/sprites/coo/walk_back.webp",
+     "w": 156,
+     "h": 358,
+     "ax": 0.324,
+     "ay": 1.0
+    },
+    "sit_type": {
+     "src": "/office/sprites/coo/sit_type.webp",
+     "w": 182,
+     "h": 306,
+     "ax": 0.3,
+     "ay": 0.74
+    },
+    "coffee": {
+     "src": "/office/sprites/coo/coffee.webp",
+     "w": 142,
+     "h": 378,
+     "ax": 0.729,
+     "ay": 1.0
+    },
+    "sofa": {
+     "src": "/office/sprites/coo/sofa.webp",
+     "w": 204,
+     "h": 368,
+     "ax": 0.58,
+     "ay": 0.62
+    },
+    "action": {
+     "src": "/office/sprites/coo/action.webp",
+     "w": 199,
+     "h": 383,
+     "ax": 0.817,
+     "ay": 1.0
+    }
+   },
+   "heightPx": 380
+  },
+  "web-dev": {
+   "poses": {
+    "stand": {
+     "src": "/office/sprites/web-dev/stand.webp",
+     "w": 135,
+     "h": 380,
+     "ax": 0.722,
+     "ay": 1.0
+    },
+    "walk": {
+     "src": "/office/sprites/web-dev/walk.webp",
+     "w": 175,
+     "h": 352,
+     "ax": 0.223,
+     "ay": 1.0
+    },
+    "stand_back": {
+     "src": "/office/sprites/web-dev/stand_back.webp",
+     "w": 139,
+     "h": 365,
+     "ax": 0.55,
+     "ay": 1.0
+    },
+    "walk_back": {
+     "src": "/office/sprites/web-dev/walk_back.webp",
+     "w": 178,
+     "h": 372,
+     "ax": 0.253,
+     "ay": 1.0
+    },
+    "sit_type": {
+     "src": "/office/sprites/web-dev/sit_type.webp",
+     "w": 222,
+     "h": 322,
+     "ax": 0.3,
+     "ay": 0.74
+    },
+    "coffee": {
+     "src": "/office/sprites/web-dev/coffee.webp",
+     "w": 160,
+     "h": 387,
+     "ax": 0.738,
+     "ay": 1.0
+    },
+    "sofa": {
+     "src": "/office/sprites/web-dev/sofa.webp",
+     "w": 221,
+     "h": 352,
+     "ax": 0.58,
+     "ay": 0.62
+    },
+    "action": {
+     "src": "/office/sprites/web-dev/action.webp",
+     "w": 272,
+     "h": 365,
+     "ax": 0.382,
+     "ay": 1.0
+    }
+   },
+   "heightPx": 380
+  },
+  "designer": {
+   "poses": {
+    "stand": {
+     "src": "/office/sprites/designer/stand.webp",
+     "w": 148,
+     "h": 380,
+     "ax": 0.537,
+     "ay": 1.0
+    },
+    "walk": {
+     "src": "/office/sprites/designer/walk.webp",
+     "w": 172,
+     "h": 372,
+     "ax": 0.305,
+     "ay": 1.0
+    },
+    "stand_back": {
+     "src": "/office/sprites/designer/stand_back.webp",
+     "w": 158,
+     "h": 379,
+     "ax": 0.668,
+     "ay": 1.0
+    },
+    "walk_back": {
+     "src": "/office/sprites/designer/walk_back.webp",
+     "w": 186,
+     "h": 375,
+     "ax": 0.288,
+     "ay": 1.0
+    },
+    "sit_type": {
+     "src": "/office/sprites/designer/sit_type.webp",
+     "w": 217,
+     "h": 313,
+     "ax": 0.3,
+     "ay": 0.74
+    },
+    "coffee": {
+     "src": "/office/sprites/designer/coffee.webp",
+     "w": 155,
+     "h": 392,
+     "ax": 0.59,
+     "ay": 1.0
+    },
+    "sofa": {
+     "src": "/office/sprites/designer/sofa.webp",
+     "w": 256,
+     "h": 362,
+     "ax": 0.58,
+     "ay": 0.62
+    },
+    "action": {
+     "src": "/office/sprites/designer/action.webp",
+     "w": 311,
+     "h": 358,
+     "ax": 0.698,
+     "ay": 1.0
+    }
+   },
+   "heightPx": 380
+  },
+  "writer": {
+   "poses": {
+    "stand": {
+     "src": "/office/sprites/writer/stand.webp",
+     "w": 142,
+     "h": 380,
+     "ax": 0.694,
+     "ay": 1.0
+    },
+    "walk": {
+     "src": "/office/sprites/writer/walk.webp",
+     "w": 171,
+     "h": 355,
+     "ax": 0.205,
+     "ay": 1.0
+    },
+    "stand_back": {
+     "src": "/office/sprites/writer/stand_back.webp",
+     "w": 141,
+     "h": 362,
+     "ax": 0.635,
+     "ay": 1.0
+    },
+    "walk_back": {
+     "src": "/office/sprites/writer/walk_back.webp",
+     "w": 166,
+     "h": 371,
+     "ax": 0.271,
+     "ay": 1.0
+    },
+    "sit_type": {
+     "src": "/office/sprites/writer/sit_type.webp",
+     "w": 200,
+     "h": 316,
+     "ax": 0.3,
+     "ay": 0.74
+    },
+    "coffee": {
+     "src": "/office/sprites/writer/coffee.webp",
+     "w": 160,
+     "h": 396,
+     "ax": 0.719,
+     "ay": 1.0
+    },
+    "sofa": {
+     "src": "/office/sprites/writer/sofa.webp",
+     "w": 223,
+     "h": 369,
+     "ax": 0.58,
+     "ay": 0.62
+    },
+    "action": {
+     "src": "/office/sprites/writer/action.webp",
+     "w": 285,
+     "h": 373,
+     "ax": 0.907,
+     "ay": 1.0
+    }
+   },
+   "heightPx": 380
+  },
+  "sales": {
+   "poses": {
+    "stand": {
+     "src": "/office/sprites/sales/stand.webp",
+     "w": 173,
+     "h": 380,
+     "ax": 0.734,
+     "ay": 1.0
+    },
+    "walk": {
+     "src": "/office/sprites/sales/walk.webp",
+     "w": 190,
+     "h": 364,
+     "ax": 0.282,
+     "ay": 1.0
+    },
+    "stand_back": {
+     "src": "/office/sprites/sales/stand_back.webp",
+     "w": 135,
+     "h": 370,
+     "ax": 0.722,
+     "ay": 1.0
+    },
+    "walk_back": {
+     "src": "/office/sprites/sales/walk_back.webp",
+     "w": 173,
+     "h": 378,
+     "ax": 0.283,
+     "ay": 1.0
+    },
+    "sit_type": {
+     "src": "/office/sprites/sales/sit_type.webp",
+     "w": 206,
+     "h": 319,
+     "ax": 0.3,
+     "ay": 0.74
+    },
+    "coffee": {
+     "src": "/office/sprites/sales/coffee.webp",
+     "w": 152,
+     "h": 383,
+     "ax": 0.757,
+     "ay": 1.0
+    },
+    "sofa": {
+     "src": "/office/sprites/sales/sofa.webp",
+     "w": 274,
+     "h": 348,
+     "ax": 0.58,
+     "ay": 0.62
+    },
+    "action": {
+     "src": "/office/sprites/sales/action.webp",
+     "w": 284,
+     "h": 362,
+     "ax": 0.389,
+     "ay": 1.0
+    }
+   },
+   "heightPx": 380
+  },
+  "qa-lead": {
+   "poses": {
+    "stand": {
+     "src": "/office/sprites/qa-lead/stand.webp",
+     "w": 153,
+     "h": 380,
+     "ax": 0.732,
+     "ay": 1.0
+    },
+    "walk": {
+     "src": "/office/sprites/qa-lead/walk.webp",
+     "w": 169,
+     "h": 374,
+     "ax": 0.213,
+     "ay": 1.0
+    },
+    "stand_back": {
+     "src": "/office/sprites/qa-lead/stand_back.webp",
+     "w": 137,
+     "h": 365,
+     "ax": 0.73,
+     "ay": 1.0
+    },
+    "walk_back": {
+     "src": "/office/sprites/qa-lead/walk_back.webp",
+     "w": 152,
+     "h": 363,
+     "ax": 0.257,
+     "ay": 1.0
+    },
+    "sit_type": {
+     "src": "/office/sprites/qa-lead/sit_type.webp",
+     "w": 216,
+     "h": 279,
+     "ax": 0.3,
+     "ay": 0.74
+    },
+    "coffee": {
+     "src": "/office/sprites/qa-lead/coffee.webp",
+     "w": 145,
+     "h": 377,
+     "ax": 0.797,
+     "ay": 1.0
+    },
+    "sofa": {
+     "src": "/office/sprites/qa-lead/sofa.webp",
+     "w": 235,
+     "h": 352,
+     "ax": 0.58,
+     "ay": 0.62
+    },
+    "action": {
+     "src": "/office/sprites/qa-lead/action.webp",
+     "w": 284,
+     "h": 358,
+     "ax": 0.405,
+     "ay": 1.0
+    }
+   },
+   "heightPx": 380
+  },
+  "ceo": {
+   "poses": {
+    "stand": {
+     "src": "/office/sprites/ceo/stand.webp",
+     "w": 129,
+     "h": 380,
+     "ax": 0.705,
+     "ay": 1.0
+    },
+    "walk": {
+     "src": "/office/sprites/ceo/walk.webp",
+     "w": 167,
+     "h": 363,
+     "ax": 0.246,
+     "ay": 1.0
+    },
+    "stand_back": {
+     "src": "/office/sprites/ceo/stand_back.webp",
+     "w": 134,
+     "h": 369,
+     "ax": 0.739,
+     "ay": 1.0
+    },
+    "walk_back": {
+     "src": "/office/sprites/ceo/walk_back.webp",
+     "w": 169,
+     "h": 370,
+     "ax": 0.317,
+     "ay": 1.0
+    },
+    "sit_type": {
+     "src": "/office/sprites/ceo/sit_type.webp",
+     "w": 215,
+     "h": 306,
+     "ax": 0.3,
+     "ay": 0.74
+    },
+    "coffee": {
+     "src": "/office/sprites/ceo/coffee.webp",
+     "w": 149,
+     "h": 390,
+     "ax": 0.698,
+     "ay": 1.0
+    },
+    "sofa": {
+     "src": "/office/sprites/ceo/sofa.webp",
+     "w": 266,
+     "h": 368,
+     "ax": 0.58,
+     "ay": 0.62
+    },
+    "action": {
+     "src": "/office/sprites/ceo/action.webp",
+     "w": 176,
+     "h": 385,
+     "ax": 0.776,
+     "ay": 1.0
+    }
+   },
+   "heightPx": 380
+  }
+ }
 }
