@@ -36,6 +36,7 @@ function imageFor(url: string | null | undefined): HTMLImageElement | null {
 /** One canvas per desk (all its monitors); drawn as slices matching the desk's own slices. */
 interface Slot { key: string; agentId: string; quads: Pt[][]; x0: number; y0: number; tex: Phaser.Textures.CanvasTexture; imgs: Phaser.GameObjects.Image[] }
 
+const IDLE_INFO: ScreenInfo = { app: 'screensaver', title: '', color: '#7b5cff', name: '' };
 const hashStr = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 
 export class ScreenLayer {
@@ -47,7 +48,11 @@ export class ScreenLayer {
 
   setMap(map: OfficeMap) {
     this.clear();
-    for (const d of map.desks) {
+    // Every sprite desk gets live screens; nobody's desk shows the RizeHub screensaver.
+    const owned = new Map(map.desks.map((d) => [d.id, d.agentId]));
+    for (const seat of map.seats) {
+      const d = { ...seat, agentId: owned.get(seat.id) ?? `idle:${seat.id}` };
+      if (!owned.has(seat.id) && !seat.deskId) continue;
       const placed = d.deskId ? this.furniture.placed.get(d.deskId) : undefined;
       if (placed?.item.screens) {
         // Same footprint and slicing as the desk sprite: each monitor column sorts exactly like the desk under it.
@@ -88,7 +93,7 @@ export class ScreenLayer {
   setInfo(agentId: string, info: ScreenInfo) { this.info.set(agentId, info); }
 
   update(t: number) {
-    if (t - this.last < 0.45) return;
+    if (t - this.last < 0.12) return;
     this.last = t;
     for (const s of this.slots) this.draw(s, t);
   }
@@ -97,7 +102,7 @@ export class ScreenLayer {
     const ctx = s.tex.getContext();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, s.tex.width, s.tex.height);
-    const info = this.info.get(s.agentId);
+    const info = this.info.get(s.agentId) ?? (s.agentId.startsWith('idle:') ? IDLE_INFO : undefined);
     if (info) {
       s.quads.forEach((quad, i) => {
         // map the content rect (0..CW, 0..CH) onto the monitor: affine from its TL, TR, BL corners
@@ -139,14 +144,7 @@ function drawApp(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, ind
   const rnd = (i: number) => ((Math.sin(seed * 0.001 + i * 12.9898) * 43758.5453) % 1 + 1) % 1;
   const app = info.app;
   if (app === 'off') { bar(ctx, 0, 0, CW, CH, '#07080c'); return; }
-  if (app === 'screensaver') {
-    const g = ctx.createLinearGradient(0, 0, CW, CH);
-    g.addColorStop(0, '#1d1848'); g.addColorStop(1, '#3b2f7a');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
-    const x = 30 + Math.sin(t * 0.4 + index) * 40 + 40; const y = 50 + Math.cos(t * 0.33 + index) * 25;
-    text(ctx, 'RizeHub', x - 30, y, 16, 'rgba(255,255,255,.75)', 120, 800);
-    return;
-  }
+  if (app === 'screensaver') { drawScreensaver(ctx, t, index, seed); return; }
   // A second monitor shows the "result" side (preview / tests / chart) of the same work.
   const side = count > 1 && index === count - 1;
   const title = info.title || 'Working';
@@ -275,4 +273,58 @@ function drawApp(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, ind
       progressBar(ctx, info.progress, CH - 6, info.color);
     }
   }
+}
+
+/** RizeHub screensaver: navy grid, drifting aurora, twinkles, and the RizeHub wordmark gliding and bouncing
+ *  around the screen ("Rize" in the brand violet-to-blue gradient, "Hub" white, the teal dot pulsing). */
+function drawScreensaver(ctx: CanvasRenderingContext2D, t: number, index: number, seed: number) {
+  const ph = index * 2.3 + (seed % 97) * 0.13;
+  ctx.fillStyle = '#0a0f1f'; ctx.fillRect(0, 0, CW, CH);
+  // aurora blobs
+  for (let i = 0; i < 3; i++) {
+    const x = CW * (0.5 + 0.45 * Math.sin(t * (0.13 + i * 0.05) + ph + i * 2));
+    const y = CH * (0.5 + 0.4 * Math.cos(t * (0.11 + i * 0.04) + ph * 1.3 + i));
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 70);
+    g.addColorStop(0, ['rgba(123,92,255,0.35)', 'rgba(61,139,255,0.3)', 'rgba(25,195,177,0.22)'][i]);
+    g.addColorStop(1, 'rgba(10,15,31,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+  }
+  // faint grid, slowly scrolling
+  ctx.strokeStyle = 'rgba(120,140,200,0.10)'; ctx.lineWidth = 0.5;
+  const off = (t * 3) % 12;
+  ctx.beginPath();
+  for (let x = -12 + off; x < CW; x += 12) { ctx.moveTo(x, 0); ctx.lineTo(x, CH); }
+  for (let y = -12 + off * 0.6; y < CH; y += 12) { ctx.moveTo(0, y); ctx.lineTo(CW, y); }
+  ctx.stroke();
+  // twinkles
+  for (let i = 0; i < 14; i++) {
+    const r = ((Math.sin(seed * 0.01 + i * 91.7) * 43758.5) % 1 + 1) % 1;
+    const r2 = ((Math.sin(seed * 0.02 + i * 17.3) * 12731.1) % 1 + 1) % 1;
+    const a = 0.5 + 0.5 * Math.sin(t * (1.5 + r * 2) + i);
+    ctx.fillStyle = `rgba(200,210,255,${0.5 * a})`;
+    ctx.fillRect(r * CW, r2 * CH, 1.1, 1.1);
+  }
+  // wordmark, bouncing (DVD-style) — its size fits the screen
+  ctx.font = '800 24px "Inter", ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  const wr = ctx.measureText('Rize').width; const wh = ctx.measureText('Hub').width;
+  const w = wr + wh + 12; const h = 20;
+  const tri = (v: number) => 1 - Math.abs(((v % 2) + 2) % 2 - 1); // 0..1..0
+  const x = 4 + tri(t * 0.09 + ph) * (CW - w - 8);
+  const y = h + 4 + tri(t * 0.13 + ph * 0.7) * (CH - h - 10);
+  const gr = ctx.createLinearGradient(x, 0, x + wr, 0);
+  const sweep = ((t * 0.5 + ph) % 2.2) - 0.6;
+  gr.addColorStop(0, '#7b5cff'); gr.addColorStop(Math.min(1, Math.max(0, sweep)), '#c7bcff'); gr.addColorStop(1, '#4b7bff');
+  ctx.shadowColor = 'rgba(123,92,255,0.8)'; ctx.shadowBlur = 10;
+  ctx.fillStyle = gr; ctx.fillText('Rize', x, y);
+  ctx.shadowColor = 'rgba(160,190,255,0.6)'; ctx.fillStyle = '#f4f6ff'; ctx.fillText('Hub', x + wr, y);
+  const pulse = 0.7 + 0.3 * Math.sin(t * 3 + ph);
+  ctx.shadowColor = '#19c3b1'; ctx.shadowBlur = 12 * pulse;
+  ctx.fillStyle = '#19b3a6';
+  ctx.beginPath(); ctx.arc(x + wr + wh + 7, y - 6.5, 3.3, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  // soft reflection under the wordmark
+  ctx.globalAlpha = 0.12; ctx.save(); ctx.translate(0, 2 * y + 4); ctx.scale(1, -1);
+  ctx.fillStyle = '#7b5cff'; ctx.fillText('Rize', x, y); ctx.fillStyle = '#ffffff'; ctx.fillText('Hub', x + wr, y);
+  ctx.restore(); ctx.globalAlpha = 1;
 }
