@@ -182,7 +182,7 @@ export function deriveOffice(snap: HqSnapshot, opts: DeriveOptions): OfficeModel
     }
     // COO runs planning meetings in the Boardroom.
     if (t.id === COO_ID && plan) {
-      return { ...base, goal: spotGoal(head, 'present'), tag: `In the Boardroom · ${plan.label}`, badge: null, screen: 'screensaver' };
+      return { ...base, goal: deskGoal(m, t.id, 'type') ?? spotGoal(head, head.pose === 'sit' ? 'type' : 'present'), tag: `In the Boardroom · ${plan.label}`, badge: null, screen: 'screensaver' };
     }
     // The COO walks over to a desk to hand over a freshly queued task.
     if (t.id === COO_ID && (t.status === 'working' || t.status === 'idle')) {

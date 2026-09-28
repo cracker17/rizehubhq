@@ -11,8 +11,9 @@ import sys
 import numpy as np, cv2 as cv
 
 E = 450
-WALL_TOP = lambda x: 190 - 0.57 * x
-WALL_BASE = lambda x: 297 - 0.57 * x
+WALL_TOP = lambda x: 175 - 0.62 * x
+WALL_BASE = lambda x: 302 - 0.62 * x
+SL = 0.62
 CAP = lambda x: 371 + 0.54 * x
 DIV_BASE = lambda x: 466 + 0.54 * x
 GLASS = lambda x: 712 - 0.59 * x
@@ -46,17 +47,17 @@ def main(src, out):
     c[:, E:] = old
     X0 = -E
     # corners
-    xa = (466 - 297) / (-0.57 - 0.54)          # divider base ∩ wall base   (gym back-left)
-    xb = (756 - 297) / (-0.57 - 0.5)           # far wall ∩ wall base      (gym front-left)
+    xa = (466 - 302) / (-SL - 0.54)          # divider base ∩ wall base   (gym back-left)
+    xb = (756 - 302) / (-SL - 0.5)           # far wall ∩ wall base      (gym front-left)
     xc = (756 - 712) / (-0.59 - 0.5)           # far wall ∩ glass          (gym front corner)
-    xd = (371 - 297) / (-0.57 - 0.54)          # cap ∩ wall base           (dev corner)
+    xd = (371 - 302) / (-SL - 0.54)          # cap ∩ wall base           (dev corner)
     print('corners', xa, xb, xc, xd)
     # 1) back-left wall with windows: copy the dev window wall along its own direction (-1, 0.57), 210 px steps
-    wall = poly_mask((H, W), [(24, WALL_TOP(24) - 16), (xb - 2, WALL_TOP(xb - 2) - 16), (xb - 2, WALL_BASE(xb - 2) + 1), (24, WALL_BASE(24) + 1)])
+    wall = poly_mask((H, W), [(24, WALL_TOP(24) - 1), (xb - 2, WALL_TOP(xb - 2) - 1), (xb - 2, WALL_BASE(xb - 2) + 1), (24, WALL_BASE(24) + 1)])
     for k in range(1, 4):
         dx = -200 * k
-        seg = poly_mask((H, W), [(24 + dx, WALL_TOP(24 + dx) - 16), (24 + dx + 200, WALL_TOP(24 + dx + 200) - 16), (24 + dx + 200, WALL_BASE(24 + dx + 200) + 1), (24 + dx, WALL_BASE(24 + dx) + 1)]) * wall
-        shift_copy(c, seg, dx, -0.57 * dx)
+        seg = poly_mask((H, W), [(24 + dx, WALL_TOP(24 + dx) - 1), (24 + dx + 200, WALL_TOP(24 + dx + 200) - 1), (24 + dx + 200, WALL_BASE(24 + dx + 200) + 1), (24 + dx, WALL_BASE(24 + dx) + 1)]) * wall
+        shift_copy(c, seg, dx, -SL * dx)
     # the old picture's plant + edge at x<24 in the wall band is replaced too (covered above for x<24)
     # 2) dev floor extension (between the window wall base and the divider cap): copy the floor 3 tiles along V
     fl = poly_mask((H, W), [(xd, CAP(xd)), (24, CAP(24)), (24, WALL_BASE(24)), (xd, WALL_BASE(xd))])

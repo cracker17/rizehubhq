@@ -608,7 +608,9 @@ export class OfficeScene extends Phaser.Scene {
       const wp = world(rp.x, rp.y);
       // Painter's order by the feet on screen; seated people sit just in front of their chair; someone on
       // the treadmill stands on its belt (in front of the machine).
-      c.view.place(wp.x, wp.y, wp.y + (m.phase === 'seated' ? 2 : 0) + (m.loop === 'treadmill' && m.at ? 90 : 0));
+      // someone sitting on a sprite sofa sits in front of its back and arms (the sofa's slices sort by its front edge)
+      const onSofaSprite = m.at?.startsWith('spot:ceo-sofa') && (m.phase === 'seated' || m.phase === 'sitting_down' || m.phase === 'standing_up');
+      c.view.place(wp.x, wp.y, wp.y + (m.phase === 'seated' ? 2 : 0) + (m.loop === 'treadmill' && m.at ? 90 : 0) + (onSofaSprite ? 34 * S : 0));
       const onScreen = wp.x > vx0 && wp.x < vx1 && wp.y > vy0 && wp.y < vy1;
       c.view.object.setVisible(onScreen);
       if (!onScreen) continue;

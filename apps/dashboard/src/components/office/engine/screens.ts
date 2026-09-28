@@ -111,6 +111,7 @@ export class ScreenLayer {
         ctx.setTransform((tr.x - tl.x) / CW, (tr.y - tl.y) / CW, (bl.x - tl.x) / CH, (bl.y - tl.y) / CH, tl.x, tl.y);
         ctx.beginPath(); ctx.rect(0, 0, CW, CH); ctx.clip();
         drawApp(ctx, info, t, i, s.quads.length, s.agentId);
+        screenFinish(ctx);
         ctx.restore();
       });
     }
@@ -145,6 +146,7 @@ function drawApp(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, ind
   const app = info.app;
   if (app === 'off') { bar(ctx, 0, 0, CW, CH, '#07080c'); return; }
   if (app === 'screensaver') { drawScreensaver(ctx, t, index, seed); return; }
+  if (app === 'review' && index === 3) { drawMobilePreview(ctx, info, t, rnd); return; }
   // A second monitor shows the "result" side (preview / tests / chart) of the same work.
   const side = count > 1 && index === count - 1;
   const title = info.title || 'Working';
@@ -226,16 +228,23 @@ function drawApp(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, ind
       return;
     }
     case 'review': {
+      // QA station: the page under test (desktop), the checklist, the scores, and the mobile preview on the tablet.
+      if (index === 3) { drawMobilePreview(ctx, info, t, rnd); return; }
+      if (index === 0 && count > 2) { drawPagePreview(ctx, info, t, rnd, false); return; }
+      if (index === 2 && count > 2) { drawScores(ctx, info, t, rnd); return; }
       bar(ctx, 0, 0, CW, CH, '#0f1720');
-      text(ctx, side ? 'Checks' : `QA · ${title}`, 6, 11, 8, '#e2f7ec', CW - 12, 800);
+      bar(ctx, 0, 0, CW, 14, '#16212d');
+      text(ctx, `QA · ${title}`, 6, 10, 7.5, '#e2f7ec', CW - 12, 800);
       const n = 7;
       const done = Math.floor((t * 0.8) % (n + 3));
+      const labels = ['Links & buttons', 'Mobile layout', 'Spelling', 'Images / alt', 'Page speed', 'SEO meta', 'Brand check'];
       for (let i = 0; i < n; i++) {
-        const y = 20 + i * 10.5;
+        const y = 19 + i * 10.5;
         const state = i < done ? (rnd(i + 3) < 0.86 ? 'ok' : 'x') : i === done ? 'run' : 'wait';
         const c = state === 'ok' ? '#39d98a' : state === 'x' ? '#ff6b6b' : state === 'run' ? '#ffd166' : '#3b4a5a';
-        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(10, y + 3, 3, 0, Math.PI * 2); ctx.fill();
-        bar(ctx, 18, y + 1.5, 40 + rnd(i) * 70, 3.4, state === 'wait' ? '#2b3746' : '#a9b8c9');
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(10, y + 3.5, 3, 0, Math.PI * 2); ctx.fill();
+        text(ctx, labels[i], 18, y + 6, 6.5, state === 'wait' ? '#5b6b7d' : '#c9d6e3', 90, 600);
+        text(ctx, state === 'ok' ? 'pass' : state === 'x' ? 'fix' : state === 'run' ? '…' : '', CW - 26, y + 6, 6, c, 22, 700);
       }
       progressBar(ctx, info.progress, CH - 6, '#39d98a');
       return;
@@ -273,6 +282,81 @@ function drawApp(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, ind
       progressBar(ctx, info.progress, CH - 6, info.color);
     }
   }
+}
+
+/** A web page being checked, scrolling slowly (desktop viewport). */
+function drawPagePreview(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, rnd: (i: number) => number, _mobile: boolean) {
+  bar(ctx, 0, 0, CW, CH, '#f8fafc');
+  bar(ctx, 0, 0, CW, 11, '#e2e8f0');
+  [0, 1, 2].forEach((i) => { ctx.fillStyle = ['#ff5f57', '#febc2e', '#28c840'][i]; ctx.beginPath(); ctx.arc(6 + i * 6, 5.5, 2, 0, Math.PI * 2); ctx.fill(); });
+  bar(ctx, 26, 2.5, CW - 34, 6, '#ffffff'); text(ctx, 'staging.client-site.com', 29, 7.6, 5, '#64748b', CW - 40, 500);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 11, CW, CH - 11); ctx.clip();
+  const scroll = (t * 9) % 120;
+  ctx.translate(0, 11 - scroll);
+  bar(ctx, 0, 0, CW, 8, '#111827'); for (let i = 0; i < 4; i++) bar(ctx, CW - 70 + i * 16, 3, 11, 2, '#9ca3af');
+  bar(ctx, 0, 8, CW, 46, info.color || '#7c3aed');
+  text(ctx, info.title || 'Landing page', 10, 26, 10, '#ffffff', CW - 20, 800);
+  bar(ctx, 10, 32, 90, 3, 'rgba(255,255,255,.75)'); bar(ctx, 10, 38, 70, 3, 'rgba(255,255,255,.6)');
+  bar(ctx, 10, 44, 34, 7, '#ffffff');
+  for (let c = 0; c < 3; c++) { bar(ctx, 8 + c * 50, 60, 44, 30, '#e5e7eb'); bar(ctx, 12 + c * 50, 64, 36, 14, ['#c4b5fd', '#93c5fd', '#fcd34d'][c]); bar(ctx, 12 + c * 50, 82, 30, 3, '#9ca3af'); }
+  for (let i = 0; i < 8; i++) bar(ctx, 10, 98 + i * 8, 60 + rnd(i + 20) * 80, 3.2, '#cbd5e1');
+  bar(ctx, 0, 170, CW, 60, '#111827');
+  ctx.restore();
+  // QA highlight box hunting over the page
+  const hx = 12 + ((Math.sin(t * 0.7) + 1) / 2) * 90; const hy = 30 + ((Math.cos(t * 0.53) + 1) / 2) * 50;
+  ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 2]); ctx.strokeRect(hx, hy, 46, 18); ctx.setLineDash([]);
+}
+
+/** Lighthouse-style scores and a small trend. */
+function drawScores(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, rnd: (i: number) => number) {
+  bar(ctx, 0, 0, CW, CH, '#0b1220');
+  text(ctx, 'Page checks', 6, 10, 7.5, '#e5e7eb', CW - 12, 800);
+  const names = ['Perf', 'A11y', 'SEO', 'Best'];
+  names.forEach((n, i) => {
+    const cx = 22 + i * 38; const cy = 38; const v = 0.72 + rnd(i + 9) * 0.26;
+    const p = Math.min(v, ((t * 0.3 + i * 0.2) % 1.6));
+    const c = v > 0.9 ? '#22c55e' : v > 0.8 ? '#f59e0b' : '#ef4444';
+    ctx.lineWidth = 3.4; ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(cx, cy, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
+    text(ctx, `${Math.round(p * 100)}`, cx - 6, cy + 3, 7, '#f8fafc', 20, 800);
+    text(ctx, n, cx - 8, cy + 22, 6, '#94a3b8', 30, 600);
+  });
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.4; ctx.beginPath();
+  for (let i = 0; i <= 16; i++) { const x = 8 + i * 9; const y = 86 - (rnd(i + 40) * 10 + i * 0.6); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+  ctx.stroke();
+  progressBar(ctx, info.progress, CH - 6, '#39d98a');
+}
+
+/** The tablet on the QA desk: the same page on two phone viewports (iPhone / Android), scrolling. */
+function drawMobilePreview(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, rnd: (i: number) => number) {
+  bar(ctx, 0, 0, CW, CH, '#1f2937');
+  text(ctx, 'Mobile preview', 6, 9, 6.5, '#e5e7eb', 80, 700);
+  [0, 1].forEach((k) => {
+    const x = 22 + k * 64; const y = 13; const w = 44; const h = 82;
+    ctx.fillStyle = '#0b0b0f'; ctx.beginPath(); ctx.roundRect(x - 2.5, y - 2.5, w + 5, h + 5, 6); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.clip();
+    bar(ctx, x, y, w, h, '#f8fafc');
+    const sc = ((t * 7 + k * 25) % 70);
+    ctx.translate(0, -sc);
+    bar(ctx, x, y + 6, w, 30, info.color || '#7c3aed');
+    text(ctx, info.title || 'Page', x + 3, y + 20, 5.5, '#fff', w - 6, 800);
+    bar(ctx, x + 3, y + 26, 22, 4, '#fff');
+    for (let i = 0; i < 10; i++) bar(ctx, x + 3, y + 42 + i * 7, 18 + rnd(i + k * 11) * 20, 2.6, '#cbd5e1');
+    bar(ctx, x + 3, y + 112, w - 6, 18, '#e5e7eb');
+    ctx.restore();
+    bar(ctx, x + w / 2 - 6, y + 1.5, 12, 2.6, '#0b0b0f'); // notch
+    // a tap ripple now and then
+    const ph = (t * 0.6 + k * 0.5) % 1;
+    if (ph < 0.35) { ctx.strokeStyle = `rgba(59,130,246,${0.8 - ph * 2})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + 12 + rnd(k + Math.floor(t * 0.6)) * 20, y + 30 + rnd(k + 5) * 30, 2 + ph * 14, 0, Math.PI * 2); ctx.stroke(); }
+  });
+}
+
+/** Glass finish over any screen: a thin dark bezel and a soft diagonal reflection. */
+function screenFinish(ctx: CanvasRenderingContext2D) {
+  const g = ctx.createLinearGradient(0, 0, CW, CH);
+  g.addColorStop(0, 'rgba(255,255,255,0.10)'); g.addColorStop(0.35, 'rgba(255,255,255,0.02)'); g.addColorStop(0.36, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.12)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+  ctx.strokeStyle = 'rgba(8,10,14,0.9)'; ctx.lineWidth = 3; ctx.strokeRect(0, 0, CW, CH);
 }
 
 /** RizeHub screensaver: navy grid, drifting aurora, twinkles, and the RizeHub wordmark gliding and bouncing

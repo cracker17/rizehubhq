@@ -181,7 +181,7 @@ class PoseView implements CharacterView {
     if (m.gesture) { const g = m.gesture.t / m.gesture.dur; bob -= Math.sin(g * Math.PI * 3) * (m.gesture.name === 'done' ? 0.07 : 0.03) * s * this.c.heightPx; }
     if (m.micro?.name === 'stretch') sy += Math.sin((m.micro.t / m.micro.dur) * Math.PI) * 0.05;
     if (m.phase === 'sitting_down' || m.phase === 'standing_up') sy *= 0.94;
-    const sitLift = (seated ? (pose === 'sit_type' ? 0.28 : pose === 'sofa_back' ? 0.2 : 0.25) : 0) * s * this.c.heightPx;
+    const sitLift = (seated ? (pose === 'sit_type' ? 0.2 : pose === 'sofa_back' ? 0.2 : 0.25) : 0) * s * this.c.heightPx;
     this.img.setOrigin(flip ? 1 - e.ax : e.ax, e.ay);
     this.img.setScale(flip ? -s : s, s * sy);
     this.img.setPosition(dx, bob - sitLift);

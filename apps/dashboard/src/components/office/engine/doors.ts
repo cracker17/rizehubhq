@@ -68,6 +68,7 @@ export class DoorLayer {
         g.lineStyle(2 * S, 0x24272b, 0.9);
         g.lineBetween(p.x, p.y, q.x, q.y); // floor track
         if (k === 0 || k === n - 1) { g.lineStyle(3.2 * S, 0x24272b, 1); const e = k === 0 ? p : q; g.lineBetween(e.x, e.y, e.x, e.y - h); }
+        else if (k % 3 === 0) { g.lineStyle(2.2 * S, 0x24272b, 0.95); g.lineBetween(p.x, p.y, p.x, p.y - h); } // mullion
         g.setDepth(Math.max(p.y, q.y));
         this.walls.push(g);
       }

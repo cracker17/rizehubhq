@@ -226,7 +226,7 @@ test('director: status → place (desk, break spot, boardroom, offline)', () => 
   assert.equal(by.get('qa-lead')!.goal!.key, 'desk:qa-lead');
   assert.equal(by.get('qa-lead')!.screen, 'review');
   // demo has a request in "planning": the COO runs the meeting from the Boardroom head seat
-  assert.equal(by.get('coo')!.goal!.key, 'spot:board-head');
+  assert.equal(by.get('coo')!.goal!.key, 'desk:coo'); // she runs it seated at her laptop
   assert.ok(model.meeting?.label.startsWith('Meeting:'));
   const off: HqSnapshot = { ...s, agents: s.agents.map((a) => (a.id === 'writer' ? { ...a, enabled: false } : a)) };
   assert.equal(deriveOffice(off, { nowMs: 0 }).agents.find((a) => a.id === 'writer')!.goal, null);

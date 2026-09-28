@@ -209,7 +209,10 @@ export class FurnitureLayer {
     c.img.setScale(1 - frac * 0.35, 1);
     // Someone sitting with their back to us is behind the backrest; facing us, the chair is behind them.
     // The seated person is always drawn over the chair (their back covers the backrest seen from behind).
-    c.img.setDepth(p.y + (occupied ? 1 : 0.5));
+    // Seen from behind (seat faces up / left) the backrest is between us and the person: the chair covers their
+    // back and hips, only head and shoulders show over it. Facing us, the person sits in front of the chair.
+    const backToUs = c.seat.face === 'up' || c.seat.face === 'left';
+    c.img.setDepth(p.y + (occupied ? (backToUs ? 3 : 1) : 0.5));
   }
 
   destroy() {
