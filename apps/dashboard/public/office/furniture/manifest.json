@@ -135,9 +135,9 @@
   "ceo_desk": {
    "src": "/office/furniture/ceo_desk.webp",
    "w": 303,
-   "h": 290,
+   "h": 337,
    "ax": 108.22,
-   "ay": 271.81,
+   "ay": 327.06,
    "W": 1.336,
    "D": 2.53
   },
@@ -153,108 +153,108 @@
   "sofa": {
    "src": "/office/furniture/sofa.webp",
    "w": 281,
-   "h": 237,
+   "h": 272,
    "ax": 206.59,
-   "ay": 204.49,
+   "ay": 254.79,
    "W": 2.542,
    "D": 0.944
   },
   "coffee_table": {
    "src": "/office/furniture/coffee_table.webp",
    "w": 155,
-   "h": 159,
+   "h": 186,
    "ax": 67.01,
-   "ay": 143.21,
+   "ay": 174.09,
    "W": 0.817,
    "D": 1.092
   },
   "bookshelf": {
    "src": "/office/furniture/bookshelf.webp",
    "w": 145,
-   "h": 267,
+   "h": 327,
    "ax": 111.68,
-   "ay": 247.81,
+   "ay": 315.57,
    "W": 1.362,
    "D": 0.394
   },
   "ceo_plant": {
    "src": "/office/furniture/ceo_plant.webp",
    "w": 141,
-   "h": 202,
+   "h": 243,
    "ax": 65.91,
-   "ay": 186.92,
+   "ay": 231.99,
    "W": 0.808,
    "D": 0.927
   },
   "floor_lamp": {
    "src": "/office/furniture/floor_lamp.webp",
    "w": 159,
-   "h": 234,
+   "h": 282,
    "ax": 124.36,
-   "ay": 212.66,
+   "ay": 270.14,
    "W": 1.528,
    "D": 0.419
   },
   "bed": {
    "src": "/office/furniture/bed.webp",
    "w": 351,
-   "h": 380,
+   "h": 447,
    "ax": 164.76,
-   "ay": 351.33,
+   "ay": 430.53,
    "W": 1.997,
    "D": 2.384
   },
   "bed_sleep": {
    "src": "/office/furniture/bed_sleep.webp",
    "w": 355,
-   "h": 403,
+   "h": 476,
    "ax": 165.04,
-   "ay": 374.09,
+   "ay": 459.41,
    "W": 1.997,
    "D": 2.428
   },
   "laptop_back": {
    "src": "/office/furniture/laptop_back.webp",
-   "w": 85,
-   "h": 86,
-   "ax": 54.32,
-   "ay": 74.73,
-   "W": 0.659,
-   "D": 0.353
+   "w": 109,
+   "h": 129,
+   "ax": 70.01,
+   "ay": 119.58,
+   "W": 0.85,
+   "D": 0.455
   },
   "laptop_front": {
    "src": "/office/furniture/laptop_front.webp",
-   "w": 88,
-   "h": 99,
-   "ax": 46.24,
-   "ay": 89.36,
-   "W": 0.561,
-   "D": 0.5
+   "w": 114,
+   "h": 152,
+   "ax": 60.11,
+   "ay": 143.43,
+   "W": 0.729,
+   "D": 0.649
   },
   "laptop_back_m": {
    "src": "/office/furniture/laptop_back_m.webp",
-   "w": 85,
-   "h": 86,
-   "ax": 28.48,
-   "ay": 78.56,
-   "W": 0.329,
-   "D": 0.707
+   "w": 109,
+   "h": 129,
+   "ax": 36.71,
+   "ay": 121.91,
+   "W": 0.425,
+   "D": 0.911
   },
   "laptop_front_m": {
    "src": "/office/furniture/laptop_front_m.webp",
-   "w": 88,
-   "h": 99,
-   "ax": 39.36,
-   "ay": 90.38,
-   "W": 0.466,
-   "D": 0.601
+   "w": 114,
+   "h": 152,
+   "ax": 51.17,
+   "ay": 144.06,
+   "W": 0.606,
+   "D": 0.781
   },
   "bookshelf_m": {
    "src": "/office/furniture/bookshelf_m.webp",
    "w": 145,
-   "h": 267,
+   "h": 327,
    "ax": 31.12,
-   "ay": 259.73,
+   "ay": 321.21,
    "W": 0.367,
    "D": 1.459
   },

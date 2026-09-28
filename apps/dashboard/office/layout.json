@@ -2034,10 +2034,10 @@
    "id": "coo-laptop",
    "sprite": "laptop_back_m",
    "at": [
-    1540,
-    398
+    1548,
+    440
    ],
-   "z": 30
+   "z": 68
   }
  ],
  "doors": [
