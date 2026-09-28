@@ -1,0 +1,35 @@
+# Production on the Hostinger VPS (docs/10-DEPLOY-VPS.md). Dashboard → https://hq.rizehub.ph via reverse proxy.
+services:
+  dashboard:
+    build: { context: ., dockerfile: apps/dashboard/Dockerfile }
+    env_file: .env
+    ports: ["127.0.0.1:3100:3000"]
+    restart: unless-stopped
+    mem_limit: 512m
+
+  worker:
+    build: { context: ., dockerfile: apps/worker/Dockerfile }
+    container_name: hq-worker
+    env_file: .env
+    volumes:
+      - ./agents:/app/agents:ro
+      - ./brain:/app/brain
+      - ./config:/app/config:ro
+      - workspaces:/app/workspaces
+    networks: [default, rizehub-internal]
+    restart: unless-stopped
+    mem_limit: 2g
+
+  bot:
+    build: { context: ., dockerfile: apps/bot/Dockerfile }
+    env_file: .env
+    restart: unless-stopped
+    mem_limit: 256m
+
+volumes:
+  workspaces:
+
+networks:
+  default: {}
+  rizehub-internal:
+    external: true   # create once: docker network create rizehub-internal

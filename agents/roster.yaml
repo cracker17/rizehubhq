@@ -1,0 +1,77 @@
+# RizeHub HQ roster: what the COO routes on (docs/04-AGENTS.md)
+# work_type → default agent. A list means load-balance by queue length.
+# Every work_type has an SOP at brain/sops/<work_type>.md and a QA checklist at brain/qa-checklists/<work_type>.md
+
+routing:
+  # Leadership & ops
+  planning:             coo
+  weekly-summary:       coo
+  inbox-triage:         ea
+  daily-report:         ea
+  client-report:        ea
+  meeting-prep:         ea
+  client-onboarding:    client-success
+  workspace-setup:      client-success
+  access-checklist:     client-success
+
+  # Growth
+  proposal:             pipeline
+  follow-up-email:      pipeline
+  lead-finder-search:   prospector
+  lead-report:          prospector
+  outreach-draft:       prospector
+  dm-reply-draft:       inbound
+  lead-qualification:   inbound
+  job-search:           job-scout
+  job-application:      job-scout
+
+  # Dev
+  shopify-section:      shopify-dev
+  shopify-page:         shopify-dev
+  shopify-theme-fix:    shopify-dev
+  shopify-speed:        shopify-dev
+  webflow-page:         webflow-dev
+  webflow-cms:          webflow-dev
+  webflow-interaction:  webflow-dev
+  wordpress-page:       wordpress-dev
+  wordpress-plugin:     wordpress-dev
+  wordpress-fix:        wordpress-dev
+  web-app:              fullstack-dev
+  api-integration:      fullstack-dev
+  automation:           fullstack-dev
+
+  # Design
+  wireframe:            [uiux-1, uiux-2]
+  ui-mockup:            [uiux-1, uiux-2]
+  ux-audit:             [uiux-1, uiux-2]
+  ad-creative:          [graphic-1, graphic-2]
+  social-graphic:       [graphic-1, graphic-2]
+  brand-asset:          [graphic-1, graphic-2]
+
+  # Content
+  content-calendar:     [social-1, social-2]
+  social-captions:      [social-1, social-2]
+  short-video-script:   [social-1, social-2]
+  seo-article:          [seo-1, seo-2]
+  landing-copy:         [seo-1, seo-2]
+  meta-tags:            [seo-1, seo-2]
+  keyword-research:     [seo-1, seo-2]
+
+  # Multimedia
+  video-edit:           video-editor
+  reel:                 video-editor
+  subtitles:            video-editor
+  voiceover:            sound-engineer
+  voice-design:         sound-engineer
+  audio-cleanup:        sound-engineer
+  music-sfx:            sound-engineer
+
+qa:
+  default: qa-lead          # every deliverable is reviewed before it reaches the CEO
+
+# Lets "fix the Madam Muse store" route to the right dev without naming the platform
+platform_to_dev:
+  shopify: shopify-dev
+  webflow: webflow-dev
+  wordpress: wordpress-dev
+  custom: fullstack-dev

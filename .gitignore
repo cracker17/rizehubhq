@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+workspaces/*
+!workspaces/.gitkeep
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+supabase/.temp/
+supabase/.branches/

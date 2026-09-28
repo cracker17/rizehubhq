@@ -1,0 +1,147 @@
+# 14 · AI Models, Providers & Costs
+
+RizeHub HQ is **provider-agnostic**. Every agent asks for a *role* ("lead", "specialist", "qa", "light"), not a specific model. A single config file maps roles to models, so moving from free models to Claude or OpenAI is a config change, not a rewrite.
+
+## How it works
+
+- **Vercel AI SDK** (`ai` package, free, open-source) is the agent runtime. The same code talks to Gemini, Groq, OpenRouter, Anthropic (Claude) and OpenAI, and it supports tool calling and multi-step agent loops on all of them.
+- **Model router** (`apps/worker/src/models/router.ts`) picks the model for each call from the active **profile**, checks the provider's remaining free quota and the budget, and falls back to the next provider when a limit is hit.
+- **Usage meter**: every call logs provider, model, tokens in/out, cached tokens and cost into `activity_log`. The dashboard shows spend per agent, per workflow and per client.
+
+```
+Agent (role: specialist) ─► Router ─► profile "free"   → gemini-flash  ─(quota hit)→ groq llama/qwen ─→ openrouter :free
+                                  └► profile "claude" → claude-sonnet-5
+                                  └► profile "openai" → gpt mid-tier
+```
+
+## Profiles (`config/models.yaml`)
+
+```yaml
+active_profile: free        # free | hybrid | claude | openai
+                            # can also be overridden per agent in the Agents page
+
+profiles:
+  free:
+    lead:       [google:gemini-flash, groq:qwen-or-llama-large, openrouter:free-large]
+    specialist: [google:gemini-flash, groq:qwen-or-llama-large, openrouter:free-large]
+    qa:         [google:gemini-flash, groq:qwen-or-llama-large]
+    light:      [groq:llama-small, google:gemini-flash-lite]
+  hybrid:                    # first paid step: pay only where quality matters most
+    lead:       [anthropic:claude-sonnet-5]
+    specialist: [google:gemini-flash, groq:qwen-or-llama-large]   # leads, jobs, content, design briefs
+    dev:        [anthropic:claude-sonnet-5]                        # dev agents get their own role
+    reports:    [anthropic:claude-sonnet-5]
+    qa:         [anthropic:claude-sonnet-5]
+    light:      [groq:llama-small]
+  claude:
+    lead:       [anthropic:claude-opus-5-5]     # or claude-sonnet-5 for value
+    specialist: [anthropic:claude-sonnet-5]
+    dev:        [anthropic:claude-sonnet-5]
+    reports:    [anthropic:claude-sonnet-5]
+    qa:         [anthropic:claude-opus-5-5]     # or claude-sonnet-5 for value
+    light:      [anthropic:claude-haiku-4-5]
+  openai:
+    lead:       [openai:<flagship>]
+    specialist: [openai:<mid-tier>]
+    dev:        [openai:<mid-tier>]
+    reports:    [openai:<mid-tier>]
+    qa:         [openai:<flagship>]
+    light:      [openai:<nano/mini>]
+```
+Exact model IDs change often. Put the current IDs from each provider's docs into this file; the code never hard-codes them.
+
+## Environment keys (only fill what you use)
+
+```
+GOOGLE_GENERATIVE_AI_API_KEY=...   # Gemini (free tier)
+GROQ_API_KEY=...                   # Groq (free tier)
+OPENROUTER_API_KEY=...             # OpenRouter (free models as fallback)
+ANTHROPIC_API_KEY=                 # later: Claude
+OPENAI_API_KEY=                    # later: OpenAI
+MODEL_PROFILE=free
+MONTHLY_BUDGET_USD=0               # 0 = free providers only; raise when you switch to paid
+```
+
+## Free-tier rules the router enforces
+
+| Rule | Why |
+|---|---|
+| Track requests per provider per day; switch provider at 90% of the daily limit | Free tiers cap requests per day (roughly 1,000–1,500 per model, and it changes; check each console) |
+| Queue low-priority tasks (job hunt, digests) for the next day when all free quota is used | Keeps urgent client work running |
+| **Never send secrets or sensitive client data to Gemini's free tier** | Google may use free-tier prompts to improve its models; route client-confidential tasks to Groq or a paid provider |
+| Keep prompts lean: send file excerpts, not whole files | Free tiers also cap tokens per minute |
+| Dev agents on free models = "draft for review" mode | Free models are weaker at long coding tasks; you review and apply |
+
+## Chat with agents ("what are you doing?")
+
+Uses the **light** role (fast and cheap). The reply is built from the agent's live state: current task, progress, last 10 activity entries, blockers and queue. It never interrupts the running task. Instructions typed in chat ("stop that, do X first") become a request to the COO.
+
+---
+
+## What would Claude cost? (estimate)
+
+**Prices used** (Claude API, per million tokens, from the official pricing page, Sep 2026):
+
+| Model | Input | Cache write | Cache read | Output |
+|---|---|---|---|---|
+| Claude Opus 5.5 | $4 | $5 | $0.20 | $20 |
+| Claude Sonnet 5 | $2 | $2.50 | $0.20 | $10 |
+| Claude Haiku 4.5 | $1 | $1.25 | $0.10 | $5 |
+
+**Assumptions**
+- Agent tasks make many calls, because each tool step is a call. Per-run numbers are in the table below.
+- Prompt caching is on: about 60% of input is read from cache, 10% is written to cache, and 30% is fresh. The system prompt, role file and tool list repeat on every call, so this is realistic.
+- Exchange rate: ₱62.75 per $1 (BSP reference rate, 25 Sep 2026).
+- These are planning estimates. Real usage can be ±50%. Newer Claude models also count about 30% more tokens for the same text, so budget with a buffer.
+
+**Cost per run**
+
+| Workflow | Calls | Setup A (Opus lead+QA) | Setup B (Sonnet) |
+|---|---|---|---|
+| COO plan | 3 | $0.13 | $0.07 |
+| Find leads (30 leads researched + drafts) | 40 | $0.79 | $0.79 |
+| Job hunt (20 screened, 5 drafts) | 25 | $0.32 | $0.32 |
+| Client onboarding | 20 | $0.35 | $0.35 |
+| Monthly client report | 10 | $0.30 | $0.30 |
+| Content piece (article / captions) | 12 | $0.33 | $0.33 |
+| Dev task (e.g. a Shopify section) | 60 | $2.65 | $2.65 |
+| Design / graphic brief | 8 | $0.13 | $0.13 |
+| QA review (per deliverable) | 8 | $0.38 | $0.20 |
+| Chat with an agent | 1 | $0.002 | $0.002 |
+| Daily digest | 5 | $0.05 | $0.05 |
+
+**Monthly volume per scenario**
+
+| | Starter | Growing | Busy |
+|---|---|---|---|
+| COO plans | 60 | 150 | 300 |
+| Lead searches (30 leads each) | 8 | 20 | 40 |
+| Job hunts | 20 | 30 | 30 |
+| Onboardings | 2 | 5 | 10 |
+| Client reports | 5 | 15 | 30 |
+| Content pieces | 20 | 60 | 120 |
+| Dev tasks | 8 | 30 | 60 |
+| Design briefs | 10 | 30 | 60 |
+| QA reviews (incl. revisions) | 70 | 190 | 380 |
+| Agent chats | 300 | 900 | 1,800 |
+
+**Monthly cost**
+
+| Scenario | A. Best quality (Opus COO+QA, Sonnet team, Haiku chat) | B. Smart value (Sonnet + Haiku) | C. Hybrid (free models for leads, jobs, content, chat; Sonnet for COO, dev, reports, QA) |
+|---|---|---|---|
+| **Starter** | $82 ≈ ₱5,150 | $65 ≈ ₱4,100 | **$41 ≈ ₱2,600** |
+| **Growing** | $232 ≈ ₱14,500 | $187 ≈ ₱11,700 | **$133 ≈ ₱8,400** |
+| **Busy** | $451 ≈ ₱28,300 | $362 ≈ ₱22,700 | **$266 ≈ ₱16,700** |
+
+Where the money goes (Growing, setup B, $187): dev tasks $79 (42%), QA $37, content $20, leads $16, COO plans $10, jobs $10, everything else under $5 each. **Dev work is the big cost**, so moving only the dev and QA agents to Claude (setup C) buys most of the quality for less money.
+
+Not included: VPS hosting (you already pay), Supabase (free tier is enough to start), web search tools, and image generation (Magnific credits).
+
+## Recommended path
+
+1. **Now: profile `free`.** Gemini, Groq and OpenRouter; set `MONTHLY_BUDGET_USD=0`. Leads, jobs, reports and content work well; dev agents draft for review.
+2. **First paying clients: profile `hybrid`.** About $40–130 a month. Claude Sonnet 5 for the COO, dev, reports and QA; free models for the rest.
+3. **Growing: profile `claude` (setup B), then A.** Switch the COO and QA to Opus only if plans or reviews miss things.
+4. At any time you can switch one agent to OpenAI or Claude from the Agents page to compare quality on real tasks. Cost per task is visible in the dashboard.
+
+**Cost controls built in:** monthly and daily budget caps, per-task budget limits, prompt caching on every call, Batch API (50% off) for non-urgent jobs like overnight job hunts and digests, and Haiku or free models for chat and summaries.

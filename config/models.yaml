@@ -1,0 +1,39 @@
+# Role → model mapping (docs/14-MODELS-AND-COSTS.md). Model IDs change often:
+# check each provider's docs and update the IDs here; code never hard-codes them.
+active_profile: free   # free | hybrid | claude | openai  (env MODEL_PROFILE overrides)
+
+profiles:
+  free:
+    lead:       [google:gemini-2.5-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
+    specialist: [google:gemini-2.5-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
+    dev:        [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
+    reports:    [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
+    qa:         [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
+    light:      [groq:llama-3.1-8b-instant, google:gemini-2.5-flash-lite]
+  hybrid:
+    lead:       [anthropic:claude-sonnet-5]
+    specialist: [google:gemini-2.5-flash, groq:openai/gpt-oss-120b]
+    dev:        [anthropic:claude-sonnet-5]
+    reports:    [anthropic:claude-sonnet-5]
+    qa:         [anthropic:claude-sonnet-5]
+    light:      [groq:llama-3.1-8b-instant]
+  claude:
+    lead:       [anthropic:claude-opus-5-5]
+    specialist: [anthropic:claude-sonnet-5]
+    dev:        [anthropic:claude-sonnet-5]
+    reports:    [anthropic:claude-sonnet-5]
+    qa:         [anthropic:claude-opus-5-5]
+    light:      [anthropic:claude-haiku-4-5-20251001]
+  openai:        # fill in current model IDs from OpenAI's docs before using
+    lead:       [openai:gpt-5.5]
+    specialist: [openai:gpt-5.4-mini]
+    dev:        [openai:gpt-5.4]
+    reports:    [openai:gpt-5.4-mini]
+    qa:         [openai:gpt-5.5]
+    light:      [openai:gpt-5.4-nano]
+
+# Free-tier guard rails (router): switch provider at 90% of these daily request caps.
+daily_request_caps:
+  google: 1000
+  groq: 1000
+  openrouter: 50

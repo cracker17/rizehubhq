@@ -1,0 +1,22 @@
+{
+  "name": "rizehubhq",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/**\" dev",
+    "dev:dashboard": "pnpm --filter dashboard dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "dev:bot": "pnpm --filter bot dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:types": "supabase gen types typescript --local > packages/shared/src/db.types.ts",
+    "db:reset": "supabase db reset",
+    "db:test": "node scripts/db-test.mjs",
+    "test": "pnpm -r --if-present test",
+    "check:roles": "pnpm --filter worker check:roles"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0",
+    "typescript": "^5.7.2"
+  }
+}
