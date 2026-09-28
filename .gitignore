@@ -14,3 +14,6 @@ dist-preview/
 scripts/office/lama.onnx
 scripts/office/__pycache__/
 *.tsbuildinfo
+
+# role-eval scorecards (pnpm eval:roles) and other generated reports
+/reports/

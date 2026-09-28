@@ -13,10 +13,12 @@
     "db:reset": "supabase db reset",
     "db:test": "node scripts/db-test.mjs",
     "test:integration": "node scripts/integration/run.mjs",
-    "test": "pnpm -r --if-present test && node --test scripts/env.test.mjs",
-    "test:scripts": "node --test scripts/env.test.mjs",
+    "test": "pnpm -r --if-present test && node --test scripts/env.test.mjs scripts/deploy.test.mjs",
+    "test:scripts": "node --test scripts/env.test.mjs scripts/deploy.test.mjs",
     "check:roles": "pnpm --filter worker check:roles",
-    "check:env": "node scripts/check-env.mjs"
+    "eval:roles": "pnpm --filter worker eval:roles",
+    "check:env": "node scripts/check-env.mjs",
+    "check:deploy": "node scripts/check-deploy.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.0",

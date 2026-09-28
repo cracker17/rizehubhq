@@ -69,7 +69,9 @@ CI runs all of these on every push, plus the `rizehub-agent-api` tests, shellche
 
 ## Go-live checklist
 
-The exact steps, in order. Full detail: `docs/10-DEPLOY-VPS.md` and `deploy/supabase-setup.md`.
+The exact steps, in order. Full detail: `docs/10-DEPLOY-VPS.md` ("Go-live runbook") and `deploy/supabase-setup.md`.
+
+0. **Offline readiness:** `pnpm check:deploy` → `0 failed`, and `pnpm eval:roles` → `All tasks passed.` With AI keys in `.env`, `pnpm eval:roles -- --live --role <role>` scores each role's 3 sample tasks against QA ≥ 85 (`reports/eval/latest-live.md`).
 
 1. **Code reachable from the VPS.** Push this repo to GitHub (private). If this build came from a Claude Code session, add the GitHub repo to the session's sources, or push the git bundle yourself: `git bundle create rizehub-hq.bundle --all` → `git clone rizehub-hq.bundle` → `git remote set-url origin git@github.com:<you>/rizehub-hq.git` → `git push -u origin main`.
 2. **Supabase project** (Singapore): create it, then `supabase link --project-ref <ref>` → `supabase db push` → run `supabase/seed.sql` once → disable sign-ups → create the private `evidence` bucket (`deploy/supabase-setup.md` §1–6).

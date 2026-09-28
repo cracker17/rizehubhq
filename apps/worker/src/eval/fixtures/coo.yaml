@@ -1,0 +1,117 @@
+# M10 role eval: COO (lead). Fictional clients and data; RizeHub HQ internal context. See eval/fixtures.ts for the format.
+role: coo
+tasks:
+  - id: coo-inbox-triage-monday
+    title: Triage Monday's CEO inbox (6 emails)
+    work_type: inbox-triage
+    instructions: |
+      Triage these six emails from the CEO's inbox (RizeHub HQ, Monday 08:00 Manila). For each: category
+      (client-urgent, client-routine, sales-lead, vendor, noise), the owner agent, the next action, and a due time.
+      Draft replies only where a reply is needed, marked DRAFT (the CEO sends everything himself).
+        1. Harbor Pine Dental (Dr. Maya Ortiz): "Booking form on /contact stopped emailing us since Friday."
+        2. Kalamansi & Clay (Ana Reyes): "Can we add a holiday gift-wrap option before Nov 15?"
+        3. Google Workspace: "Your invoice for October is ready."
+        4. Inbound lead via rizehub.ph form: "We run 3 Webflow sites for our clinics in Austin, need a monthly retainer."
+        5. Newsletter: "10 AI tools you must try this week"
+        6. Tidewell Supplements (Marco Diaz): "Kickoff call Thursday 9am ET still OK?"
+    acceptance_criteria:
+      - "All 6 emails are categorized with exactly one category each"
+      - "Every actionable email names an owner agent, a next action and a due time"
+      - "Harbor Pine Dental's broken form is flagged client-urgent and routed to web-dev"
+      - "Draft replies are marked DRAFT and nothing is sent"
+    scripted:
+      attempts:
+        - output:
+            summary: Six emails triaged; one client-urgent (Harbor Pine Dental form) routed to web-dev; three DRAFT replies for the CEO.
+            content: |
+              | # | From | Category | Owner | Next action | Due |
+              |---|---|---|---|---|---|
+              | 1 | Harbor Pine Dental | client-urgent | web-dev | Check Webflow form notification settings + test submission; confirm fix to client | Today 12:00 |
+              | 2 | Kalamansi & Clay | client-routine | web-dev | Scope a gift-wrap line-item property on the cart; quote from pricing.md | Wed 17:00 |
+              | 3 | Google Workspace | vendor | coo | File invoice in finance folder | Fri |
+              | 4 | Inbound lead (Austin clinics) | sales-lead | sales | Qualify against ICP; draft reply proposing a 20-min call | Today 17:00 |
+              | 5 | Newsletter | noise | none | Archive | n/a |
+              | 6 | Tidewell Supplements | client-routine | coo | Confirm Thursday 9am ET (21:00 Manila); prep agenda | Tue 12:00 |
+
+              DRAFT (1, to Dr. Ortiz): "Thanks for flagging this. We're checking the form's notification settings now and will confirm once a test submission reaches your inbox today."
+              DRAFT (4): "Thanks for reaching out. Happy to help with the three clinic sites; would a 20-minute call this week work?"
+              DRAFT (6): "Thursday 9am ET works. I'll send the agenda by Wednesday."
+            criteria_map:
+              "All 6 emails are categorized with exactly one category each": "Table rows 1-6, one category column"
+              "Every actionable email names an owner agent, a next action and a due time": "Owner/Next action/Due columns filled for rows 1,2,3,4,6"
+              "Harbor Pine Dental's broken form is flagged client-urgent and routed to web-dev": "Row 1"
+              "Draft replies are marked DRAFT and nothing is sent": "Three replies prefixed DRAFT; no send action requested"
+          qa: { score: 93 }
+
+  - id: coo-client-report-harbor-pine
+    title: September SEO report commentary for Harbor Pine Dental
+    work_type: client-report
+    client: { name: Harbor Pine Dental, slug: harbor-pine-dental, platforms: [webflow], website: "https://harborpinedental.example" }
+    instructions: |
+      Write the CEO-reviewed commentary for Harbor Pine Dental's September SEO report. Use ONLY these numbers
+      (from the RizeHub report data): organic sessions 1,840 (Aug 1,520), booking-form submissions 46 (Aug 39),
+      top query "emergency dentist portland" avg position 7.2 (Aug 11.4), pages indexed 38 (Aug 31).
+      Structure: headline, 3 wins, 1 risk, 3 next-month actions. Plain US English, no jargon. Do not publish.
+    acceptance_criteria:
+      - "Every number matches the brief exactly and no other metrics are invented"
+      - "Contains a headline, 3 wins, 1 risk and 3 next-month actions"
+      - "Month-over-month change is stated as a percentage for sessions and submissions"
+      - "Report is left as a draft for CEO approval (not published)"
+    scripted:
+      attempts:
+        - output:
+            summary: September commentary drafted from the provided figures; sessions +21%, submissions +18%; saved as a draft for the CEO.
+            content: |
+              ## September: more patients finding you, and more of them booking
+              **Wins**
+              1. Organic sessions rose to 1,840 from 1,520 (+21%).
+              2. Booking-form submissions rose to 46 from 39 (+18%).
+              3. "emergency dentist portland" moved from position 11.4 to 7.2, now on page one.
+              **Risk**
+              - Seven new pages were indexed (31 → 38); a few are thin service pages that could dilute rankings if left as-is.
+              **Next month**
+              1. Expand the emergency-dentistry page with FAQs and after-hours details.
+              2. Merge or enrich the thinnest new service pages.
+              3. Add booking-form tracking by page so we can see which pages drive appointments.
+              _Draft for CEO review; not published._
+          qa: { score: 90 }
+
+  - id: coo-meeting-prep-tidewell
+    title: Kickoff meeting prep for Tidewell Supplements
+    work_type: meeting-prep
+    client: { name: Tidewell Supplements, slug: tidewell-supplements, platforms: [shopify], website: "https://tidewellsupplements.example" }
+    instructions: |
+      Prepare the CEO for Thursday's 30-minute kickoff with Marco Diaz (Tidewell Supplements, Shopify store, US).
+      Signed scope: Shopify speed optimisation + 3 Meta ad creatives. Known facts: mobile PageSpeed 41 (from our audit),
+      launch of a new magnesium product on Nov 20. Produce: agenda with timings, 5 questions to ask, access we still
+      need (as a checklist, no credentials), and risks. Times in both ET and Manila time.
+    acceptance_criteria:
+      - "Agenda fits in 30 minutes with a timing per item"
+      - "Exactly 5 questions for the client are listed"
+      - "Access needed is a checklist and contains no credentials"
+      - "Meeting time is given in both ET and Manila time"
+    scripted:
+      attempts:
+        - output:
+            summary: 30-minute agenda, 5 questions, access checklist (no credentials) and risks for the Tidewell kickoff (Thu 9:00 ET / 21:00 Manila).
+            content: |
+              **When:** Thursday 9:00 ET = Thursday 21:00 Manila
+              **Agenda (30 min)**
+              - 0-5 Intros and goals
+              - 5-15 Speed plan: mobile PageSpeed 41 today, target and approach
+              - 15-25 Meta creatives for the Nov 20 magnesium launch
+              - 25-30 Access, next steps, owners
+              **Questions**
+              1. Which apps can we remove or defer?
+              2. Who approves theme changes on your side?
+              3. What is the launch offer for the magnesium product?
+              4. Any brand assets or product photos for the ads?
+              5. What result would make this project a win in 60 days?
+              **Access still needed**
+              - [ ] Shopify collaborator access (staff account, theme permissions)
+              - [ ] Meta Business Manager partner access
+              - [ ] Google Analytics 4 viewer access
+              **Risks**
+              - Nov 20 launch leaves ~3 weeks for creatives; approvals must be quick.
+              - Theme edits during the launch week: we work on an unpublished theme only.
+          qa: { score: 91 }

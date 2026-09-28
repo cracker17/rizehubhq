@@ -21,6 +21,10 @@ jobs:
       - run: pnpm test
       - run: pnpm db:test
       - run: pnpm --filter worker check:roles
+      # M10 harness, offline (scripted model, no keys): every role's fixtures through the real runner + QA path
+      - run: pnpm eval:roles -- --quiet
+      # M11 offline go-live readiness (db-test already ran above)
+      - run: pnpm check:deploy -- --skip-db
       - run: pnpm --filter dashboard build
 
   # Reference Agent API kit for the RizeHub side (zero runtime deps, Node's built-in test runner).

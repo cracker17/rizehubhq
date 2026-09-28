@@ -1,0 +1,89 @@
+# M10 role eval: Graphic Designer (design). Fictional clients; every design ships with a design spec.
+role: designer
+tasks:
+  - id: designer-wireframe-roofing-landing
+    title: Landing page wireframe for Northfield Roofing's storm-damage campaign
+    work_type: wireframe
+    client: { name: Northfield Roofing Co., slug: northfield-roofing, platforms: [webflow], website: "https://northfieldroofing.example" }
+    instructions: |
+      Wireframe a mobile-first landing page for Northfield Roofing Co. (Columbus, OH) for Google Ads traffic searching
+      "storm damage roof repair". Goal: free inspection requests. Include section order, content notes per section,
+      form fields, and a design spec the Web Developer can build from (grid, spacing scale, type scale, breakpoints).
+    acceptance_criteria:
+      - "Section order is given for mobile with the form or its CTA above the fold"
+      - "Form has no more than 4 fields"
+      - "Design spec lists grid, spacing scale, type scale and breakpoints"
+      - "Every section has content notes the writer and developer can act on"
+    scripted:
+      attempts:
+        - output:
+            summary: 7-section mobile-first wireframe with a 3-field inspection form above the fold and a build-ready design spec.
+            content: |
+              **Mobile section order**
+              1. Hero: headline "Storm-damaged roof? Free inspection within 48 hours", 3-field form (Name, Phone, ZIP), CTA "Book my free inspection".
+              2. Trust bar: licence number, years in Columbus, insurance-claim help (copy from the client; no invented numbers).
+              3. How it works: 3 steps (Inspect → Photo report → Insurance-ready estimate).
+              4. Before/after gallery: 4 client photos with captions.
+              5. Reviews: 3 real Google reviews (client to supply).
+              6. FAQ: 5 questions on insurance claims and timing.
+              7. Final CTA: repeat form.
+              **Design spec**
+              - Grid: 4 columns mobile (16px gutter), 12 columns desktop (24px gutter), max width 1200px
+              - Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64
+              - Type scale: 14 / 16 / 20 / 28 / 36 (1.25 ratio), body 16px
+              - Breakpoints: 375, 768, 1024, 1440
+          qa: { score: 90 }
+
+  - id: designer-ad-creative-tidewell
+    title: 3 Meta ad concepts for Tidewell's magnesium launch
+    work_type: ad-creative
+    client: { name: Tidewell Supplements, slug: tidewell-supplements, platforms: [shopify], website: "https://tidewellsupplements.example" }
+    instructions: |
+      Create 3 Meta (Facebook/Instagram) ad concepts for Tidewell's new magnesium glycinate product launching Nov 20.
+      For each: visual description, on-image text (≤ 20% of the image), primary text, headline, sizes (1:1 and 9:16)
+      with safe zones. Supplement claims must be FDA-safe (no disease claims). Do not launch or schedule anything.
+    acceptance_criteria:
+      - "Exactly 3 concepts, each with visual, on-image text, primary text and headline"
+      - "Sizes 1:1 (1080x1080) and 9:16 (1080x1920) with safe zones are specified"
+      - "No disease or cure claims appear in any copy"
+      - "Nothing was launched or scheduled"
+    scripted:
+      attempts:
+        - output:
+            summary: Three launch concepts (Wind-down ritual, Label close-up, Founder note) with sizes, safe zones and FDA-safe copy.
+            content: |
+              **Concept 1: Wind-down ritual**: bedside flat-lay, warm lamp light, bottle in focus. On-image: "Your new evening ritual". Primary: "Meet Magnesium Glycinate: a gentle part of your wind-down routine. Launching Nov 20." Headline: "Wind down with Tidewell".
+              **Concept 2: Label close-up**: macro of the clean label on sand-coloured backdrop. On-image: "3 ingredients. That's it." Primary: "Simple formula, third-party tested. Available Nov 20." Headline: "Simple by design".
+              **Concept 3: Founder note**: handwritten card beside the bottle. On-image: "Made the one we wanted". Primary: "We couldn't find a magnesium we liked, so we made one." Headline: "From our kitchen table".
+              **Sizes**: 1:1 1080x1080 (keep text 100px from each edge); 9:16 1080x1920 (keep the top 250px and bottom 340px clear for UI).
+              **Compliance**: no disease, treatment or cure claims; structure/function wording only, with the standard FDA disclaimer in the landing page.
+              Status: concepts only; nothing launched or scheduled.
+          qa: { score: 88 }
+
+  - id: designer-ux-audit-product-page
+    title: UX audit of the product page (Kalamansi & Clay)
+    work_type: ux-audit
+    client: { name: Kalamansi & Clay, slug: kalamansi-and-clay, platforms: [shopify], website: "https://kalamansiandclay.example" }
+    instructions: |
+      Audit the product page template of Kalamansi & Clay (handmade ceramics) for mobile conversion. Findings must be
+      prioritised (impact × effort), each with evidence (what you observed, at which width) and a concrete fix the
+      Web Developer can implement. Limit to the top 6 findings.
+    acceptance_criteria:
+      - "No more than 6 findings, ordered by priority"
+      - "Every finding has evidence with the viewport width"
+      - "Every finding has a concrete fix"
+      - "Impact and effort are rated for every finding"
+    scripted:
+      attempts:
+        - output:
+            summary: 6 prioritised findings for the mobile product page; top issue is the add-to-cart button below 2 screens of images.
+            content: |
+              | # | Finding (evidence) | Impact | Effort | Fix |
+              |---|---|---|---|---|
+              | 1 | Add-to-cart sits below 5 stacked images (375px: 1,900px down) | High | Low | Swipeable gallery; buy box directly under first image |
+              | 2 | Handmade-variation note hidden in a collapsed tab (375px) | High | Low | Short note under price: "Each piece is unique; slight variations" |
+              | 3 | Shipping cost only shown at checkout (375px, 414px) | High | Med | Add shipping estimate line near price |
+              | 4 | Variant swatches 28px tap targets (375px) | Med | Low | 44px minimum tap targets |
+              | 5 | No care instructions (all widths) | Med | Low | Add "Care" accordion (dishwasher/microwave safe, from the client) |
+              | 6 | Reviews below footer-height content (414px) | Low | Med | Move star summary under title; link to reviews |
+          qa: { score: 92 }

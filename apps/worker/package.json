@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "check:roles": "tsx src/checkRoles.ts",
+    "eval:roles": "tsx src/eval/cli.ts",
     "test": "tsx --test",
     "mock:rizehub": "tsx src/rizehub/mockServer.ts",
     "contract:rizehub": "tsx src/rizehub/contractCheck.ts"

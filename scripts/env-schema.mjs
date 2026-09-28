@@ -169,6 +169,8 @@ export const VARS = [
   S({ key: 'BACKUP_KEEP_DAYS', group: 'Ops', svc: ['ops'], check: intIn(1) }),
   // Dev-only (documented, commented out in .env.example)
   ...['MOCK_RIZEHUB_PORT', 'MOCK_RIZEHUB_HOST', 'HQ_WEBHOOK_URL', 'RIZEHUB_CHECK_WORKSPACE', 'RIZEHUB_CHECK_ACCOUNT'].map((key) => S({ key, group: 'Dev tools', svc: [], devOnly: true })),
+  // Dashboard office previews: inlined by Next at build time (default /office), so no runtime env file needs it.
+  S({ key: 'NEXT_PUBLIC_OFFICE_ASSETS', group: 'Dev tools', svc: [], devOnly: true }),
 ];
 export const BY_KEY = new Map(VARS.map((v) => [v.key, v]));
 

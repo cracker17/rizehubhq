@@ -17,6 +17,8 @@ Everything in this document is scripted in `deploy/`:
 | `.github/workflows/deploy.yml` | Optional auto-deploy after CI on `main` (off until `DEPLOY_ENABLED=true`) |
 | `scripts/check-env.mjs` | `pnpm check:env [-- --production]`: per-service `.env` validation; `-- --split` checks the three per-service files and **fails** if a server secret (service-role key, vault key) is in `.env.dashboard` |
 | `scripts/split-env.mjs` | Master `.env` → `.env.dashboard`, `.env.bot`, `.env.worker` (mode 600), each with only that container's variables |
+| `scripts/check-deploy.mjs` | `pnpm check:deploy [-- --skip-db --skip-docker]`: everything checkable without a VPS (env schema ↔ `.env.example` ↔ compose/Dockerfile env, `docker compose config`, proxy domains, `bash -n` + shellcheck, migrations in PGlite, Dockerfile COPY paths / `.dockerignore`, Playwright version, health routes). Docker and shellcheck checks are skipped when not installed |
+| `apps/worker/src/eval/` | `pnpm eval:roles [-- --role <id> --live]`: M10 role harness (3 fixture tasks per role through the real runner + QA). Offline = scripted model (CI); `--live` = configured providers. Scorecards in `reports/eval/` (gitignored) |
 
 ## Architecture on the VPS
 
@@ -189,7 +191,39 @@ Dumps go to `~/backups/rizehubhq` (`BACKUP_DIR`) and are kept `BACKUP_KEEP_DAYS`
 - Worker heartbeat: the bot alerts you if the worker stops reporting.
 - Uptime ping (e.g. UptimeRobot free) on `https://hq.rizehub.ph/api/health`.
 
+## Go-live runbook (CEO, once the keys and the VPS exist)
+
+Follow it top to bottom; each step says how you know it worked. Sections above have the detail. The README "Go-live checklist" is the short version of the same steps.
+
+**Before you touch the VPS (on your laptop)**
+1. **Offline readiness is green.** `pnpm install` → `pnpm check:deploy` must end with `0 failed` (env schema + `.env.example`, `docker compose config`, proxy domains = `hq.rizehub.ph` → `127.0.0.1:3100`, deploy scripts `bash -n` + shellcheck, migrations in PGlite, Dockerfile paths, Playwright version). `pnpm eval:roles` (offline role harness) must say `All tasks passed.` CI runs both on every push.
+2. **Code is on GitHub** (private repo), or you have a `git bundle` (step 3 above).
+3. **AI keys work (M10 pre-check, no VPS needed).** Put the free keys in your local `.env` (`GOOGLE_GENERATIVE_AI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`; `MODEL_PROFILE=free`, `MONTHLY_BUDGET_USD=0`), then `pnpm eval:roles -- --live --role writer`. It runs the role's 3 sample tasks through the real runner + QA with the configured models (in-memory database, mock RizeHub, nothing is sent or published) and writes `reports/eval/latest-live.md` (+ `.json`). A missing key stops it with exit code 2 and names the variable. Repeat per role (`coo`, `web-dev`, `designer`, `writer`, `sales`, `qa-lead`); a role is ready when its row says `3/3 … yes`. If a role fails, tune `agents/<role>.md` / its SOP and re-run: the scorecards are timestamped, so you can compare runs.
+
+**Accounts and DNS**
+4. **Snapshot + pre-flight.** Hostinger snapshot, then the step 0 commands on the VPS. Write down who owns ports 80/443 (decides 5A/5B/5C), free RAM ≥ 3 GB, free disk ≥ 15 GB.
+5. **DNS.** A record `hq` → VPS IP (step 1). Done when `dig +short hq.rizehub.ph` prints the VPS IP.
+6. **Production Supabase** (Singapore), `deploy/supabase-setup.md` §1–4 and §6: `supabase link` → `supabase db push` → seed once → sign-ups off → private `evidence` bucket. Copy the URL, anon key and service-role key into your password manager.
+7. **Production Telegram bot** from @BotFather (keep the test bot for local work) and your numeric id from @userinfobot.
+
+**On the VPS**
+8. **Setup script** (step 4): `sudo bash setup-vps.sh --repo git@github.com:<you>/rizehub-hq.git [--with-nginx --email you@example.com]`. Add the deploy key it prints, answer the prompts (Supabase URL/keys, bot token, Telegram id, AI keys). Done when `check-env` shows `0 error(s)` for `--production` and for `--split --production`, and the script ends with healthy containers. **Save `VAULT_MASTER_KEY` in your password manager now.**
+9. **Proxy + TLS** (step 5 A, B or C). Done when https://hq.rizehub.ph/api/health returns `{"ok":true,…}` with a valid certificate, and your other sites on the VPS still load.
+10. **Firewall** (step 7): OpenSSH, 80, 443 allowed; SSH keys only.
+11. **CEO login.** `deploy/supabase-setup.md` §5 (auth user + `ceo_users` row, MFA). Done when you log in at https://hq.rizehub.ph and see the 6 agents.
+12. **Bot.** `/status` to the production bot answers you, and only you.
+13. **End-to-end.** `/assign Write a 600-word blog post about Shopify speed for Madam Muse` → plan in Approvals → approve → agent works → QA → deliverable waits for you → approve. Check the cost shows on `/costs`.
+14. **Resilience.** `docker compose restart worker`, then reboot the VPS: `docker compose ps` shows dashboard + worker `healthy` and bot `running` both times.
+15. **Backups** (step 9): `SUPABASE_DB_URL` in `.env`, `./deploy/backup.sh` once, cron line added, one dump copied off the VPS.
+16. **Monitoring** (step 10): UptimeRobot (or similar) on `https://hq.rizehub.ph/api/health`.
+
+**Later / optional**
+17. **RizeHub link** when RizeHub exposes `/agent-api/v1` (step 6): join `rizehub-internal`, block `/agent-api` publicly, set `RIZEHUB_API_URL` + the four keys. Until then `RIZEHUB_API_URL=mock`.
+18. **Hermes runtime** (step 6b) and **auto-deploy** (step 8) when you want them.
+19. **M11 done** when the Checklist below is all ticked and HQ has had one week of real use. Then **M10**: per role, one at a time, 3 real client tasks with QA ≥ 85 (the dashboard shows each task's QA score); `pnpm eval:roles -- --live --role <role>` stays the quick re-check after you edit a role file or switch `MODEL_PROFILE`.
+
 ## Checklist
+- [ ] `pnpm check:deploy` 0 failed and `pnpm eval:roles` all passed on the commit you deploy
 - [ ] Existing sites on the VPS still load after the proxy + firewall changes
 - [ ] https://hq.rizehub.ph loads with valid SSL, login required; `/api/health` → ok
 - [ ] `docker compose ps`: dashboard + worker `healthy`, bot `running`

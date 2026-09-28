@@ -1,0 +1,133 @@
+# M10 role eval: Web Developer (dev). Fictional clients; work only on unpublished themes / staging.
+role: web-dev
+tasks:
+  - id: web-dev-shopify-section-gift-badges
+    title: Featured collection section with gift badges (Kalamansi & Clay)
+    work_type: shopify-section
+    client: { name: Kalamansi & Clay, slug: kalamansi-and-clay, platforms: [shopify], website: "https://kalamansiandclay.example" }
+    instructions: |
+      Build an Online Store 2.0 section `featured-gifts.liquid` for Kalamansi & Clay (handmade ceramics, Shopify Dawn-based theme).
+      It shows up to 8 products from a merchant-selected collection with an optional "Gift ready" badge on products tagged `gift`.
+      Heading, badge text, collection and product count must be schema settings. Mobile: 2 columns; desktop: 4.
+      Work on an unpublished theme copy only; request CEO approval for anything that publishes.
+    acceptance_criteria:
+      - "Section file featured-gifts.liquid with a valid {% schema %} block and a preset"
+      - "Heading, badge text, collection and product count are schema settings (no hardcoded text)"
+      - "Products tagged gift show the badge; others do not"
+      - "Grid is 2 columns on mobile and 4 on desktop"
+      - "No theme was published; preview is on an unpublished theme"
+    scripted:
+      attempts:
+        - output:
+            summary: featured-gifts section on unpublished theme "KC dev"; badge on gift-tagged products.
+            content: |
+              ```liquid
+              <section class="featured-gifts">
+                <h2>Holiday gifts</h2>
+                <div class="grid grid--2-col-tablet-down grid--4-col-desktop">
+                  {%- for product in section.settings.collection.products limit: section.settings.count -%}
+                    <div class="card">{%- if product.tags contains 'gift' -%}<span class="badge">Gift ready</span>{%- endif -%}{{ product.title }}</div>
+                  {%- endfor -%}
+                </div>
+              </section>
+              {% schema %}{"name":"Featured gifts","settings":[{"type":"collection","id":"collection","label":"Collection"},{"type":"range","id":"count","min":2,"max":8,"step":1,"default":4,"label":"Products"}],"presets":[{"name":"Featured gifts"}]}{% endschema %}
+              ```
+              Preview: unpublished theme "KC dev".
+          qa: { score: 74, fail: [1], summary: Heading and badge text are hardcoded in the markup }
+        - output:
+            summary: featured-gifts section with every text a schema setting; tested on unpublished theme "KC dev" at 375px and 1440px.
+            content: |
+              ```liquid
+              <section class="featured-gifts">
+                {%- if section.settings.heading != blank -%}<h2>{{ section.settings.heading | escape }}</h2>{%- endif -%}
+                <div class="grid grid--2-col-tablet-down grid--4-col-desktop">
+                  {%- for product in section.settings.collection.products limit: section.settings.count -%}
+                    <div class="card">
+                      {%- if product.tags contains 'gift' and section.settings.badge_text != blank -%}<span class="badge">{{ section.settings.badge_text | escape }}</span>{%- endif -%}
+                      {% render 'card-product', card_product: product %}
+                    </div>
+                  {%- endfor -%}
+                </div>
+              </section>
+              {% schema %}
+              {"name":"Featured gifts","settings":[
+                {"type":"text","id":"heading","label":"Heading","default":"Holiday gifts"},
+                {"type":"text","id":"badge_text","label":"Badge text","default":"Gift ready"},
+                {"type":"collection","id":"collection","label":"Collection"},
+                {"type":"range","id":"count","min":2,"max":8,"step":1,"default":4,"label":"Products"}],
+               "presets":[{"name":"Featured gifts"}]}
+              {% endschema %}
+              ```
+              Preview: unpublished theme "KC dev" (not published). Publishing requested via approval only.
+          qa: { score: 91 }
+
+  - id: web-dev-webflow-cms-services
+    title: Services CMS collection + template (Harbor Pine Dental)
+    work_type: webflow-cms
+    client: { name: Harbor Pine Dental, slug: harbor-pine-dental, platforms: [webflow], website: "https://harborpinedental.example" }
+    instructions: |
+      Harbor Pine Dental's 9 service pages are static and drift out of sync. Design a Webflow CMS collection "Services"
+      (fields, types, required flags, slug rules) and the collection template layout, and a migration plan for the 9 pages
+      with 301 redirects from old URLs. Work in the staging site only; publishing to the live domain needs CEO approval.
+    acceptance_criteria:
+      - "Collection fields list name, type and required flag for each field"
+      - "Template layout maps each section to a CMS field"
+      - "All 9 old URLs have a 301 redirect target"
+      - "Changes are made on staging only and publishing is requested via approval"
+    scripted:
+      attempts:
+        - output:
+            summary: Services collection (8 fields), template bindings, 9 redirects; built on staging, live publish requested through an approval.
+            content: |
+              **Collection: Services**
+              | Field | Type | Required |
+              |---|---|---|
+              | Name | Plain text | yes |
+              | Slug | Slug | yes |
+              | Summary | Plain text (160) | yes |
+              | Hero image | Image | yes |
+              | Body | Rich text | yes |
+              | Price from | Plain text | no |
+              | FAQ | Rich text | no |
+              | SEO title | Plain text (60) | yes |
+
+              **Template:** Hero (Name, Summary, Hero image) → Body → Price band (Price from, hidden when empty) → FAQ → Booking CTA (static component).
+
+              **Redirects (301):** /teeth-whitening → /services/teeth-whitening; /implants → /services/dental-implants; /invisalign → /services/clear-aligners;
+              /emergency → /services/emergency-dentistry; /kids → /services/childrens-dentistry; /crowns → /services/crowns;
+              /root-canal → /services/root-canal; /cleaning → /services/cleaning-and-exam; /veneers → /services/veneers.
+
+              Built on staging (harbor-pine-dental.webflow.io). Live publish: approval requested.
+          qa: { score: 89 }
+
+  - id: web-dev-wordpress-fix-mobile-menu
+    title: Fix mobile menu overlapping the booking button (Bluewattle Physio)
+    work_type: wordpress-fix
+    client: { name: Bluewattle Physio, slug: bluewattle-physio, platforms: [wordpress], website: "https://bluewattlephysio.example" }
+    instructions: |
+      On phones (≤ 480px) the open hamburger menu on Bluewattle Physio (WordPress, Astra child theme) sits under the sticky
+      "Book now" button, so the last two menu items can't be tapped. Fix it in the child theme on staging, explain the root
+      cause, and list what to check before the CEO approves the push to live.
+    acceptance_criteria:
+      - "Root cause is explained in one or two sentences"
+      - "Fix is in the child theme only (no parent theme or plugin edits)"
+      - "Verified at 375px and 414px widths on staging"
+      - "A pre-launch check list is included and the push to live waits for approval"
+    scripted:
+      attempts:
+        - output:
+            summary: z-index conflict between the sticky booking bar (9999) and the off-canvas menu (999); fixed in the child theme on staging.
+            content: |
+              **Root cause:** the sticky "Book now" bar has `z-index: 9999` while Astra's mobile menu uses `z-index: 999`, so the bar paints over the menu's last items.
+
+              **Fix (child theme `style.css` only):**
+              ```css
+              @media (max-width: 480px) {
+                .ast-mobile-popup-drawer.active { z-index: 10000; }
+                body.ast-main-header-nav-open .bw-sticky-book { visibility: hidden; }
+              }
+              ```
+              Verified on staging at 375px and 414px: all 7 menu items tappable, booking bar returns when the menu closes.
+
+              **Before pushing live (needs CEO approval):** clear the cache plugin, re-test on iPhone Safari and Android Chrome, check the booking bar still shows on all pages.
+          qa: { score: 92 }

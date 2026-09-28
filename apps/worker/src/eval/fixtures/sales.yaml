@@ -1,0 +1,100 @@
+# M10 role eval: Sales Agent (sales). Fictional leads and postings; the CEO sends every message himself.
+role: sales
+tasks:
+  - id: sales-outreach-draft-copperleaf
+    title: First outreach email to Copperleaf Candles (slow mobile store)
+    work_type: outreach-draft
+    instructions: |
+      Draft a first cold email from Julev Ajeto, RizeHub to Priya Shah, founder of Copperleaf Candles (Shopify, US,
+      copperleafcandles.example). Verified facts from our research: mobile PageSpeed 38, largest contentful paint 5.1s
+      on the home page, 14 apps installed, hero video autoplays on mobile. Offer: a free 15-minute speed teardown video.
+      Under 120 words, one specific observation, one soft CTA, CAN-SPAM footer (physical address + opt-out line).
+      Draft only: the CEO approves and sends.
+    acceptance_criteria:
+      - "Under 120 words excluding the footer"
+      - "Uses at least one verified fact from the brief and no invented facts"
+      - "Exactly one call to action"
+      - "Includes a physical address and an opt-out line"
+      - "Marked as a draft for CEO approval; nothing is sent"
+    scripted:
+      attempts:
+        - output:
+            summary: 96-word first email built on the 5.1s mobile LCP + autoplay hero video; soft CTA to a free teardown video; CAN-SPAM footer; draft only.
+            content: |
+              DRAFT (for CEO approval, not sent)
+              Subject: Copperleaf's home page on mobile
+
+              Hi Priya,
+
+              I loaded copperleafcandles.example on a phone this morning: the home page takes about 5.1 seconds to show its main content, and the hero video autoplays on mobile, which is usually the biggest drag on first load.
+
+              Would a free 15-minute teardown video be useful? I'd show exactly what's slowing the page and what I'd fix first, no strings attached.
+
+              Julev Ajeto, RizeHub
+
+              ---
+              RizeHub · [physical address from OUTREACH_PHYSICAL_ADDRESS] · Reply "no thanks" and I won't email again.
+          qa: { score: 90 }
+
+  - id: sales-lead-qualification-inbound
+    title: Qualify 3 inbound leads against the ICP
+    work_type: lead-qualification
+    instructions: |
+      Score these 3 inbound leads (0-100) against brain/sales/ideal-client-profile.md and recommend next steps:
+        A) "Austin Smiles Group": 3 Webflow sites for dental clinics, wants a monthly retainer, budget "around $1.5k/mo".
+        B) "Jess's Craft Corner": new Etsy seller wants a free Shopify store "for exposure".
+        C) "Brightline Solar AU": WordPress site, 40 leads/month, wants landing pages + SEO, budget not stated.
+      Explain every score in 1-2 sentences. Draft (do not send) a reply for the top lead. Never quote prices outside pricing.md.
+    acceptance_criteria:
+      - "All 3 leads have a score and a 1-2 sentence reason"
+      - "Leads are ranked with a recommended next step each"
+      - "A reply draft exists for the top-ranked lead and nothing is sent"
+      - "No prices are quoted that are not in pricing.md"
+    scripted:
+      attempts:
+        - output:
+            summary: Ranked A (86), C (72), B (15); DRAFT reply to Austin Smiles Group proposing a discovery call; no prices quoted.
+            content: |
+              | Rank | Lead | Score | Reason | Next step |
+              |---|---|---|---|---|
+              | 1 | Austin Smiles Group | 86 | Multi-site Webflow retainer in a niche we serve (healthcare), stated monthly budget. | Discovery call this week |
+              | 2 | Brightline Solar AU | 72 | Clear lead-gen goal and existing traffic; budget unknown, AU timezone fits. | Ask budget + timeline by email |
+              | 3 | Jess's Craft Corner | 15 | Wants free work; outside ICP. | Polite decline with a DIY resource |
+
+              DRAFT (not sent) to Austin Smiles Group:
+              "Thanks for reaching out. Supporting three clinic sites on a monthly plan is exactly what we do. Could we book 20 minutes this week to go through what each site needs? — Julev, RizeHub"
+          qa: { score: 88 }
+
+  - id: sales-job-application-webflow
+    title: Application draft for a remote Webflow developer contract
+    work_type: job-application
+    instructions: |
+      Draft Julev's application for this posting (fictional): "Senior Webflow Developer, 20 h/week, remote, US hours overlap
+      2h, must have CMS + interactions experience, portfolio required, $35-45/h." Use brain/career/application-style.md and
+      brain/sales/portfolio.md. Under 170 words, open with the client's problem not with "I", include 2 relevant Webflow
+      portfolio links (only rows marked shareable; where none are confirmed use [PLACEHOLDER: …] markers, never invent a
+      link) and availability. Draft only; the CEO submits it himself.
+    acceptance_criteria:
+      - "Under 170 words"
+      - "Does not start with the word I"
+      - "Has 2 Webflow portfolio slots, each a shareable link from brain/sales/portfolio.md or a [PLACEHOLDER: …] marker (no invented links)"
+      - "States availability including the US-hours overlap"
+      - "Draft only; nothing submitted"
+    scripted:
+      attempts:
+        - output:
+            summary: 142-word application opening with the client's CMS/interaction needs, 2 portfolio placeholders (no shareable links confirmed yet), availability; draft for the CEO to submit.
+            content: |
+              DRAFT (CEO submits)
+              A Webflow site that editors can update without breaking the interactions is harder than it looks, and it's the part I enjoy most.
+
+              I've built CMS-driven Webflow sites with scroll-linked interactions for architecture, construction and B2B clients, including:
+              - [PLACEHOLDER: Webflow CMS + interactions project; no shareable link confirmed in brain/sales/portfolio.md]
+              - [PLACEHOLDER: second Webflow project; no shareable link confirmed in brain/sales/portfolio.md]
+
+              Availability: 20 hours a week, with a daily 2-hour overlap with US Eastern hours (8-10am ET). I can start next week.
+
+              Happy to walk you through either build on a short call.
+
+              Julev Ajeto
+          qa: { score: 87 }

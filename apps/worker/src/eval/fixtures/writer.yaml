@@ -1,0 +1,100 @@
+# M10 role eval: Content Writer (writer). Fictional clients; the writer never publishes.
+role: writer
+tasks:
+  - id: writer-meta-tags-bluewattle
+    title: Meta titles and descriptions for 5 pages (Bluewattle Physio)
+    work_type: meta-tags
+    client: { name: Bluewattle Physio, slug: bluewattle-physio, platforms: [wordpress], website: "https://bluewattlephysio.example" }
+    instructions: |
+      Write meta titles and descriptions for Bluewattle Physio (physiotherapy clinic in Brisbane, AU) for these pages:
+      Home, Sports Physio, Back Pain, Dry Needling, Book Online. Australian English. Primary keyword per page is the
+      page name + "Brisbane". Deliver as a table ready for Yoast; do not change anything on the site.
+    acceptance_criteria:
+      - "5 pages each have a title and a description"
+      - "Every title is 60 characters or fewer"
+      - "Every description is 150-160 characters"
+      - "Each title contains its page keyword and Brisbane"
+    scripted:
+      attempts:
+        - output:
+            summary: Titles and descriptions for 5 pages (first draft).
+            content: |
+              | Page | Title | Description |
+              |---|---|---|
+              | Home | Bluewattle Physio: Trusted Physiotherapy Clinic in Brisbane, Queensland | Book a physio in Brisbane … |
+          qa: { score: 71, fail: [0, 1, 2], summary: Only one page delivered; title is 71 characters }
+        - output:
+            summary: 5 pages, titles ≤ 60 characters with keyword + Brisbane, descriptions 150-160 characters, Australian English.
+            content: |
+              | Page | Title (chars) | Description (chars) |
+              |---|---|---|
+              | Home | Physiotherapy Brisbane · Bluewattle Physio (42) | Bluewattle Physio helps Brisbane locals move without pain: sports injuries, back pain and dry needling. Book online in under a minute today. (152) |
+              | Sports Physio | Sports Physio Brisbane · Bluewattle Physio (42) | Get back to training faster with sports physio in Brisbane. Assessment, taping and a clear rehab plan from physios who play sport themselves. (151) |
+              | Back Pain | Back Pain Physio Brisbane · Bluewattle (39) | Ongoing back pain? Our Brisbane physios find the cause, treat it hands-on and give you simple exercises to keep it away. Same-week bookings. (150) |
+              | Dry Needling | Dry Needling Brisbane · Bluewattle Physio (41) | Dry needling in Brisbane from qualified physios, combined with hands-on treatment and exercise to ease muscle tightness and help you recover. (151) |
+              | Book Online | Book Online Physio Brisbane · Bluewattle (40) | Book your Brisbane physio appointment online in under a minute. Choose your physio, pick a time that suits you and get a reminder before you come. (153) |
+          qa: { score: 92 }
+
+  - id: writer-seo-article-roofing
+    title: "Article: How to choose a storm-damage roofer in Columbus"
+    work_type: seo-article
+    client: { name: Northfield Roofing Co., slug: northfield-roofing, platforms: [webflow], website: "https://northfieldroofing.example" }
+    instructions: |
+      Write a helpful blog article for Northfield Roofing Co. targeting "storm damage roofer Columbus". Audience: homeowners
+      after a hailstorm. Include an H1 with the keyword, 4-6 H2 sections, a checklist, and a soft CTA to the free inspection
+      page (/free-inspection). No invented statistics or claims about the client. Deliver as markdown; do not publish.
+    acceptance_criteria:
+      - "H1 contains \"storm damage roofer\" and Columbus"
+      - "Between 4 and 6 H2 sections"
+      - "Includes a homeowner checklist"
+      - "No invented statistics or client claims"
+      - "Ends with a CTA linking to /free-inspection"
+    scripted:
+      attempts:
+        - output:
+            summary: 5-section article with checklist and CTA to /free-inspection; no statistics used.
+            content: |
+              # How to Choose a Storm Damage Roofer in Columbus
+              A hailstorm can leave damage you can't see from the ground. Here's how to pick a roofer you can trust.
+              ## 1. Check the licence and insurance first
+              Ask for proof of liability insurance and workers' compensation before anyone climbs your roof.
+              ## 2. Be wary of door-to-door "storm chasers"
+              Out-of-town crews often arrive after big storms. Choose a local company with a Columbus address.
+              ## 3. Ask how they document damage
+              A good roofer gives you dated photos and a written report you can share with your insurer.
+              ## 4. Understand the insurance process
+              Your roofer should explain what your adjuster will look for, not promise a claim outcome.
+              ## 5. Get the warranty in writing
+              Ask about both the manufacturer's and the workmanship warranty.
+              **Homeowner checklist**
+              - [ ] Proof of insurance
+              - [ ] Local address and references
+              - [ ] Photo report of the damage
+              - [ ] Written estimate and warranty
+              Not sure what the storm did to your roof? [Book a free inspection](/free-inspection).
+          qa: { score: 90 }
+
+  - id: writer-social-captions-holiday
+    title: 5 Instagram captions for the holiday drop (Kalamansi & Clay)
+    work_type: social-captions
+    client: { name: Kalamansi & Clay, slug: kalamansi-and-clay, platforms: [shopify], website: "https://kalamansiandclay.example" }
+    instructions: |
+      Write 5 Instagram captions for Kalamansi & Clay's holiday ceramics drop (handmade in Davao, ships to the US).
+      Warm, crafted tone; each caption under 150 words, a clear CTA, and 5-8 relevant hashtags. Mention that each piece
+      is unique. Do not schedule or post.
+    acceptance_criteria:
+      - "Exactly 5 captions"
+      - "Each caption is under 150 words and has a CTA"
+      - "Each caption has 5 to 8 hashtags"
+      - "At least one caption says each piece is unique"
+    scripted:
+      attempts:
+        - output:
+            summary: 5 holiday captions (under 150 words each) with CTAs and 6 hashtags each; not scheduled.
+            content: |
+              1. Wrapped in kalamansi-yellow glaze and made by hand in Davao. Our holiday mugs are here, and no two are alike. Tap the link in bio to find yours. #handmadeceramics #holidaygifts #pottery #madeinthephilippines #giftideas #ceramicmug
+              2. Every bowl in the drop was thrown, trimmed and glazed by hand, so each piece is unique. Shop the holiday collection before Dec 10 for US delivery. #handmade #ceramics #holidaydrop #potterylove #giftguide #slowliving
+              3. Gift-ready and gift-wrapped: add a note at checkout and we'll handwrite it. Link in bio. #giftwrap #handmadegifts #ceramicart #holidayshopping #smallbusiness #pottery
+              4. Behind the glaze: 3 days in the kiln, one careful unpacking. Meet the Tinuod plates. Shop now via the link in bio. #studiopottery #behindthescenes #ceramics #handmade #holidaycollection #tableware
+              5. Last call for US holiday shipping on Dec 10. Pick yours today. #lastchance #holidaygifts #handmadeceramics #pottery #shopsmall #giftsforher
+          qa: { score: 89 }

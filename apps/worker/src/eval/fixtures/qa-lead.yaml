@@ -1,0 +1,95 @@
+# M10 role eval: QA (qa). QA reviews finished deliverables; the eval checks QA reaches the expected verdict
+# (a good deliverable passes with score ≥ threshold, a flawed one fails). Fictional clients.
+role: qa-lead
+tasks:
+  - id: qa-review-meta-tags-good
+    kind: review
+    maker: writer
+    expect: pass
+    title: Review meta tags for Harbor Pine Dental (3 pages)
+    work_type: meta-tags
+    client: { name: Harbor Pine Dental, slug: harbor-pine-dental, platforms: [webflow], website: "https://harborpinedental.example" }
+    instructions: |
+      Write meta titles and descriptions for Harbor Pine Dental (Portland, OR) for Home, Emergency Dentistry and
+      Teeth Whitening. US English. Keyword per page: page name + "Portland". Deliver as a table; do not change the site.
+    acceptance_criteria:
+      - "3 pages each have a title and a description"
+      - "Every title is 60 characters or fewer"
+      - "Every description is 150-160 characters"
+      - "Each title contains its page keyword and Portland"
+    deliverable:
+      summary: 3 pages with titles ≤ 60 characters (keyword + Portland) and 150-160 character descriptions.
+      content: |
+        | Page | Title (chars) | Description (chars) |
+        |---|---|---|
+        | Home | Family Dentist Portland · Harbor Pine Dental (43) | Harbor Pine Dental is a friendly family dentist in Portland, OR. Cleanings, whitening and same-day emergency visits. Book your appointment online. (150) |
+        | Emergency Dentistry | Emergency Dentistry Portland · Harbor Pine (41) | Toothache or a broken tooth? Harbor Pine Dental offers same-day emergency dentistry in Portland, OR. Call or book online and we'll see you fast. (150) |
+        | Teeth Whitening | Teeth Whitening Portland · Harbor Pine Dental (44) | Brighten your smile with professional teeth whitening in Portland, OR. In-office and take-home options, planned with a Harbor Pine dentist. (150) |
+    scripted:
+      qa: { score: 92 }
+
+  - id: qa-review-outreach-flawed
+    kind: review
+    maker: sales
+    expect: fail
+    title: Review first outreach email to Copperleaf Candles
+    work_type: outreach-draft
+    instructions: |
+      Draft a first cold email from Julev Ajeto, RizeHub to Priya Shah (Copperleaf Candles, Shopify). Verified facts:
+      mobile PageSpeed 38, largest contentful paint 5.1s. Under 120 words, one CTA, CAN-SPAM footer (address + opt-out).
+      Draft only.
+    acceptance_criteria:
+      - "Under 120 words excluding the footer"
+      - "Uses at least one verified fact from the brief and no invented facts"
+      - "Exactly one call to action"
+      - "Includes a physical address and an opt-out line"
+    deliverable:
+      summary: Short first email with a speed hook.
+      content: |
+        Subject: Quick question
+
+        Hi Priya, stores like yours lose 53% of mobile visitors because of slow pages, and we helped 200+ Shopify brands
+        double their revenue. Book a call here, reply with a time, or grab our free audit.
+
+        Julev
+      criteria_map:
+        "Under 120 words excluding the footer": "43 words"
+        "Uses at least one verified fact from the brief and no invented facts": "Speed hook"
+        "Exactly one call to action": "Book a call"
+        "Includes a physical address and an opt-out line": "Added by the worker"
+    scripted:
+      qa: { score: 58, fail: [1, 2, 3], summary: Invented statistics, three CTAs and no CAN-SPAM footer }
+
+  - id: qa-review-shopify-section-good
+    kind: review
+    maker: web-dev
+    expect: pass
+    title: Review announcement bar section (Tidewell Supplements)
+    work_type: shopify-section
+    client: { name: Tidewell Supplements, slug: tidewell-supplements, platforms: [shopify], website: "https://tidewellsupplements.example" }
+    instructions: |
+      Build an OS 2.0 section `launch-bar.liquid`: a dismissible announcement bar for the Nov 20 magnesium launch.
+      Text, link and background colour are schema settings; dismissal remembered for the session. Unpublished theme only.
+    acceptance_criteria:
+      - "Section file launch-bar.liquid with a valid {% schema %} block and a preset"
+      - "Text, link and background colour are schema settings"
+      - "Dismissal is remembered for the session"
+      - "No theme was published"
+    deliverable:
+      summary: launch-bar section on unpublished theme "TW dev"; sessionStorage dismissal; all text/link/colour in schema.
+      content: |
+        ```liquid
+        <div class="launch-bar" style="background: {{ section.settings.bg }}" data-launch-bar hidden>
+          <a href="{{ section.settings.link }}">{{ section.settings.text | escape }}</a>
+          <button type="button" aria-label="Dismiss" data-dismiss>&times;</button>
+        </div>
+        <script>
+          (() => { const bar = document.querySelector('[data-launch-bar]'); if (!bar) return;
+            if (sessionStorage.getItem('tw-launch-bar') !== 'x') bar.hidden = false;
+            bar.querySelector('[data-dismiss]').addEventListener('click', () => { bar.hidden = true; sessionStorage.setItem('tw-launch-bar', 'x'); }); })();
+        </script>
+        {% schema %}{"name":"Launch bar","settings":[{"type":"text","id":"text","label":"Text","default":"New: Magnesium Glycinate, Nov 20"},{"type":"url","id":"link","label":"Link"},{"type":"color","id":"bg","label":"Background","default":"#0f3d3e"}],"presets":[{"name":"Launch bar"}]}{% endschema %}
+        ```
+        Preview: unpublished theme "TW dev".
+    scripted:
+      qa: { score: 90 }
