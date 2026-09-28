@@ -3,6 +3,8 @@
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { errMsg } from './deps';
+import type { Route } from './routes/types';
+import { EXTRA_ROUTES } from './routes';
 
 export const MAX_BODY_BYTES = 16 * 1024;
 
@@ -23,6 +25,20 @@ function send(res: http.ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
+function readRaw(req: http.IncomingMessage, limit = 1024 * 1024): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > limit) { reject(new Error('body too large')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 function readJson(req: http.IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -39,10 +55,15 @@ function readJson(req: http.IncomingMessage): Promise<unknown> {
   });
 }
 
-export function createHttpServer(handlers: HttpHandlers, secret: string): http.Server {
+export function createHttpServer(handlers: HttpHandlers, secret: string, routes: Route[] = EXTRA_ROUTES): http.Server {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
+      const route = routes.find((r) => r.method === req.method && r.path === url.pathname);
+      if (route?.auth === 'self') {
+        const [status, body] = await route.handle(req, await readRaw(req));
+        return send(res, status, body);
+      }
       if (!secret) return send(res, 503, { error: 'HQ_INTERNAL_SECRET is not configured' });
       const given = req.headers['x-hq-secret'];
       if (!secretMatches(Array.isArray(given) ? given[0] : given, secret)) return send(res, 401, { error: 'unauthorized' });
@@ -54,6 +75,10 @@ export function createHttpServer(handlers: HttpHandlers, secret: string): http.S
         if (typeof body.question !== 'string' || !body.question.trim()) return send(res, 400, { error: 'question is required' });
         const { answer } = await handlers.chat(body.agentId, body.question);
         return send(res, 200, { answer });
+      }
+      if (route) {
+        const [status, body] = await route.handle(req, await readRaw(req, MAX_BODY_BYTES));
+        return send(res, status, body);
       }
       return send(res, 404, { error: 'not found' });
     } catch (e) {

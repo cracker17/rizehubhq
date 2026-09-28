@@ -1,6 +1,7 @@
 // Specialist task runner (docs/05 [4]): one claimed task → generateText agent loop with the role's
 // tools → submit_output / ask_ceo. Heartbeat, usage + cost logging, budget guard, quota requeue.
 import { generateText, stepCountIs, tool, type StopCondition, type ToolSet } from 'ai';
+import { TOOL_FACTORIES } from './tools';
 import { z } from 'zod';
 import type { ClientRow, TaskOutput, TaskRow } from './hqdb';
 import type { Role } from './roles';
@@ -162,6 +163,11 @@ export function buildTools(ctx: ToolContext): ToolSet {
       },
     }),
   };
+
+  // Tool modules (vault, RizeHub, …) add real implementations; they win over stubs but never replace built-ins.
+  for (const factory of TOOL_FACTORIES) {
+    for (const [name, t] of Object.entries(factory(ctx))) if (!(name in all)) all[name] = t;
+  }
 
   const tools: ToolSet = {};
   for (const name of ctx.role.tools) {
