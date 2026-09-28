@@ -1,6 +1,5 @@
 import { Coffee, Hand, AlertTriangle } from 'lucide-react';
-import type { Agent } from '@/lib/mock';
-import { IDLE_LABEL } from '@/lib/mock';
+import { IDLE_LABEL, type TileAgent as Agent } from '@/lib/data/derive';
 import { STATUS_COLOR, STATUS_LABEL } from '@/lib/status';
 import { Avatar } from './Avatar';
 
@@ -13,7 +12,7 @@ export function AgentTile({ agent, onOpen }: { agent: Agent; onOpen: (a: Agent) 
     agent.status === 'idle' ? 'Available for work'
     : agent.task ?? '';
   return (
-    <button onClick={() => onOpen(agent)} className="item group flex w-full flex-col gap-3 p-4 text-left transition-colors hover:border-[var(--color-line-active)]">
+    <button onClick={() => onOpen(agent)} aria-label={`${agent.name}: ${stateText}${line ? `, ${line}` : ''}. Open details`} className="item group flex w-full flex-col gap-3 p-4 text-left transition-colors hover:border-[var(--color-line-active)]">
       <div className="flex items-center gap-3">
         <Avatar name={agent.name} color={agent.color} status={agent.status} />
         <div className="min-w-0 flex-1">

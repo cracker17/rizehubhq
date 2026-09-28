@@ -3,10 +3,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import { NAV } from '@/lib/nav';
-import { kpis } from '@/lib/mock';
+import { useHq } from '@/lib/data/store';
+import { money } from '@/lib/data/derive';
 
 export function Sidebar() {
   const path = usePathname();
+  const { kpis } = useHq();
   return (
     <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-[var(--color-line)] px-4 py-6 lg:flex">
       <Link href="/" className="mb-8 flex items-center gap-2.5 px-2">
@@ -23,6 +25,7 @@ export function Sidebar() {
             <Link
               key={href}
               href={href}
+              aria-current={active ? 'page' : undefined}
               className={clsx(
                 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] transition-colors',
                 active
@@ -32,14 +35,14 @@ export function Sidebar() {
             >
               <Icon size={18} strokeWidth={1.75} />
               <span className="flex-1">{label}</span>
-              {href === '/approvals' && (
-                <span className="rounded-md bg-[var(--color-primary)] px-1.5 text-xs font-semibold text-white">{kpis.pendingApprovals}</span>
+              {href === '/approvals' && kpis.pendingApprovals > 0 && (
+                <span className="rounded-md bg-[var(--color-primary)] px-1.5 text-xs font-semibold text-white" aria-label={`${kpis.pendingApprovals} pending`}>{kpis.pendingApprovals}</span>
               )}
             </Link>
           );
         })}
       </nav>
-      <p className="mt-4 px-3 text-xs text-[var(--color-dim)]">AI profile: <span className="text-[var(--color-muted)]">free</span> · spend today ${kpis.spendToday}</p>
+      <p className="mt-4 px-3 text-xs text-[var(--color-dim)]">AI profile: <span className="text-[var(--color-muted)]">free</span> · spend today {money(kpis.spendToday)}</p>
     </aside>
   );
 }

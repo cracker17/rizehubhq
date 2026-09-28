@@ -19,4 +19,7 @@ export const config = {
   maxParallelTasks: num('MAX_PARALLEL_TASKS', 2),
   monthlyBudgetUsd: num('MONTHLY_BUDGET_USD', 0),
   modelProfile: process.env.MODEL_PROFILE,
+  qaThreshold: num('QA_THRESHOLD', 85),
+  httpPort: num('WORKER_HTTP_PORT', 4000),
+  internalSecret: process.env.HQ_INTERNAL_SECRET ?? '',
 };

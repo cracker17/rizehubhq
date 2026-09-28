@@ -1,0 +1,93 @@
+// The worker loop (docs/05 [4]): each tick plans ≤ 1 staged request, claims tasks while under
+// MAX_PARALLEL_TASKS, and runs ≤ 1 QA review. Planning and QA run single-flight in the background
+// so a slow model call never blocks claiming.
+import { errMsg, log, type WorkerDeps } from './deps';
+import { runIdleShuffle } from './idle';
+import { planNext } from './planner';
+import { reviewNext } from './qa';
+import { runTask } from './runner';
+
+export interface LoopOptions {
+  pollIntervalMs: number;
+  maxParallelTasks: number;
+  staleEveryMs?: number;
+  idleEveryMs?: number;
+  quotaBackoffMs?: number;
+}
+
+export class WorkerLoop {
+  readonly running = new Map<string, Promise<unknown>>();
+  private controllers = new Map<string, AbortController>();
+  private planning: Promise<unknown> | null = null;
+  private reviewing: Promise<unknown> | null = null;
+  private timers: NodeJS.Timeout[] = [];
+  private stopping = false;
+  private loopDone: Promise<void> | null = null;
+  private pausedUntil = { tasks: 0, planning: 0, qa: 0 };
+
+  constructor(private deps: WorkerDeps, private opts: LoopOptions) {}
+
+  private backoff(kind: keyof WorkerLoop['pausedUntil']) {
+    this.pausedUntil[kind] = Date.now() + (this.opts.quotaBackoffMs ?? 60_000);
+    log(this.deps, `[worker] ${kind} paused after a quota error`);
+  }
+
+  async tick(): Promise<void> {
+    const now = Date.now();
+    if (!this.planning && now >= this.pausedUntil.planning) {
+      this.planning = planNext(this.deps)
+        .then((o) => { if (o.status === 'deferred') this.backoff('planning'); })
+        .catch((e) => log(this.deps, '[worker] planning failed', errMsg(e)))
+        .finally(() => { this.planning = null; });
+    }
+    while (!this.stopping && now >= this.pausedUntil.tasks && this.running.size < this.opts.maxParallelTasks) {
+      const task = await this.deps.db.claimNextTask();
+      if (!task) break;
+      log(this.deps, `[worker] ${task.agent_id} claimed "${task.title}"`);
+      const ctrl = new AbortController();
+      this.controllers.set(task.id, ctrl);
+      const p = runTask(task, this.deps, { abortSignal: ctrl.signal })
+        .then((r) => {
+          log(this.deps, `[worker] ${task.agent_id} → ${r.status} ($${r.costUsd.toFixed(4)})`);
+          if (r.status === 'requeued' && !this.stopping) this.backoff('tasks');
+        })
+        .catch((e) => log(this.deps, `[worker] task ${task.id} crashed`, errMsg(e)))
+        .finally(() => { this.running.delete(task.id); this.controllers.delete(task.id); });
+      this.running.set(task.id, p);
+    }
+    if (!this.reviewing && now >= this.pausedUntil.qa) {
+      this.reviewing = reviewNext(this.deps)
+        .then((o) => { if (o.status === 'deferred') this.backoff('qa'); })
+        .catch((e) => log(this.deps, '[worker] QA failed', errMsg(e)))
+        .finally(() => { this.reviewing = null; });
+    }
+  }
+
+  start(): void {
+    const every = (ms: number, fn: () => Promise<unknown>, name: string) => {
+      this.timers.push(setInterval(() => { fn().catch((e) => log(this.deps, `[worker] ${name} failed`, errMsg(e))); }, ms));
+    };
+    every(this.opts.staleEveryMs ?? 60_000, async () => {
+      const n = await this.deps.db.requeueStaleTasks();
+      if (n) log(this.deps, `[worker] re-queued ${n} stale task(s)`);
+    }, 'requeue_stale_tasks');
+    every(this.opts.idleEveryMs ?? 90_000, () => runIdleShuffle(this.deps.db), 'idle shuffler');
+
+    this.loopDone = (async () => {
+      while (!this.stopping) {
+        try { await this.tick(); } catch (e) { log(this.deps, '[worker] tick failed', errMsg(e)); }
+        await new Promise((r) => setTimeout(r, this.opts.pollIntervalMs));
+      }
+    })();
+  }
+
+  /** Stops claiming, aborts running tasks (they are re-queued, not failed) and waits for them. */
+  async stop(timeoutMs = 20_000): Promise<void> {
+    this.stopping = true;
+    for (const t of this.timers) clearInterval(t);
+    this.timers = [];
+    for (const c of this.controllers.values()) c.abort();
+    const all = Promise.allSettled([...this.running.values(), this.planning, this.reviewing, this.loopDone].filter(Boolean));
+    await Promise.race([all, new Promise((r) => setTimeout(r, timeoutMs).unref())]);
+  }
+}

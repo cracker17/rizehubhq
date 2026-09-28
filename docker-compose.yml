@@ -4,6 +4,8 @@ services:
     build: { context: ., dockerfile: apps/dashboard/Dockerfile }
     env_file: .env
     ports: ["127.0.0.1:3100:3000"]
+    environment:
+      HQ_WORKER_URL: http://hq-worker:4000
     restart: unless-stopped
     mem_limit: 512m
 

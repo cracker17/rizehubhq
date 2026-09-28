@@ -51,3 +51,23 @@ export function shuffleIdle(agents: IdleAgent[], rand: () => number = Math.rando
   }
   return changes;
 }
+
+/** Minimal DB surface the shuffler needs (HqDb satisfies it). */
+export interface IdleDb {
+  listAgents(): Promise<{ id: string; status: string; enabled: boolean; idle_activity: string | null; idle_since: string | null }[]>;
+  setIdleActivity(agentId: string, activity: string | null): Promise<boolean>;
+}
+
+/** One shuffler tick: reads idle agents, decides moves, writes agents.idle_activity. Returns how many moved. */
+export async function runIdleShuffle(db: IdleDb, now = Date.now(), rand: () => number = Math.random): Promise<number> {
+  const idle = (await db.listAgents()).filter((a) => a.enabled && a.status === 'idle');
+  const known = new Set<string>(Object.keys(CAPACITY));
+  const changes = shuffleIdle(idle.map((a) => ({
+    id: a.id,
+    activity: a.idle_activity && known.has(a.idle_activity) ? (a.idle_activity as IdleActivity) : null,
+    idleForMs: a.idle_since ? now - Date.parse(a.idle_since) : 0,
+  })), rand);
+  let moved = 0;
+  for (const [id, act] of changes) if (await db.setIdleActivity(id, act)) moved++;
+  return moved;
+}

@@ -223,4 +223,85 @@ await step('the service role (worker) can operate', () => as('service_role', nul
   assert.ok((await one(`select (claim_request_for_planning()).id`)).id);
 }));
 
+// ---------- worker helpers (20260928020000_worker_helpers.sql) ----------
+await step('planning_failed → request failed + "COO couldn\'t plan this" approval', async () => {
+  const r = await val(`select id from requests where status = 'planning' order by created_at limit 1`);
+  assert.ok(r);
+  const ap = await val(`select planning_failed($1, 'plan kept using unknown agents')`, [r]);
+  assert.equal(await status('requests', r), 'failed');
+  assert.equal(await val(`select payload->>'type' from approvals where id = $1`, [ap]), 'planning_failed');
+  assert.match(await val(`select title from approvals where id = $1`, [ap]), /^COO couldn't plan this: plan kept/);
+  assert.equal(await agent('coo'), 'waiting');
+  await assert.rejects(db.query(`select planning_failed($1, 'again')`, [r]), /not being planned/);
+});
+await step('release_request_for_planning hands a claimed request back to the queue', async () => {
+  await val(`select create_request('telegram', 'Release me', 'urgent')`);
+  const r = (await one(`select (claim_request_for_planning()).id`)).id;
+  assert.equal(await status('requests', r), 'planning');
+  await db.query(`select release_request_for_planning($1, 'no model quota')`, [r]);
+  assert.equal(await status('requests', r), 'staged');
+});
+let helperTask;
+await step('requeue_task puts a working task back without failing it; heartbeat touch works', async () => {
+  const r = await val(`select create_request('dashboard', 'Helper test')`);
+  await db.exec(`update requests set status = 'planning' where id = '${r}'`);
+  const ap = await val(`select submit_plan($1, $2::jsonb)`, [r, plan([T('h', 'seo-2', 'seo-article')], 'Helper')]);
+  await db.query(`select decide_approval($1, 'approve')`, [ap]);
+  helperTask = await val(`select id from tasks where request_id = $1`, [r]);
+  await db.exec(`update tasks set status = 'pending' where status = 'queued' and id <> '${helperTask}'`);
+  assert.equal((await one(`select (claim_next_task()).id`)).id, helperTask);
+  await db.exec(`update tasks set heartbeat_at = now() - interval '5 minutes' where id = '${helperTask}'`);
+  await db.query(`select touch_task_heartbeat($1)`, [helperTask]);
+  assert.ok(await val(`select heartbeat_at > now() - interval '1 minute' from tasks where id = $1`, [helperTask]));
+  await db.query(`select requeue_task($1, 'quota')`, [helperTask]);
+  assert.equal(await status('tasks', helperTask), 'queued');
+  assert.equal(await agent('seo-2'), 'idle');
+  assert.equal(await val(`select count(*)::int from activity_log where action = 'task.requeued' and task_id = $1`, [helperTask]), 1);
+});
+await step('request_external_action queues an approval and leaves the task running', async () => {
+  await one(`select (claim_next_task()).id`);
+  const ap = await val(`select request_external_action($1, 'publish', '{"description":"Publish article on the blog"}'::jsonb)`, [helperTask]);
+  assert.equal(await status('approvals', ap), 'pending');
+  assert.equal(await val(`select payload->>'action_type' from approvals where id = $1`, [ap]), 'publish');
+  assert.equal(await status('tasks', helperTask), 'working');
+});
+await step('record_usage logs tokens + cost and adds them to the task and request', async () => {
+  await db.query(`select record_usage('seo-2', $1, null, 'task', 1200, 300, 0.0123, '{"provider":"anthropic"}'::jsonb)`, [helperTask]);
+  await db.query(`select record_usage('seo-2', $1, null, 'task', 100, 50, 0.001, '{}'::jsonb)`, [helperTask]);
+  assert.equal(await val(`select tokens_in from tasks where id = $1`, [helperTask]), 1300);
+  assert.equal(Number(await val(`select cost_usd from tasks where id = $1`, [helperTask])), 0.0133);
+  assert.equal(Number(await val(`select r.cost_usd from requests r join tasks t on t.request_id = r.id where t.id = $1`, [helperTask])), 0.0133);
+  assert.equal(await val(`select detail->>'provider' from activity_log where action = 'usage.task' order by id limit 1`), 'anthropic');
+});
+await step('release_qa_review hands a review back to qa_pending', async () => {
+  await db.query(`select submit_task_output($1, '{"summary":"article"}'::jsonb)`, [helperTask]);
+  assert.equal((await one(`select (claim_qa_review()).id`)).id, helperTask);
+  await db.query(`select release_qa_review($1, 'quota')`, [helperTask]);
+  assert.equal(await status('tasks', helperTask), 'qa_pending');
+  assert.equal(await agent('qa-lead'), 'idle');
+});
+await step('set_idle_activity only moves idle agents; update_agent_screen upserts the POV row', async () => {
+  assert.equal(await val(`select set_idle_activity('seo-1', 'coffee')`), true);
+  assert.equal(await val(`select idle_activity from agents where id = 'seo-1'`), 'coffee');
+  await db.exec(`update agents set status = 'working' where id = 'seo-1'`);
+  assert.equal(await val(`select set_idle_activity('seo-1', 'lobby')`), false);
+  await db.exec(`update agents set status = 'idle' where id = 'seo-1'`);
+  await db.query(`select update_agent_screen('qa-lead', $1, '{"app":"review","title":"QA","step_note":"Checking","progress":40}'::jsonb)`, [helperTask]);
+  assert.equal(await val(`select progress from agent_screens where agent_id = 'qa-lead'`), 40);
+});
+await step('anonymous visitors cannot call worker helpers', () => as('anon', null, async () => {
+  await assert.rejects(db.query(`select requeue_task(gen_random_uuid(), 'x')`), /permission denied/);
+}));
+
 console.log(`\nAll ${passed} database checks passed.`);
+
+// ---------- extra suites (scripts/db-tests/*.mjs, run in name order) ----------
+// Each suite: export default async function ({ db, step, one, val, status, agent, as, assert }) { ... }
+const extraDir = './scripts/db-tests';
+if (fs.existsSync(extraDir)) {
+  for (const f of fs.readdirSync(extraDir).filter((f) => f.endsWith('.mjs')).sort()) {
+    const mod = await import(path.resolve(extraDir, f));
+    await mod.default({ db, step, one, val, status, agent, as, assert });
+  }
+  console.log(`All ${passed} database checks passed (incl. extra suites).`);
+}
