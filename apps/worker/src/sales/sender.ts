@@ -1,11 +1,11 @@
 // Sends approved outreach emails, one at a time, under today's cap (configured cap ∩ warm-up ramp; SQL stops at 50).
 // Only rows whose external_action approval is APPROVED can be claimed (sales_claim_send). Before each send the address
 // is re-checked: suppression list, a public source for the address, no denied source. CAN-SPAM problems (no physical
-// address, no sender, main domain) stop the whole tick before anything is claimed.
+// address, no sender, main domain) and OUTREACH_QUIET_HOURS (Manila) stop the whole tick before anything is claimed.
 import { outreachConfig, sendingProblems, type OutreachConfig } from './config';
 import { composeMessage, ComposeError } from './compose';
 import { isPermanentSmtpError, type Mailer } from './mailer';
-import { capForDay } from './schedule';
+import { capForDay, inQuietHours } from './schedule';
 import { deniedSource, GIVEN_SOURCES } from './sources';
 import type { SalesDb } from './store';
 
@@ -13,7 +13,7 @@ type Logger = (msg: string, extra?: unknown) => void;
 const msgOf = (e: unknown) => (e instanceof Error ? e.message : String(e)).split('\n')[0]!.slice(0, 400);
 
 export interface SendTickResult {
-  status: 'disabled' | 'cap_reached' | 'idle' | 'sent';
+  status: 'disabled' | 'quiet_hours' | 'cap_reached' | 'idle' | 'sent';
   sent: number; failed: number; skipped: number; cap: number; sentToday: number; problems: string[]; warmupDay?: number;
 }
 
@@ -27,9 +27,11 @@ export async function runSendTick(o: { db: SalesDb; mailer: Mailer | null; cfg?:
   const log = o.log ?? (() => undefined);
   const problems = sendingProblems(c);
   if (!o.mailer && !problems.length) problems.push('no SMTP transport');
-  const { cap, warmupDay } = await todayCap(o.db, c, o.now ?? new Date());
+  const now = o.now ?? new Date();
+  const { cap, warmupDay } = await todayCap(o.db, c, now);
   const r: SendTickResult = { status: 'idle', sent: 0, failed: 0, skipped: 0, cap, sentToday: 0, problems, warmupDay };
   if (problems.length) { r.status = 'disabled'; return r; }
+  if (inQuietHours(c.quietHours, now)) { r.status = 'quiet_hours'; return r; } // nothing is claimed until the window ends
 
   for (let i = 0; i < (o.maxPerTick ?? 10); i++) {
     const claim = await o.db.claimSend(cap);

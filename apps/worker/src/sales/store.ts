@@ -2,11 +2,12 @@
 // supabase/migrations/20260928090000_sales_pipeline.sql (argument names must match the SQL; the integration suite
 // checks every rpc() call site). Reads are small selects.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { LeadStage } from '@rizehubhq/shared';
+import type { LeadEmailStatus, LeadStage } from '@rizehubhq/shared';
 import type { LeadSource } from './sources';
 
 export type EmailKind = 'first_touch' | 'follow_up' | 'reply' | 'proposal';
-export type EmailStatus = 'draft' | 'pending_approval' | 'approved' | 'sent' | 'rejected' | 'received' | 'failed' | 'cancelled';
+/** lead_emails.status: the shared enum (packages/shared/src/status.ts mirrors the migration's check constraint). */
+export type EmailStatus = LeadEmailStatus;
 export const REPLY_CLASSES = ['interested', 'question', 'not_now', 'not_interested', 'unsubscribe'] as const;
 export type ReplyClass = (typeof REPLY_CLASSES)[number];
 
@@ -26,7 +27,7 @@ export interface LeadEmailRow {
   id: string; lead_id: string; direction: 'out' | 'in'; kind: EmailKind; follow_up_number: number | null; to_email: string | null;
   from_email: string | null; subject: string; body: string; status: EmailStatus; flags: string[]; needs_explicit_approval: boolean;
   approval_id: string | null; message_id: string | null; in_reply_to: string | null; classification: ReplyClass | null;
-  classified_by: string | null; auto_reply: boolean; ceo_note: string | null; last_error: string | null;
+  classified_by: 'heuristic' | 'model' | 'ceo' | null; auto_reply: boolean; ceo_note: string | null; last_error: string | null;
   created_at: string; sent_at: string | null; received_at: string | null;
 }
 export interface DraftResult { id: string; status: EmailStatus; flags: string[]; needs_explicit_approval: boolean; replaced: boolean }

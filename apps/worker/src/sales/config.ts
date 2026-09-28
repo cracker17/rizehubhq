@@ -7,6 +7,8 @@ import { CAP_ABSOLUTE_MAX, CAP_DEFAULT_MAX } from './schedule';
 export interface MailServer { host: string; port: number; user: string; pass: string; secure: boolean }
 
 export interface OutreachConfig {
+  /** OUTREACH_ENABLED: the master switch. Off (the default) = no outreach background jobs at all (drafting still works). */
+  enabled: boolean;
   smtp: MailServer | null;
   imap: MailServer | null;
   fromName: string;
@@ -26,8 +28,21 @@ export interface OutreachConfig {
   mainDomain: string;
   sendEveryMs: number;
   inboxEveryMs: number;
+  /** OUTREACH_QUIET_HOURS ("22-7", Manila): no email is claimed or sent in this window. null = none. */
+  quietHours: QuietHours | null;
   /** Non-fatal notes for the startup log (cap lowered, unsubscribe link off…). */
   warnings: string[];
+}
+
+/** Manila hours [start, end): start > end wraps midnight ("22-7" = 22:00–06:59). */
+export interface QuietHours { start: number; end: number }
+
+/** "22-7" / "22:00-07:00" → { start: 22, end: 7 }; null when empty, malformed or zero-length. */
+export function parseQuietHours(v: string | undefined): QuietHours | null {
+  const m = /^\s*(\d{1,2})(?::00)?\s*-\s*(\d{1,2})(?::00)?\s*$/.exec(v ?? '');
+  if (!m) return null;
+  const start = Number(m[1]), end = Number(m[2]);
+  return start <= 23 && end <= 24 && start !== end % 24 ? { start, end: end % 24 } : null;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -58,8 +73,12 @@ export function outreachConfig(env: Env = workerEnv()): OutreachConfig {
   const warmupFrom = /^\d{4}-\d{2}-\d{2}$/.test(from) ? new Date(`${from}T00:00:00+08:00`) : null;
   const unsubscribeUrl = str(env.OUTREACH_UNSUBSCRIBE_URL) || null;
   const unsubscribeSecret = str(env.OUTREACH_UNSUBSCRIBE_SECRET) || null;
+  const quietRaw = str(env.OUTREACH_QUIET_HOURS);
+  const quietHours = parseQuietHours(quietRaw);
+  if (quietRaw && !quietHours) warnings.push(`OUTREACH_QUIET_HOURS="${quietRaw}" is not "HH-HH" (Manila hours, e.g. 22-7): ignored`);
   if (unsubscribeUrl && !unsubscribeSecret) warnings.push('OUTREACH_UNSUBSCRIBE_URL is set but OUTREACH_UNSUBSCRIBE_SECRET is not: using the mailto: opt-out only');
   return {
+    enabled: bool(env.OUTREACH_ENABLED),
     smtp: server(env, 'SMTP'),
     imap: server(env, 'IMAP'),
     fromName: str(env.OUTREACH_FROM_NAME) || 'Julev Ajeto, RizeHub',
@@ -76,6 +95,7 @@ export function outreachConfig(env: Env = workerEnv()): OutreachConfig {
     mainDomain: (str(env.OUTREACH_MAIN_DOMAIN) || 'rizehub.ph').toLowerCase(),
     sendEveryMs: int(env.OUTREACH_SEND_EVERY_MS, 60_000),
     inboxEveryMs: int(env.OUTREACH_IMAP_EVERY_MS, 120_000),
+    quietHours,
     warnings,
   };
 }

@@ -7,7 +7,7 @@
 5. **Length**: body ≤ 120 words. Verify: count.
 6. **Subject**: ≤ 50 characters, specific, no fake "Re:". Verify: count/read.
 7. **One CTA**: exactly one question or ask. Verify: read.
-8. **Opt-out**: cold emails include an opt-out line. Verify: read.
+8. **Opt-out**: cold emails include an opt-out line (pipeline drafts: appended by the worker; check the draft tool's preview). Verify: read.
 9. **No invented proof or prices**: no stats/testimonials; prices only if in pricing.md and already proposed. Verify: compare.
 10. **Names correct**: recipient and company spelled as in lead record. Verify: `rizehub_readonly`.
 11. **Branding**: RizeHub sender block; no personal emails unless allowed. Verify: read.

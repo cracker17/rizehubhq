@@ -1,5 +1,5 @@
 // RizeHub HQ worker (docs/05-ORCHESTRATION.md): COO planner, specialist runner, QA reviewer,
-// stale-task requeue, idle shuffler, scheduled reports (M7) and the internal chat/health endpoint.
+// stale-task requeue, idle shuffler, scheduled reports (M7), sales outreach jobs and the internal chat/health endpoint.
 import { config, scrubProcessEnv, workerEnv } from './config';
 import { sandboxStatus } from './dev/agentUser';
 import { createBrain } from './brain';
@@ -14,6 +14,7 @@ import { ModelPicker } from './models/usage';
 import { answerChat } from './chat';
 import type { WorkerDeps } from './deps';
 import { setMcpDeps } from './hermes/mcp';
+import { startSalesBackground, stopSalesBackground } from './sales/background';
 
 async function main() {
   if (!config.supabaseUrl || !config.supabaseServiceKey) {
@@ -63,6 +64,9 @@ async function main() {
     onDailySpend: (g) => picker.setDailySpend(g),
   });
   loop.start();
+  // Sales outreach (send approved emails, IMAP replies, daily batch, follow-ups): nothing starts unless OUTREACH_ENABLED=true,
+  // and nothing is sent without SMTP + CAN-SPAM settings (sales/background.ts).
+  const salesTimers = startSalesBackground(deps);
 
   const server = createHttpServer({
     chat: (agentId, question) => answerChat(agentId, question, deps),
@@ -77,6 +81,7 @@ async function main() {
     shuttingDown = true;
     console.log(`[worker] ${sig}: stopping (running tasks are re-queued)`);
     server.close();
+    stopSalesBackground(salesTimers);
     await loop.stop();
     process.exit(0);
   };

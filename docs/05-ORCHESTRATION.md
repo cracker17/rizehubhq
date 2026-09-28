@@ -229,6 +229,13 @@ External actions are executed by **fixed worker code**, not by the agent, using 
 | 18:00 daily | Standups from each active agent → CEO daily digest | COO |
 | Monday 08:00 | Weekly summary: done, costs, QA pass rate, bottlenecks | COO |
 | Custom | Recurring requests (e.g. "weekly SEO report for Vinyl Icons") | via `source='schedule'` |
+| Every 1 min / 2 min | Sales outreach: send CEO-approved emails under the daily cap (not in `OUTREACH_QUIET_HOURS`, not while paused); read IMAP replies, honour opt-outs | worker (`sales/background.ts`) |
+| `OUTREACH_BATCH_HOUR` (17:00) | The day's first-touch + follow-up drafts → ONE batch approval | worker |
+| Hourly | Due follow-ups (day 3 / 7 / 14) → one request for the Sales Agent; day 21 → lost (no response) | worker → Sales Agent |
+
+All outreach jobs are off unless `OUTREACH_ENABLED=true`; without SMTP keys, sender address and postal address only the
+`settings.outreach_status` row (why sending is off) and, if IMAP is set, reply reading run. Nothing is ever sent without an
+approved `external_action` (`sales.email_batch` / `sales.email`).
 
 ## Failure handling
 

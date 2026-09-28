@@ -5,5 +5,7 @@ import { rizehubTools } from './rizehub';
 import { devTools } from './dev';
 import { researchTools } from './research';
 import { brainWriteTools } from './brainWrite';
+import { salesTools } from './sales';
 
-export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools, devTools, researchTools, brainWriteTools];
+// salesTools returns nothing for any role but `sales` (and the runner only exposes names listed in the role file).
+export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools, devTools, researchTools, brainWriteTools, salesTools];

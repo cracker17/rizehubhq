@@ -81,8 +81,10 @@ export function checkProposal(body: string, codes: string[], brain: SalesBrain):
   if (prices.length) {
     const placeholder = codes.filter((c) => /EDIT[ _]ME/i.test(rows.get(c)!));
     if (placeholder.length) return `prices for ${placeholder.join(', ')} are still placeholders (EDIT ME — Julev to confirm) in brain/sales/packages.md: remove the prices and ask_ceo for them`;
-    const allowed = codes.map((c) => rows.get(c)!.toLowerCase().replace(/\s+/g, ''));
-    const bad = prices.filter((p) => !allowed.some((row) => row.includes(p.toLowerCase().replace(/\s+/g, ''))));
+    // whole amounts only: "$45" must not pass because a row says "$450"
+    const norm = (p: string) => p.toLowerCase().replace(/\s+/g, '');
+    const allowed = new Set(codes.flatMap((c) => (rows.get(c)!.match(MONEY) ?? []).map(norm)));
+    const bad = prices.filter((p) => !allowed.has(norm(p)));
     if (bad.length) return `price(s) ${bad.join(', ')} are not in the packages.md row(s) you used (${codes.join(', ') || 'none'}): copy prices exactly or ask_ceo`;
   }
   if (RESULTS.test(body) && !/Status:\s*confirmed/i.test(brain.caseStudies)) {

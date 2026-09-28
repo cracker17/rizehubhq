@@ -36,3 +36,17 @@ export function capForDay(o: CapOptions, now: Date): { cap: number; warmupDay: n
   const ramp = o.warmupStart + o.warmupStepPerWeek * Math.floor(days / 7);
   return { cap: Math.max(0, Math.min(o.cap, ramp)), warmupDay: days + 1, ramp };
 }
+
+/** Manila date (YYYY-MM-DD) + hour (0–23): the daily batch, the send-cap day and quiet hours all run on Manila time. */
+export function manilaClock(now: Date): { day: string; hour: number } {
+  const day = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  const hour = Number(now.toLocaleString('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', hourCycle: 'h23' }));
+  return { day, hour };
+}
+
+/** True inside OUTREACH_QUIET_HOURS ([start, end) Manila hours; start > end wraps midnight). null = never quiet. */
+export function inQuietHours(q: { start: number; end: number } | null, now: Date): boolean {
+  if (!q) return false;
+  const { hour } = manilaClock(now);
+  return q.start < q.end ? hour >= q.start && hour < q.end : hour >= q.start || hour < q.end;
+}

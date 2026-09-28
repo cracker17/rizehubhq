@@ -42,7 +42,7 @@ export const config = {
 // The boundary is the privilege drop in dev/agentUser.ts (agent commands run under another uid).
 
 /** Names that hold secrets. */
-export const SECRET_ENV = /(^|_)(KEY|KEYS|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|PAT)(_|$)|^SUPABASE_DB_URL$/;
+export const SECRET_ENV = /(^|_)(KEY|KEYS|TOKEN|SECRET|PASS|PASSWORD|PASSWD|CREDENTIALS?|PAT)(_|$)|^SUPABASE_DB_URL$/;
 /**
  * Secret names still read from process.env by code outside this module's control (vault/crypto.ts
  * loadKeyring() default, used by tools/vault.ts). Kept until those readers take workerEnv().

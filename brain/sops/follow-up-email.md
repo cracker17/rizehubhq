@@ -25,8 +25,7 @@ Hi {first name or team},
 {One new useful thing: finding, tip, or answer.}
 {One question or CTA.}
 
-{Sender block from brain/company/brand-voice.md}
-{Opt-out line for cold emails: "Not relevant? Reply 'no' and we won't email again."}
+(No sign-off / opt-out line: `draft_follow_up` / `draft_reply` append the sender block, postal address and opt-out.)
 ```
 
 ## 4. Rules
@@ -38,6 +37,6 @@ Hi {first name or team},
 
 ## 5. Deliver
 - Save drafts in workspace; optionally `gmail_draft` (draft only).
-- Each send → `request_external_action(type: "send_email", spec: {thread_id, to, subject, body, send_after})`.
+- Each email → `draft_follow_up` (or `draft_reply` for an answer to their reply): it threads automatically and the worker sends it only after approval. Emails outside the HQ pipeline → `request_external_action(type: "send_email", spec: {thread_id, to, subject, body, send_after})`.
 - Propose the next follow-up date in output; do not change stage until the send executes.
 - `submit_output` with criteria_map.

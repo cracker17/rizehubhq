@@ -7,7 +7,7 @@
 5. **First line about them**, not about RizeHub. Verify: read.
 6. **One CTA** (question). Verify: read.
 7. **No invented proof**: no stats, results, testimonials, case studies, prices. Verify: read + brain search.
-8. **Opt-out line** on every email. Verify: read.
+8. **Opt-out line** on every email (pipeline drafts: the worker appends sender block, postal address and opt-out; check the draft tool's preview). Verify: read.
 9. **Not suppressed / not contacted before**. Verify: lead stage + suppression list.
 10. **Spam-safe**: no caps shouting, "guaranteed", "act now", no attachments, ≤ 1 link. Verify: read.
 11. **Tone** matches `brand-voice.md`. Verify: compare.
