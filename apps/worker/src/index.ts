@@ -14,6 +14,7 @@ import { ModelPicker } from './models/usage';
 import { answerChat } from './chat';
 import type { WorkerDeps } from './deps';
 import { setMcpDeps } from './hermes/mcp';
+import { hermesStartupReport } from './hermes/config';
 import { startSalesBackground, stopSalesBackground } from './sales/background';
 
 async function main() {
@@ -52,6 +53,9 @@ async function main() {
     onProviderQuota: (p) => picker.markExhausted(p),
   };
   setMcpDeps(deps); // HQ MCP tool server for Hermes agents (POST /mcp)
+  const hermes = hermesStartupReport(roles, workerEnv());
+  console.log(hermes.line);
+  for (const w of hermes.warnings) console.warn(w);
   console.log(`[worker] ${roles.length} agents · profile "${profile}" · budget $${config.monthlyBudgetUsd}/month`
     + `${config.dailyAiBudgetUsd !== null ? ` · $${config.dailyAiBudgetUsd}/day` : ''}`
     + ` · spent $${picker.spentThisMonthUsd.toFixed(2)} · parallel ${config.maxParallelTasks} · QA ≥ ${config.qaThreshold}`);

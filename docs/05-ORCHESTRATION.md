@@ -84,7 +84,7 @@ If `questions_for_ceo` is not empty, the plan approval shows the questions first
 - If the request is unclear or the client is unknown, ask — don't guess.
 - **Design → dev handoff.** When a request needs design (designer: `wireframe`, `ui-mockup`, `brand-asset`, `ux-audit`) and building (`web-dev`), every web-dev task depends on the design task. The planner enforces it after validation (`enforceDesignHandoff` in `apps/worker/src/planner.ts` adds a missing dependency, never a cycle, and notes it in the plan's assumptions).
   - Release: `release_ready_tasks()` queues a pending task only when every dependency is `done`, and a task is `done` only after QA passed it **and** the CEO approved the deliverable. A QA pass alone never releases the developer.
-  - Input: the developer's prompt gets the upstream outputs (`apps/worker/src/handoff.ts` `taskHandoffContext` → `upstreamContext`): the designer's `design-spec.md` first (colours, fonts, spacing, layout notes, asset list), then other dependencies' deliverables. The spec and the files listed in the design task's `output.files` are copied into the dev workspace at `upstream/<design-task-id>/` (jail rules, size caps). The Content Writer's prompt gets the samples in `brain/style/writing-samples/` the same way.
+  - Input: the developer's prompt gets the upstream outputs (`apps/worker/src/handoff.ts` `taskHandoffContext` → `upstreamContext`): the designer's `design-spec.md` first (colours, fonts, spacing, layout notes, asset list), then other dependencies' deliverables. The spec and the files listed in the design task's `output.files` are copied into the dev workspace at `upstream/<design-task-id>/` (jail rules, size caps). The Content Writer's prompt gets the samples in `brain/style/writing-samples/` the same way. Both runtimes use it: `buildRunPrompt` in `apps/worker/src/runner.ts` = `buildTaskPrompt` + `taskHandoffContext` (built-in runner and Hermes; on Hermes the prompt adds that the copied files are opened with the HQ `workspace_fs` tool, because they live in the worker's task workspace). A task without dependencies gets exactly `buildTaskPrompt`.
 
 ## [4] Worker loop (pseudocode)
 
@@ -162,7 +162,8 @@ Over a cap the loop stops and the task is failed through `fail_task` with the re
 Agents with `runtime: hermes` (roster + role file) run on their own Hermes Agent instance (`apps/worker/src/hermes/`,
 deploy: `deploy/hermes/README.md`). The worker still claims the task, heartbeats and reports progress:
 1. `GET /health` on `HERMES_URL_<AGENT>`, then `POST /v1/chat/completions` (Bearer `HERMES_KEY_<AGENT>`) with the role body
-   as system prompt and the same task prompt as above (instructions, criteria, QA/CEO feedback, SOP/checklist/brain paths)
+   as system prompt and the same task prompt as above (instructions, criteria, QA/CEO feedback, SOP/checklist/brain paths,
+   upstream design spec + assets via `buildRunPrompt`)
    plus a short "Running on Hermes" note. `X-Hermes-Session-Id` = task id (the transcript continues across revisions),
    `X-Hermes-Session-Key` = agent id (long-term memory per employee).
 2. Hermes runs its own tool loop. HQ tools come from the worker's MCP endpoint `POST /mcp` (Streamable HTTP, JSON-RPC:
@@ -174,7 +175,9 @@ deploy: `deploy/hermes/README.md`). The worker still claims the task, heartbeats
    fenced ```json block with the `submit_output` fields, or `{"ask_ceo": …}`; plain text → `fallback: true` output) and
    saved with `submit_task_output`. Usage is recorded as `usage.task` with `detail.runtime = 'hermes'`, priced with the
    Hermes model (`HERMES_MODEL[_<AGENT>]`). The per-task caps above are enforced only on the built-in runner; a Hermes run
-   that costs more than the role budget is flagged `over_task_budget` in the usage detail.
+   that costs more than the effective task budget (stricter of the role budget and `MAX_COST_PER_TASK_USD`) is flagged
+   `over_task_budget` in the usage detail. At startup the worker logs which `runtime: hermes` agents run on Hermes and warns
+   about half-configured ones (URL without key, missing/short `HQ_MCP_TOKEN_<AGENT>`, no `HERMES_MODEL`).
 4. Fallback (`HERMES_FALLBACK=on`, default): not configured, `/health` failing, or the run failing with down/timeout
    (`HERMES_TIMEOUT_MS`, default 30 min) → the task runs on the built-in runner and activity `hermes.fallback` says
    "Hermes unavailable for <agent>, ran on the built-in runner (<reason>)". `off` → re-queued (failed if not configured).

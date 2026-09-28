@@ -13,7 +13,7 @@ import type { Role } from '../roles';
 import { errMsg, log, usageDetail, type WorkerDeps } from '../deps';
 import { costUsd, type TokenUsage } from '../models/usage';
 import type { RunOptions, RunResult } from '../runner';
-import { buildTaskPrompt } from '../runner';
+import { buildRunPrompt, taskLimits } from '../runner';
 import { HermesClient, HermesError, type HermesUsage } from './client';
 import { hermesAgentConfig, hermesFallbackEnabled, type HermesAgentConfig } from './config';
 import { releaseMcpTaskState } from './mcpState';
@@ -32,8 +32,11 @@ export type BuiltinRunner = (task: TaskRow, deps: WorkerDeps, opts: RunOptions) 
 export const fallbackNote = (agentId: string, reason: string) =>
   `Hermes unavailable for ${agentId}, ran on the built-in runner (${reason})`;
 
+/** Marker the handoff section (handoff.ts) uses when it copied upstream files into the HQ task workspace. */
+const UPSTREAM_FILES_MARKER = 'Files copied into your workspace:';
+
 /** Extra instructions appended to the task prompt for Hermes runs. */
-export function hermesInstructions(task: Pick<TaskRow, 'id'>): string {
+export function hermesInstructions(task: Pick<TaskRow, 'id'>, opts: { upstreamFiles?: boolean } = {}): string {
   return [
     '## Running on Hermes',
     `HQ tools come from the MCP server "hq" (report_progress, brain_read, brain_search, ask_ceo, request_external_action, submit_output, `
@@ -45,6 +48,10 @@ export function hermesInstructions(task: Pick<TaskRow, 'id'>): string {
       + 'something blocking is missing. If the HQ tools are not reachable, end your final answer with a fenced ```json block: '
       + '{"summary": "...", "content": "...", "files": [], "links": [], "preview_url": null, "criteria_map": [{"criterion": "...", "how_met": "..."}]} '
       + 'or {"ask_ceo": {"question": "...", "options": []}}.',
+    ...(opts.upstreamFiles
+      ? ['The upstream files listed above (upstream/<task-id>/…, incl. design-spec.md) are in the HQ task workspace, not in your local '
+        + '/workspace: open them with the HQ workspace_fs tool.']
+      : []),
   ].join('\n');
 }
 
@@ -171,7 +178,9 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
   try {
     const client0 = task.client_id ? await db.getClient(task.client_id) : null;
     await db.reportProgress(task.id, 5, 'Reading the brief', { app: 'doc', title: task.title });
-    const prompt = `${buildTaskPrompt(task, client0, deps)}\n\n${hermesInstructions(task)}`;
+    // Same prompt as the built-in runner, incl. the design→dev handoff (upstream design spec + assets).
+    const base = await buildRunPrompt(task, client0, deps, opts.handoff);
+    const prompt = `${base}\n\n${hermesInstructions(task, { upstreamFiles: base.includes(UPSTREAM_FILES_MARKER) })}`;
     let res;
     try {
       res = await client.chat({
@@ -229,7 +238,7 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
     await releaseMcpTaskState(task.id).catch(() => undefined);
     if (usage && pricing) {
       const u: TokenUsage = usage;
-      const limitUsd = role.budget_usd_per_task;
+      const limitUsd = taskLimits(role, opts.limits).maxCostUsd; // stricter of the role budget and MAX_COST_PER_TASK_USD
       await db.recordUsage({
         actor: task.agent_id, kind: 'task', taskId: task.id, requestId: task.request_id,
         tokensIn: u.inputTokens ?? 0, tokensOut: u.outputTokens ?? 0, costUsd: cost,

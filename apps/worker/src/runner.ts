@@ -12,6 +12,7 @@ import { cachedPrompt, withRollingCache } from './models/cache';
 import { WORKER_EXECUTED_ACTIONS } from './rizehub/background';
 import { config } from './config';
 import { runHermesTask, type HermesRunOptions } from './hermes/runner';
+import { taskHandoffContext, type UpstreamOptions } from './handoff';
 
 /** Where not-yet-built tools arrive (docs/11-ROADMAP.md). */
 export const TOOL_MILESTONES: Record<string, string> = {
@@ -99,6 +100,18 @@ export function buildTaskPrompt(task: TaskRow, client: ClientRow | null, deps: P
     + 'and a criteria_map entry for every acceptance criterion. If something blocking is missing, call ask_ceo. '
     + 'Anything that publishes, sends, merges, deploys or spends goes through request_external_action.');
   return parts.join('\n\n');
+}
+
+/**
+ * The full task prompt both runtimes send: buildTaskPrompt() plus the handoff context (handoff.ts): the approved
+ * outputs of the tasks this one depends on (the Graphic Designer's design spec + asset links/files first, copied into
+ * the task workspace under upstream/<id>/) and the role's extra brain context. A task without dependencies (and a
+ * role without extra brain context) gets exactly buildTaskPrompt(). Never throws on handoff problems.
+ */
+export async function buildRunPrompt(
+  task: TaskRow, client: ClientRow | null, deps: Pick<WorkerDeps, 'brain' | 'db'>, opts: UpstreamOptions = {},
+): Promise<string> {
+  return buildTaskPrompt(task, client, deps) + await taskHandoffContext({ db: deps.db, brain: deps.brain }, task, opts);
 }
 
 export interface ToolContext { task: TaskRow; role: Role; deps: WorkerDeps; state: RunState }
@@ -221,6 +234,8 @@ export interface RunOptions {
   limits?: TaskLimits;
   /** Hermes runtime overrides (tests); defaults come from the env (hermes/config.ts). */
   hermes?: HermesRunOptions;
+  /** Design→dev handoff options (tests: workspacesDir); default copies upstream files into WORKSPACES_DIR. */
+  handoff?: UpstreamOptions;
 }
 
 /**
@@ -253,6 +268,7 @@ export async function runBuiltinTask(task: TaskRow, deps: WorkerDeps, opts: RunO
     const pm = picked;
     const limits = taskLimits(role, opts.limits);
 
+    const prompt = await buildRunPrompt(task, client, deps, opts.handoff);
     const tools = buildTools({ task, role, deps, state });
     const stopWhen: StopCondition<ToolSet>[] = [stepCountIs(limits.maxSteps), () => state.ended !== null || state.overBudget || state.toolErrors >= 3];
     await db.reportProgress(task.id, 5, 'Reading the brief', { app: 'doc', title: task.title });
@@ -260,7 +276,7 @@ export async function runBuiltinTask(task: TaskRow, deps: WorkerDeps, opts: RunO
     const result = await generateText({
       model: pm.model,
       // Anthropic: system prompt + tools cached once per run, conversation cached step by step (models/cache.ts).
-      ...cachedPrompt(pm.provider, role.body, buildTaskPrompt(task, client, deps)),
+      ...cachedPrompt(pm.provider, role.body, prompt),
       prepareStep: ({ messages }) => ({ messages: withRollingCache(pm.provider, messages) }),
       tools,
       stopWhen,

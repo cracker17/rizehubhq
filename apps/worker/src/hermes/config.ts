@@ -65,3 +65,35 @@ export function mcpTokenMap(agentIds: readonly string[], env: Env = workerEnv())
   for (const t of dup) out.delete(t);
   return out;
 }
+
+/**
+ * One startup line on how the `runtime: hermes` agents will run, plus warnings for half-configured agents (index.ts).
+ * Nothing configured → those agents simply run on the built-in runner (or are re-queued/failed with HERMES_FALLBACK=off).
+ */
+export function hermesStartupReport(roles: readonly { id: string; runtime: string }[], env: Env = workerEnv()): { line: string; warnings: string[] } {
+  const hermesRoles = roles.filter((r) => r.runtime === 'hermes').map((r) => r.id);
+  const fallback = hermesFallbackEnabled(env);
+  const withToken = new Set(mcpTokenMap(hermesRoles, env).values());
+  const on: string[] = [];
+  const warnings: string[] = [];
+  for (const id of hermesRoles) {
+    const s = envSuffix(id);
+    const cfg = hermesAgentConfig(id, env);
+    if (cfg) {
+      on.push(id);
+      if (!withToken.has(id)) {
+        warnings.push(`[worker] Hermes ${id}: HQ_MCP_TOKEN_${s} missing, shorter than ${MIN_MCP_TOKEN_LENGTH} or shared with another agent: `
+          + 'its Hermes cannot call HQ tools (only its final answer is saved)');
+      }
+      if (!cfg.model) warnings.push(`[worker] Hermes ${id}: HERMES_MODEL / HERMES_MODEL_${s} not set: its usage is recorded unpriced ($0)`);
+    } else if (!!env[`HERMES_URL_${s}`]?.trim() !== !!env[`HERMES_KEY_${s}`]?.trim()) {
+      warnings.push(`[worker] Hermes ${id}: set both HERMES_URL_${s} and HERMES_KEY_${s} (one is empty): it runs without Hermes`);
+    }
+  }
+  const off = hermesRoles.filter((id) => !on.includes(id));
+  const parts = [
+    on.length ? `on Hermes: ${on.join(', ')}` : '',
+    off.length ? `${fallback ? 'on the built-in runner (Hermes not configured)' : 'NOT RUNNABLE (Hermes not configured, HERMES_FALLBACK=off)'}: ${off.join(', ')}` : '',
+  ].filter(Boolean);
+  return { line: `[worker] runtime:hermes agents ${parts.join(' · ') || 'none'} · HERMES_FALLBACK ${fallback ? 'on' : 'off'}`, warnings };
+}
