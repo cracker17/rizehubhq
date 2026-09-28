@@ -18,6 +18,8 @@ import { OccluderLayer } from './occluders';
 import { DoorLayer } from './doors';
 import { ScreenLayer } from './screens';
 import { officeAudio } from './audio';
+import { PropLayer } from './props';
+import { SuiteLayer } from './suite';
 
 /** Ambient light for the time of day (Asia/Manila): a tint over the picture and how bright the lamps are. */
 export interface Ambient { color: number; alpha: number; lamps: number }
@@ -90,6 +92,8 @@ export class OfficeScene extends Phaser.Scene {
   private occluders!: OccluderLayer;
   private doors!: DoorLayer;
   private screenLayer!: ScreenLayer;
+  private props!: PropLayer;
+  private suite!: SuiteLayer;
   private ambient: Ambient = { color: 0x0b1030, alpha: 0, lamps: 0 };
   private pending: { model: OfficeModel; events: OfficeEvent[] } | null = null;
   private camX = WORLD_W / 2;
@@ -139,6 +143,10 @@ export class OfficeScene extends Phaser.Scene {
     this.occluders.create('office-bg');
     this.doors = new DoorLayer(this);
     this.doors.create();
+    this.props = new PropLayer(this);
+    this.props.create('office-bg');
+    this.suite = new SuiteLayer(this);
+    this.suite.create(NIGHT_DEPTH);
     this.screenLayer = new ScreenLayer(this, this.furniture);
     this.screenLayer.setMap(this.map);
     officeAudio.arm();
@@ -267,7 +275,9 @@ export class OfficeScene extends Phaser.Scene {
       this.camX = c.x; this.camY = c.y;
     } else {
       this.zoomLevel = this.coverZoom();
-      this.camX = WORLD_W / 2;
+      // The picture is wider than most screens: keep the CEO suite (right) in the first view.
+      const visW = this.scale.width / (this.zoomLevel * this.opts.dpr);
+      this.camX = Math.max(WORLD_W / 2, WORLD_W - visW / 2);
       this.camY = WORLD_H / 2;
     }
     this.applyCamera();
@@ -479,7 +489,9 @@ export class OfficeScene extends Phaser.Scene {
       if (c.hidden) continue;
       tick(c.motion, dt, env);
       const m = c.motion;
-      const goalSeat = m.goal?.key.startsWith('desk:') ? this.map.desks.find((d) => d.agentId === m.goal!.key.slice(5))?.id ?? null : null;
+      const gk = m.goal?.key ?? '';
+      const goalSeat = gk.startsWith('desk:') ? this.map.desks.find((d) => d.agentId === gk.slice(5))?.id ?? null
+        : gk === 'spot:ceo-chair' && this.map.seats.some((x) => x.id === 'ceo') ? 'ceo' : null;
       if (goalSeat) c.seat = goalSeat;
       else if (c.seat) {
         const s = this.map.seats.find((x) => x.id === c.seat);
@@ -511,6 +523,8 @@ export class OfficeScene extends Phaser.Scene {
     this.furniture.update(dt, users, t);
     this.doors.update(dt, people, time);
     this.screenLayer.update(t);
+    this.suite.update(dt, t, this.ambient);
+    this.props.update(dt, t, [...this.chars.values()].map((c) => ({ id: c.id, motion: c.motion, hidden: c.hidden })), this.ambient.lamps);
     this.drawFx(t, rally);
 
     if (this.followId) {
@@ -530,13 +544,6 @@ export class OfficeScene extends Phaser.Scene {
   private drawFx(t: number, rally: number) {
     const g = this.fx;
     g.clear();
-    // espresso machine steam
-    const m = W(551, 436);
-    for (let i = 0; i < 3; i++) {
-      const k = (t * 0.45 + i / 3) % 1;
-      g.fillStyle(0xffffff, 0.3 * (1 - k));
-      g.fillCircle(m.x + Math.sin(t * 2 + i * 2) * 3 * S, m.y - k * 22 * S, (2 + k * 4) * S);
-    }
     // fireplace flicker
     this.fire.setAlpha(0.16 + this.ambient.lamps * 0.5 + Math.sin(t * 7.3) * 0.03 + Math.sin(t * 13.1) * 0.02);
     // ping-pong ball when both players are at the table

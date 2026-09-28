@@ -61,3 +61,11 @@ people can sit at every desk and chairs can move:
 Depth: desks and occluders (`occluders` in layout.json: pieces of the picture such as the Dev Team's glass
 front, the lounge sofa back, the boardroom table) are drawn as thin vertical slices sorted by their floor
 line, so a person can be in front of one end of a desk and behind the other.
+
+## CEO suite + sliding doors (v4)
+- The painted glass door leaves were inpainted out (`mask-doors_mask.png`); the scene draws the leaves and
+  slides them open. The Growth & Sales floor was redone (`mask-floor_gs2.png`, `contact.py` for the
+  contact shadow along the walls, `wallband.py` for the wall base behind the old desks).
+- `extend_ceo.py` widens the picture to 1560 px and paints the CEO suite (floor, window wall, slat wall,
+  the doorway view into the Game Hall). Luxury furniture sprites (executive desk, leather chair, sofa, marble
+  table, bookshelf, plant, arc lamp) are a Magnific sheet, matted and built by `build_furniture.py`.

@@ -9,12 +9,13 @@ import { officeAudio } from './audio';
 
 const S = LAYOUT.image.scale;
 const OPEN_ANGLE = (82 * Math.PI) / 180;
-const NEAR = 1.25; // tiles
+const NEAR = 1.7; // tiles: doors start opening as someone walks up
 
 interface DoorState {
   d: LayoutDoor;
   g: Phaser.GameObjects.Graphics;
   light: Phaser.GameObjects.Graphics | null;
+  strips: Phaser.GameObjects.Graphics[];
   hingeT: Pt;
   freeT: Pt;
   centerT: Pt;
@@ -39,8 +40,9 @@ export class DoorLayer {
       const freeT = PROJ.toTile(d.free[0], d.free[1]);
       const g = this.scene.add.graphics();
       const light = d.opening ? this.scene.add.graphics() : null;
-      const painted = d.painted ?? !(LAYOUT.glassWalls ?? []).some((gw) => gw.id.startsWith(d.id));
-      this.doors.push({ d, g, light, hingeT, freeT, centerT: { x: (hingeT.x + freeT.x) / 2, y: (hingeT.y + freeT.y) / 2 }, open: 0, target: 0, holdUntil: 0, painted });
+      const painted = d.painted ?? d.kind === 'wood';
+      const strips = Array.from({ length: 8 }, () => this.scene.add.graphics());
+      this.doors.push({ d, g, light, strips, hingeT, freeT, centerT: { x: (hingeT.x + freeT.x) / 2, y: (hingeT.y + freeT.y) / 2 }, open: 0, target: 0, holdUntil: 0, painted });
     }
     for (const wall of walls) this.buildWall(wall);
   }
@@ -77,7 +79,7 @@ export class DoorLayer {
     for (const s of this.doors) {
       const near = people.some((p) => p.walking && Math.hypot(p.pos.x - s.centerT.x, p.pos.y - s.centerT.y) < NEAR)
         || people.some((p) => Math.hypot(p.pos.x - s.centerT.x, p.pos.y - s.centerT.y) < 0.55);
-      if (near) s.holdUntil = now + 900;
+      if (near) s.holdUntil = now + 1100;
       const target = now < s.holdUntil ? 1 : 0;
       if (target !== s.target) {
         s.target = target;
@@ -104,45 +106,80 @@ export class DoorLayer {
         s.light.setDepth(Math.max(...q.map((p) => p.y)) - 6);
       }
     }
+    for (const sg of s.strips) sg.clear();
     if (s.painted && e < 0.01) return; // the picture shows the closed door
-    const ang = e * OPEN_ANGLE * d.swing;
     const vx = s.freeT.x - s.hingeT.x;
     const vy = s.freeT.y - s.hingeT.y;
-    const ft = { x: s.hingeT.x + vx * Math.cos(ang) - vy * Math.sin(ang), y: s.hingeT.y + vx * Math.sin(ang) + vy * Math.cos(ang) };
-    const hb = toW(s.hingeT); const fb = toW(ft);
+    const at = (k: number, off = 0) => ({ x: s.hingeT.x + vx * (k + off), y: s.hingeT.y + vy * (k + off) });
+    const mode = d.mode ?? (d.kind === 'glass' ? 'slide' : 'swing');
     const H = d.h * S;
-    const quad = [hb, fb, { x: fb.x, y: fb.y - H }, { x: hb.x, y: hb.y - H }];
+    // leaves as floor edges (tile points): [start, end]
+    let leaves: [Pt, Pt][];
+    if (mode === 'slide') {
+      const k = e * 0.9; // glide along the wall over the fixed panel on the hinge side
+      leaves = [[at(0, -k), at(1, -k)]];
+    } else if (mode === 'slide2') {
+      const k = e * 0.48; // two leaves part from the middle into the wall pockets
+      leaves = [[at(0, -k), at(0.5, -k)], [at(0.5, k), at(1, k)]];
+    } else {
+      const ang = e * OPEN_ANGLE * d.swing;
+      leaves = [[s.hingeT, { x: s.hingeT.x + vx * Math.cos(ang) - vy * Math.sin(ang), y: s.hingeT.y + vx * Math.sin(ang) + vy * Math.cos(ang) }]];
+    }
+    if (mode === 'slide2') {
+      // header track over the opening
+      const r0 = toW(at(mode === 'slide2' ? -0.12 : -0.9)); const r1 = toW(at(mode === 'slide2' ? 1.12 : 1));
+      g.lineStyle(2.6 * S, 0x1f2226, 0.95);
+      g.lineBetween(r0.x, r0.y - H - 2 * S, r1.x, r1.y - H - 2 * S);
+      g.setDepth(Math.max(r0.y, r1.y) + 2);
+    }
+    let si = 0;
+    for (const [a, b] of leaves) {
+      // each leaf in vertical strips, each strip sorted by its own floor point (people pass behind / in front)
+      const n = 4;
+      for (let i = 0; i < n && si < s.strips.length; i++, si++) {
+        const p0 = toW({ x: a.x + (b.x - a.x) * (i / n), y: a.y + (b.y - a.y) * (i / n) });
+        const p1 = toW({ x: a.x + (b.x - a.x) * ((i + 1) / n), y: a.y + (b.y - a.y) * ((i + 1) / n) });
+        this.drawStrip(s.strips[si], d, p0, p1, H, i === 0, i === n - 1, i === Math.floor(n / 2));
+      }
+    }
+  }
+
+  /** One vertical strip of a door leaf (frame edges only at the leaf's ends). */
+  private drawStrip(g: Phaser.GameObjects.Graphics, d: LayoutDoor, p0: Pt, p1: Pt, H: number, first: boolean, last: boolean, mid: boolean) {
+    const quad = [p0, p1, { x: p1.x, y: p1.y - H }, { x: p0.x, y: p0.y - H }];
     if (d.kind === 'glass') {
-      g.fillStyle(0xd7eef6, 0.26);
+      g.fillStyle(d.frosted ? 0xe9f1f4 : 0xd7eef6, d.frosted ? 0.62 : 0.16);
       g.fillPoints(quad, true);
-      g.lineStyle(3 * S, 0x2a2d31, 1);
-      g.strokePoints(quad, true);
-      // handle
-      const hx = fb.x + (hb.x - fb.x) * 0.1; const hy = fb.y + (hb.y - fb.y) * 0.1;
-      g.lineStyle(2.2 * S, 0xc9ccd1, 1);
-      g.lineBetween(hx, hy - H * 0.42, hx, hy - H * 0.58);
-      g.lineStyle(2 * S, 0xffffff, 0.18);
-      g.lineBetween(hb.x + (fb.x - hb.x) * 0.3, hb.y - H * 0.2, hb.x + (fb.x - hb.x) * 0.7, hb.y - H * 0.8);
+      if (d.frosted) { // a clear band at eye level, like office manifestation film
+        const b = (t: number) => [{ x: p0.x, y: p0.y - H * t }, { x: p1.x, y: p1.y - H * t }];
+        const [a0, a1] = b(0.52); const [c0, c1] = b(0.6);
+        g.fillStyle(0xbfd9e3, 0.35); g.fillPoints([a0, a1, c1, c0], true);
+      }
+      g.lineStyle(2.6 * S, 0x2a2d31, 1);
+      g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+      g.lineBetween(p0.x, p0.y - H, p1.x, p1.y - H);
+      if (first) g.lineBetween(p0.x, p0.y, p0.x, p0.y - H);
+      if (last) g.lineBetween(p1.x, p1.y, p1.x, p1.y - H);
+      if (last) { g.lineStyle(2.2 * S, 0xc9ccd1, 1); g.lineBetween(p1.x - 3 * S, p1.y - H * 0.42, p1.x - 3 * S, p1.y - H * 0.6); }
+      if (mid) { g.lineStyle(2 * S, 0xffffff, 0.2); g.lineBetween(p0.x, p0.y - H * 0.25, p1.x, p1.y - H * 0.75); }
     } else {
       g.fillStyle(0x6a3f22, 1);
       g.fillPoints(quad, true);
-      const inset = (p: Pt, q: Pt, a: number, b: number) => ({ x: p.x + (q.x - p.x) * a, y: p.y + (q.y - p.y) * a - H * b });
-      const win = [inset(hb, fb, 0.2, 0.52), inset(hb, fb, 0.8, 0.52), inset(hb, fb, 0.8, 0.9), inset(hb, fb, 0.2, 0.9)];
-      g.fillStyle(0xf3e6c8, 0.9);
-      g.fillPoints(win, true);
       g.lineStyle(1.6 * S, 0x3b2413, 1);
-      g.strokePoints(quad, true);
-      g.strokePoints(win, true);
-      const hx = fb.x + (hb.x - fb.x) * 0.1; const hy = fb.y + (hb.y - fb.y) * 0.1;
-      g.lineStyle(2.4 * S, 0x2a2a2a, 1);
-      g.lineBetween(hx, hy - H * 0.38, hx, hy - H * 0.55);
+      g.lineBetween(p0.x, p0.y, p1.x, p1.y); g.lineBetween(p0.x, p0.y - H, p1.x, p1.y - H);
+      if (first) g.lineBetween(p0.x, p0.y, p0.x, p0.y - H);
+      if (last) g.lineBetween(p1.x, p1.y, p1.x, p1.y - H);
+      if (!first && !last) { // window
+        g.fillStyle(0xf3e6c8, 0.9);
+        g.fillPoints([{ x: p0.x, y: p0.y - H * 0.52 }, { x: p1.x, y: p1.y - H * 0.52 }, { x: p1.x, y: p1.y - H * 0.9 }, { x: p0.x, y: p0.y - H * 0.9 }], true);
+      }
+      if (last) { g.lineStyle(2.4 * S, 0x2a2a2a, 1); g.lineBetween(p1.x - 3 * S, p1.y - H * 0.38, p1.x - 3 * S, p1.y - H * 0.55); }
     }
-    // sort by the leaf's floor edge (its middle)
-    g.setDepth((hb.y + fb.y) / 2);
+    g.setDepth(Math.max(p0.y, p1.y) + 0.5);
   }
 
   destroy() {
-    this.doors.forEach((s) => { s.g.destroy(); s.light?.destroy(); });
+    this.doors.forEach((s) => { s.g.destroy(); s.light?.destroy(); s.strips.forEach((x) => x.destroy()); });
     this.walls.forEach((g) => g.destroy());
     this.doors = []; this.walls = [];
   }

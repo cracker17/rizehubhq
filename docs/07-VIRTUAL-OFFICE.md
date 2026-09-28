@@ -39,7 +39,8 @@ coordinate data in **`apps/dashboard/office/layout.json`**, in pixels of the 1x 
 | `rooms` | Dev Team, Design Studio, Growth & Sales, QA Lab, Boardroom, CEO Office, Reception, Coffee Corner, Lounge (fireplace), Game Hall, Gym — each with its sign position (HTML pill) |
 | `desks` | Every desk seat (4 Dev, 2 Design, 2 Growth & Sales, 2 QA Lab, the Boardroom head seat, the CEO desk) with facing, `chair` (an animated office chair stands there) and either monitor quads (painted desks) or `desk` (the sprite desk whose monitors it uses) |
 | `furniture` | Sprite desks and gym equipment (`public/office/furniture`), placed by their floor anchor; drawn in depth-sorted slices so people pass in front of and behind them |
-| `doors` | Doors that swing open (with a sound) when someone walks through: glass doors of the Dev Team, Boardroom, Game Hall, Growth & Sales and the gym; the wooden front doors (they light the doorway) |
+| `doors` | Doors that open as someone walks up and close behind them (with a sound): the glass doors slide along their wall (Dev Team, Boardroom, Game Hall, Growth & Sales, gym), the CEO suite has a wide frosted double sliding door, the wooden front doors swing (and light the doorway) |
+| `windows`, `neon`, `ceoBubble` | The CEO suite: window panes (sky and Davao skyline by the time of day), the 3D neon RizeHub logo on the walnut wall, where the approvals bubble floats |
 | `glassWalls` | Glass the scene draws itself (the gym front) |
 | `occluders` | Pieces of the picture redrawn over people standing behind them: the Dev Team's glass front, the lounge sofa's back, the boardroom table |
 | `assignments` | `web-dev → dev-1`, `designer → design-1` (nearest the Dev Team), `writer → sales-1`, `sales → sales-2`, `qa-lead → qa-1`, `coo → board-head`. An agent's own `agents.desk.id` overrides this, so a new hire gets a desk without a code change. Unassigned desks stay plain furniture. |
@@ -52,6 +53,8 @@ Around the picture:
 - **Chairs** slide out and swivel towards the aisle when someone walks up or stands up, turn back to the desk as they sit, and fidget a little while they work.
 - **Monitors** show what the agent is actually doing: the text / code / deliverable image from `agent_screens`, the current step and progress, in the app that fits the work (editor, doc, design canvas, CRM table, QA checklist).
 - **Light** follows the Philippine clock (Asia/Manila): dawn, day, golden hour, dusk and night blend into each other and the lamps and fireplace glow brighter as it gets dark. The toolbar can pin day or night.
+- **Living props**: the painted fire flickers and throws sparks, bubbles glug up the water dispenser, the espresso machine steams and brews a cup when someone takes a coffee, the arcade plays (attract mode, a real game when someone is at it), and plants sway in the draft when someone walks past.
+- **CEO suite**: the picture was widened to the right: the old corner office and the plant room became one suite (walnut herringbone, window wall, walnut-slat wall with the animated neon logo, executive desk, leather sofa, marble table, bookshelf) behind a wide frosted sliding door (`scripts/office/extend_ceo.py`).
 - **Music**: a quiet generative lo-fi loop (WebAudio, no files) with a mute button; doors whoosh and click. Sound starts after the first click (browser rule) and the choice is remembered.
 
 ## 4. Behaviour: status → what you see

@@ -20,7 +20,16 @@ export interface LayoutSpot { id: string; kind: string; at: XY; face: Facing; po
 /** A sprite from public/office/furniture placed with its floor anchor at `at`. */
 export interface LayoutFurniture { id: string; sprite: string; at: XY; flip?: boolean }
 /** A swinging door: floor edge of the leaf from hinge to free end, leaf height (all 1x picture px). */
-export interface LayoutDoor { id: string; kind: 'glass' | 'wood'; hinge: XY; free: XY; h: number; swing: 1 | -1; opening?: XY[]; painted?: boolean }
+export interface LayoutDoor {
+  id: string; kind: 'glass' | 'wood'; hinge: XY; free: XY; h: number; swing: 1 | -1; opening?: XY[];
+  /** The picture still shows this door when closed (wooden front doors); glass leaves were removed from it. */
+  painted?: boolean;
+  /** slide: the leaf glides along the wall towards the hinge side (glass); slide2: two leaves part from the
+   *  middle (the CEO suite); swing: it turns on the hinge (wood). */
+  mode?: 'slide' | 'slide2' | 'swing';
+  /** Frosted (satin) glass instead of clear. */
+  frosted?: boolean;
+}
 /** A glass wall drawn by the scene (not in the picture): floor line + height. */
 export interface LayoutGlassWall { id: string; base: XY[]; h: number }
 /** A piece of the picture (polygon) redrawn over people standing behind it; `base` is its floor line. */
@@ -43,6 +52,12 @@ export interface OfficeLayout {
   doors?: LayoutDoor[];
   glassWalls?: LayoutGlassWall[];
   occluders?: LayoutOccluder[];
+  /** Window panes drawn live (sky and city by the time of day): TL, TR, BR, BL. */
+  windows?: { id: string; quad: XY[] }[];
+  /** The neon RizeHub logo on the CEO suite's wall: TL, TR, BR, BL. */
+  neon?: { id: string; quad: XY[] };
+  /** Where the "N to approve" bubble floats (above the CEO's chair). */
+  ceoBubble?: XY;
 }
 
 export const LAYOUT = raw as unknown as OfficeLayout;

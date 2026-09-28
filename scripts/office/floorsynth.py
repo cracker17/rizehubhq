@@ -19,17 +19,19 @@ def herringbone(tx, ty, wt=0.18, n=4):
     a, b = tx / wt, ty / wt
     best_id = np.zeros(a.shape, np.int64); kind = np.zeros(a.shape, np.int8); edge = np.full(a.shape, 9.0, np.float32)
     along = np.zeros(a.shape, np.float32); found = np.zeros(a.shape, bool)
-    for j in range(-6, 7):
+    jc = np.round((a - b) / (2 * n))  # centre the search on the local diagonal (works far from the origin)
+    for dj in range(-3, 4):
+        j = jc + dj
         qa, qb = a - j*n, b + j*n
         k = np.floor(qb)            # H plank: y in [k,k+1], x in [k,k+n]
         inH = (qa >= k) & (qa < k + n) & ~found
-        best_id[inH] = (k[inH]*131 + j*7919).astype(np.int64); kind[inH] = 0
+        best_id[inH] = (k[inH]*131 + j[inH]*7919).astype(np.int64); kind[inH] = 0
         e = np.minimum.reduce([qb - k, k + 1 - qb, (qa - k) / n * 4, (k + n - qa) / n * 4])
         edge[inH] = np.minimum(qb - k, k + 1 - qb)[inH]; edge[inH] = np.minimum(edge[inH], np.minimum(qa - k, k + n - qa)[inH])
         along[inH] = (qa - k)[inH]; found |= inH
         k2 = np.floor(qa) - n       # V plank: x in [k+n,k+n+1], y in [k+1-n,k+1]
         inV = (qb >= k2 + 1 - n) & (qb < k2 + 1) & ~found
-        best_id[inV] = (k2[inV]*131 + j*7919 + 50000).astype(np.int64); kind[inV] = 1
+        best_id[inV] = (k2[inV]*131 + j[inV]*7919 + 50000).astype(np.int64); kind[inV] = 1
         edge[inV] = np.minimum(np.minimum(qa - (k2 + n), k2 + n + 1 - qa), np.minimum(qb - (k2 + 1 - n), k2 + 1 - qb))[inV]
         along[inV] = (qb - (k2 + 1 - n))[inV]; found |= inV
     return best_id, kind, edge, along
@@ -62,11 +64,11 @@ if __name__ == '__main__':
     tx = Mi[0, 0]*px + Mi[0, 1]*py; ty = Mi[1, 0]*px + Mi[1, 1]*py
     rng = np.random.default_rng(7)
     if mat == 'parquet':
-        pid, kind, edge, along = herringbone(tx, ty)
+        pid, kind, edge, along = herringbone(tx, ty, wt=0.11, n=3)
         r = hash2(pid, pid // 7, 1)
         shade = 0.86 + 0.24 * r                                  # plank-to-plank variation
-        grain = np.sin(along * 9.0 + hash2(pid, pid, 3) * 20) * 0.03 + (rng.standard_normal(tx.shape) * 0.025)
-        seam = np.clip(edge / 0.09, 0, 1) ** 0.6                 # dark joints
+        grain = np.sin(along * 25.0 + hash2(pid, pid, 3) * 20) * 0.03 + (rng.standard_normal(tx.shape) * 0.025)
+        seam = np.clip(edge / 0.03, 0, 1) ** 0.6                 # dark joints
         f = (shade + grain) * (0.74 + 0.26 * seam)
         tint = np.stack([f * 1.0, f * 1.0, f * 1.0], -1)
     else:  # polished concrete

@@ -253,7 +253,7 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
 
           {/* awaiting CEO approval → chat bubble above the CEO office */}
           {pending.length > 0 && (
-            <Link href="/approvals" className="pointer-events-auto absolute" style={{ ...at([1232, 548]), transform: 'translate(-50%, -100%) scale(var(--inv))' }}
+            <Link href="/approvals" className="pointer-events-auto absolute" style={{ ...at(LAYOUT.ceoBubble ?? [1232, 548]), transform: 'translate(-50%, -100%) scale(var(--inv))' }}
               aria-label={`${pending.length} approval${pending.length === 1 ? '' : 's'} waiting for you`}>
               <span className="relative flex animate-bounce items-center gap-1.5 whitespace-nowrap rounded-2xl bg-[#8b5cf6] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_6px_16px_rgba(80,40,160,.45)] ring-2 ring-white/70 [animation-duration:2.2s]">
                 <MessageSquareMore size={14} aria-hidden /> {pending.length} to approve

@@ -132,6 +132,69 @@
    "W": 0.477,
    "D": 0.621
   },
+  "ceo_desk": {
+   "src": "/office/furniture/ceo_desk.webp",
+   "w": 303,
+   "h": 290,
+   "ax": 108.22,
+   "ay": 271.81,
+   "W": 1.336,
+   "D": 2.53
+  },
+  "ceo_chair": {
+   "src": "/office/furniture/ceo_chair.webp",
+   "w": 96,
+   "h": 130,
+   "ax": 56.9,
+   "ay": 119.7,
+   "W": 0.698,
+   "D": 0.492
+  },
+  "sofa": {
+   "src": "/office/furniture/sofa.webp",
+   "w": 281,
+   "h": 237,
+   "ax": 206.59,
+   "ay": 204.49,
+   "W": 2.542,
+   "D": 0.944
+  },
+  "coffee_table": {
+   "src": "/office/furniture/coffee_table.webp",
+   "w": 155,
+   "h": 159,
+   "ax": 67.01,
+   "ay": 143.21,
+   "W": 0.817,
+   "D": 1.092
+  },
+  "bookshelf": {
+   "src": "/office/furniture/bookshelf.webp",
+   "w": 145,
+   "h": 267,
+   "ax": 111.68,
+   "ay": 247.81,
+   "W": 1.362,
+   "D": 0.394
+  },
+  "ceo_plant": {
+   "src": "/office/furniture/ceo_plant.webp",
+   "w": 141,
+   "h": 202,
+   "ax": 65.91,
+   "ay": 186.92,
+   "W": 0.808,
+   "D": 0.927
+  },
+  "floor_lamp": {
+   "src": "/office/furniture/floor_lamp.webp",
+   "w": 159,
+   "h": 234,
+   "ax": 124.36,
+   "ay": 212.66,
+   "W": 1.528,
+   "D": 0.419
+  },
   "treadmill": {
    "src": "/office/furniture/treadmill.webp",
    "w": 192,
