@@ -1,8 +1,8 @@
 import type { IdleActivity } from '@rizehubhq/shared';
 
 /** Spot capacity per idle activity (docs/07 §5). */
-export const CAPACITY: Record<IdleActivity, number> = { coffee: 3, lounge_sofa: 3, lobby: 8, ping_pong: 2, foosball: 2, chat: 4 };
-const WEIGHTS: [IdleActivity, number][] = [['coffee', 30], ['lounge_sofa', 20], ['lobby', 15], ['ping_pong', 10], ['foosball', 10], ['chat', 15]];
+export const CAPACITY: Record<IdleActivity, number> = { coffee: 3, lounge_sofa: 3, lobby: 8, ping_pong: 2, foosball: 2, chat: 4, gym: 2 };
+const WEIGHTS: [IdleActivity, number][] = [['coffee', 28], ['lounge_sofa', 18], ['lobby', 12], ['ping_pong', 10], ['foosball', 10], ['chat', 14], ['gym', 8]];
 const PAIRED: IdleActivity[] = ['ping_pong', 'foosball', 'chat'];
 
 export interface IdleAgent { id: string; activity: IdleActivity | null; idleForMs: number }

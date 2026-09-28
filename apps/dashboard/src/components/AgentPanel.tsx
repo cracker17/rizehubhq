@@ -33,7 +33,7 @@ function Screen({ agent }: { agent: Agent }) {
         <div className="flex items-center gap-1.5 border-b border-[var(--color-line)] px-3 py-2">
           <span className="h-2.5 w-2.5 rounded-full bg-[#e5484d]" /><span className="h-2.5 w-2.5 rounded-full bg-[#f5a524]" /><span className="h-2.5 w-2.5 rounded-full bg-[#1f9d6b]" />
           <span className="ml-2 min-w-0 flex-1 truncate text-xs text-[var(--color-muted)]">{idle ? 'Screensaver' : s?.title ?? agent.task ?? s?.app}</span>
-          {!idle && s && <span className="shrink-0 rounded bg-[var(--color-panel)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">{s.app}</span>}
+          {!idle && s && <span className="shrink-0 rounded bg-[#15133a]/55 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-muted)]">{s.app}</span>}
         </div>
         <div className="aspect-[16/10] overflow-hidden bg-[#0e0d26]">
           {idle ? (
@@ -96,11 +96,11 @@ function Chat({ agent }: { agent: Agent }) {
           <button onClick={() => void send('What are you doing?')} className="self-end rounded-2xl rounded-br-md bg-[var(--color-primary)] px-4 py-2.5 text-[15px]">What are you doing?</button>
         )}
         {msgs.map((m, i) => (
-          <p key={i} className={clsx('max-w-[90%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-[15px]', m.from === 'ceo' ? 'self-end rounded-br-md bg-[var(--color-primary)]' : 'self-start rounded-bl-md bg-[var(--color-panel-2)]')}>
+          <p key={i} className={clsx('max-w-[90%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-[15px]', m.from === 'ceo' ? 'self-end rounded-br-md bg-[var(--color-primary)]' : 'self-start rounded-bl-md bg-[#231f55]/65')}>
             {m.text}
           </p>
         ))}
-        {waiting && <p className="self-start rounded-2xl rounded-bl-md bg-[var(--color-panel-2)] px-4 py-2.5 text-[15px] text-[var(--color-muted)]">…</p>}
+        {waiting && <p className="self-start rounded-2xl rounded-bl-md bg-[#231f55]/65 px-4 py-2.5 text-[15px] text-[var(--color-muted)]">…</p>}
         {msgs.some((m) => m.demo) && (
           <p className="text-xs text-[var(--color-dim)]">
             {session.chatLive ? 'Demo reply (sign in to the live dashboard to reach the worker).' : 'Demo reply from the agent’s live state. Set HQ_WORKER_URL and HQ_INTERNAL_SECRET for real answers.'}
@@ -111,7 +111,7 @@ function Chat({ agent }: { agent: Agent }) {
       <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="sticky bottom-0 flex gap-2 bg-[var(--color-bg)] pt-1">
         <label htmlFor={`chat-${agent.id}`} className="sr-only">Message {agent.name}</label>
         <input id={`chat-${agent.id}`} value={text} onChange={(e) => setText(e.target.value)} placeholder={`Ask ${agent.name}…`}
-          className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-4 text-[15px] outline-none placeholder:text-[var(--color-dim)] focus:border-[var(--color-line-active)]" />
+          className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--color-line)] bg-[#231f55]/65 px-4 text-[15px] outline-none placeholder:text-[var(--color-dim)] focus:border-[var(--color-line-active)]" />
         <button disabled={!text.trim() || waiting} aria-label="Send" className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)] disabled:opacity-40"><Send size={17} /></button>
       </form>
     </div>
@@ -170,21 +170,21 @@ export function AgentPanel({ agent, onClose }: { agent: Agent | null; onClose: (
   if (!agent) return null;
   const headline = agent.status === 'working' ? `${agent.verb ?? 'Working'}${agent.task ? ` · ${agent.task}` : ''}` : agent.status === 'idle' && agent.idle ? IDLE_LABEL[agent.idle] : STATUS_LABEL[agent.status];
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
+    <div className="glass-scrim fixed inset-0 z-50 flex justify-end" onClick={onClose}>
       <aside role="dialog" aria-modal aria-label={`${agent.name} details`} onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-[520px] flex-col border-l border-[var(--color-line)] bg-[var(--color-bg)] p-5 sm:p-6">
+        className="glass flex h-full w-full max-w-[520px] flex-col border-y-0 border-r-0 p-5 sm:p-6">
         <div className="mb-5 flex items-center gap-3">
-          <Avatar name={agent.name} color={agent.color} status={agent.status} size={52} />
+          <Avatar id={agent.id} name={agent.name} color={agent.color} status={agent.status} size={52} />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-semibold">{agent.name}</h2>
             <p className="truncate text-sm" style={{ color: STATUS_COLOR[agent.status] }}>{headline}{agent.progress && agent.status === 'working' ? ` · ${agent.progress}%` : ''}</p>
           </div>
           <button ref={closeRef} onClick={onClose} aria-label="Close" className="text-[var(--color-muted)] hover:text-white"><X size={22} /></button>
         </div>
-        <div className="mb-4 flex gap-1 rounded-xl bg-[var(--color-panel)] p-1" role="tablist">
+        <div className="mb-4 flex gap-1 rounded-xl bg-[#15133a]/55 p-1" role="tablist">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-              className={clsx('flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm', tab === id ? 'bg-[var(--color-panel-2)] text-white' : 'text-[var(--color-muted)]')}>
+              className={clsx('flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm', tab === id ? 'bg-[#231f55]/65 text-white' : 'text-[var(--color-muted)]')}>
               <Icon size={15} aria-hidden /> {label}
             </button>
           ))}

@@ -2,11 +2,11 @@
 // Client-only: this module (and Phaser) is only ever loaded through a dynamic import.
 import * as Phaser from 'phaser';
 import type { OfficeEvent, OfficeModel } from '../logic/director';
-import { OfficeScene, type FrameInfo, type SceneOptions } from './OfficeScene';
+import { OfficeScene, type Ambient, type FrameInfo, type SceneOptions } from './OfficeScene';
 
 export interface OfficeController {
   setModel(model: OfficeModel, events: OfficeEvent[]): void;
-  setNight(night: boolean): void;
+  setAmbient(a: Ambient): void;
   zoomBy(factor: number): void;
   resetView(): void;
   follow(id: string | null): void;
@@ -90,7 +90,7 @@ export function createOfficeGame(parent: HTMLElement, o: CreateOptions): OfficeC
 
   return {
     setModel: (model, events) => scene.setModel(model, events),
-    setNight: (night) => run(() => scene.setNight(night)),
+    setAmbient: (a) => run(() => scene.setAmbient(a)),
     zoomBy: (f) => run(() => scene.zoomBy(f)),
     resetView: () => run(() => scene.resetView()),
     follow: (id) => run(() => scene.follow(id)),

@@ -3,7 +3,7 @@
 import clsx from 'clsx';
 import { useHq } from '@/lib/data/store';
 import type { DigestLine } from '@/lib/data/reports';
-import { Avatar } from '../Avatar';
+import { Avatar, portraitUrl } from '../Avatar';
 
 export const usd = (n: number | string | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`;
 
@@ -22,7 +22,7 @@ export function deptLabel(d: string) {
 export function useAgent(id: string | null | undefined) {
   const { idx } = useHq();
   const a = id ? idx.agentById.get(id) : undefined;
-  return { name: a?.name ?? id ?? 'Team', color: a?.avatar?.color ?? '#6D4AFF', department: a?.department ?? '' };
+  return { id: a?.id ?? id ?? null, name: a?.name ?? id ?? 'Team', color: a?.avatar?.color ?? '#6D4AFF', department: a?.department ?? '' };
 }
 
 export function AgentChip({ id, size = 20 }: { id: string | null; size?: number }) {
@@ -30,7 +30,7 @@ export function AgentChip({ id, size = 20 }: { id: string | null; size?: number 
   if (!id) return null;
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px] text-[var(--color-muted)]">
-      {size >= 32 ? <Avatar name={a.name} color={a.color} size={size} /> : (
+      {size >= 32 || portraitUrl(a.id) ? <Avatar id={a.id} name={a.name} color={a.color} size={size} /> : (
         <span aria-hidden className="flex shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
           style={{ width: size, height: size, background: `radial-gradient(circle at 30% 25%, ${a.color}, color-mix(in oklab, ${a.color} 55%, #0b0a1f))` }}>
           {a.name.replace(/[^A-Za-z0-9 ]/g, ' ').trim()[0]?.toUpperCase()}

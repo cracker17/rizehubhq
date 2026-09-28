@@ -24,7 +24,7 @@ export function StandupCard({ report }: { report: ReportRow }) {
   return (
     <article className="item flex min-w-0 flex-col gap-3.5 p-4" style={blocked ? { borderColor: 'color-mix(in oklab, var(--color-danger) 45%, var(--color-line))' } : undefined}>
       <header className="flex items-center gap-3">
-        <Avatar name={a.name} color={a.color} size={40} />
+        <Avatar id={a.id} name={a.name} color={a.color} size={40} />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-medium">{a.name}</h3>
           <p className="truncate text-[13px] text-[var(--color-muted)]">{deptLabel(a.department || 'team')}{spend > 0 ? ` · ${usd(spend)}` : ''}</p>

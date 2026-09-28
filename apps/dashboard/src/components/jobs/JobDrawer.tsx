@@ -44,9 +44,9 @@ export function JobDrawer({ job, now, busy, onClose, onCopy, onApplied, onSkip }
   const applied = ['applied', 'replied', 'interview', 'offer', 'rejected'].includes(job.status);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/55" onClick={onClose}>
+    <div className="glass-scrim fixed inset-0 z-50 flex justify-end" onClick={onClose}>
       <aside role="dialog" aria-modal aria-labelledby="job-title" onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full flex-col border-l border-[var(--color-line)] bg-[var(--color-panel)] shadow-[0_10px_40px_rgba(0,0,0,.5)] sm:max-w-[520px]">
+        className="glass flex h-full w-full flex-col border-y-0 border-r-0 sm:max-w-[520px]">
         <header className="flex items-start gap-3 border-b border-[var(--color-line)] p-4 sm:p-5">
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
@@ -66,12 +66,12 @@ export function JobDrawer({ job, now, busy, onClose, onCopy, onApplied, onSkip }
           <div className="grid grid-cols-2 gap-2">
             {href ? (
               <a href={href} target="_blank" rel="noopener noreferrer nofollow"
-                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] text-sm font-medium hover:border-[var(--color-line-active)]">
+                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[#231f55]/65 text-sm font-medium hover:border-[var(--color-line-active)]">
                 <ExternalLink size={16} aria-hidden /> Open job
               </a>
             ) : <span className="flex h-10 items-center justify-center rounded-xl border border-dashed border-[var(--color-line)] text-sm text-[var(--color-dim)]">No link</span>}
             <button onClick={() => job.draft && onCopy(job.draft)} disabled={!job.draft}
-              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] text-sm font-medium hover:border-[var(--color-line-active)] disabled:opacity-40">
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[#231f55]/65 text-sm font-medium hover:border-[var(--color-line-active)] disabled:opacity-40">
               <Copy size={16} aria-hidden /> Copy draft
             </button>
           </div>
@@ -137,7 +137,7 @@ export function JobDrawer({ job, now, busy, onClose, onCopy, onApplied, onSkip }
               <label className="flex items-center gap-2 text-[13px] text-[var(--color-muted)]">
                 Follow up in
                 <select value={days} onChange={(e) => setDays(Number(e.target.value))}
-                  className="h-9 rounded-lg border border-[var(--color-line)] bg-[var(--color-panel-2)] px-2 text-sm text-white outline-none focus:border-[var(--color-line-active)]">
+                  className="h-9 rounded-lg border border-[var(--color-line)] bg-[#231f55]/65 px-2 text-sm text-white outline-none focus:border-[var(--color-line-active)]">
                   {[3, 5, 7, 10, 14].map((d) => <option key={d} value={d}>{d} days</option>)}
                 </select>
               </label>

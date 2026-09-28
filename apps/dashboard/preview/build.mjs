@@ -26,10 +26,7 @@ const css = fs.readdirSync(cssDir).filter((f) => f.endsWith('.css')).map((f) => 
 fs.writeFileSync(path.join(out, 'office.css'), css);
 fs.mkdirSync(path.join(out, 'office'), { recursive: true });
 for (const f of ['office-bg.webp', 'manifest.json']) fs.copyFileSync(path.join(app, 'public/office', f), path.join(out, 'office', f));
-fs.cpSync(path.join(app, 'public/office/sprites'), path.join(out, 'office/sprites'), { recursive: true });
-fs.mkdirSync(path.join(out, 'office'), { recursive: true });
-for (const f of ['office-bg.webp', 'manifest.json']) fs.copyFileSync(path.join(app, 'public/office', f), path.join(out, 'office', f));
-fs.cpSync(path.join(app, 'public/office/sprites'), path.join(out, 'office/sprites'), { recursive: true });
+for (const d of ['sprites', 'furniture', 'portraits']) fs.cpSync(path.join(app, 'public/office', d), path.join(out, 'office', d), { recursive: true });
 fs.writeFileSync(path.join(out, 'index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RizeHub HQ Office</title>

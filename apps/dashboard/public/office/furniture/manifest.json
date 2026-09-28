@@ -1,0 +1,190 @@
+{
+ "version": 1,
+ "notes": "Sheared furniture sprites (build_furniture.py). ax/ay = floor anchor in texture px; W/D = footprint in grid tiles.",
+ "items": {
+  "desk_dual": {
+   "src": "/office/furniture/desk_dual.webp",
+   "w": 270,
+   "h": 365,
+   "ax": 167.56,
+   "ay": 327.43,
+   "W": 2.069,
+   "D": 1.188,
+   "screens": [
+    [
+     [
+      77.4,
+      30.75
+     ],
+     [
+      154.8,
+      65.38
+     ],
+     [
+      154.8,
+      128.22
+     ],
+     [
+      77.4,
+      91.92
+     ]
+    ],
+    [
+     [
+      161.1,
+      68.64
+     ],
+     [
+      236.7,
+      101.86
+     ],
+     [
+      235.8,
+      165.67
+     ],
+     [
+      161.1,
+      132.32
+     ]
+    ]
+   ]
+  },
+  "desk_single": {
+   "src": "/office/furniture/desk_single.webp",
+   "w": 270,
+   "h": 365,
+   "ax": 161.01,
+   "ay": 330.08,
+   "W": 1.988,
+   "D": 1.263,
+   "screens": [
+    [
+     [
+      92.7,
+      25.97
+     ],
+     [
+      204.3,
+      76.49
+     ],
+     [
+      203.4,
+      151.2
+     ],
+     [
+      91.8,
+      99.84
+     ]
+    ]
+   ]
+  },
+  "desk_design": {
+   "src": "/office/furniture/desk_design.webp",
+   "w": 264,
+   "h": 365,
+   "ax": 162.17,
+   "ay": 329.11,
+   "W": 1.969,
+   "D": 1.176
+  },
+  "desk_qa": {
+   "src": "/office/furniture/desk_qa.webp",
+   "w": 324,
+   "h": 410,
+   "ax": 216.57,
+   "ay": 365.81,
+   "W": 2.649,
+   "D": 1.249
+  },
+  "desk_exec": {
+   "src": "/office/furniture/desk_exec.webp",
+   "w": 288,
+   "h": 367,
+   "ax": 179.52,
+   "ay": 330.0,
+   "W": 2.205,
+   "D": 1.256
+  },
+  "chair_ur": {
+   "src": "/office/furniture/chair_ur.webp",
+   "w": 103,
+   "h": 161,
+   "ax": 41.95,
+   "ay": 150.03,
+   "W": 0.513,
+   "D": 0.736
+  },
+  "chair_dl": {
+   "src": "/office/furniture/chair_dl.webp",
+   "w": 93,
+   "h": 160,
+   "ax": 48.84,
+   "ay": 148.27,
+   "W": 0.598,
+   "D": 0.523
+  },
+  "chair_dr": {
+   "src": "/office/furniture/chair_dr.webp",
+   "w": 91,
+   "h": 160,
+   "ax": 38.62,
+   "ay": 149.0,
+   "W": 0.477,
+   "D": 0.621
+  },
+  "treadmill": {
+   "src": "/office/furniture/treadmill.webp",
+   "w": 192,
+   "h": 245,
+   "ax": 62.43,
+   "ay": 227.83,
+   "W": 0.756,
+   "D": 1.587
+  },
+  "dumbbell_rack": {
+   "src": "/office/furniture/dumbbell_rack.webp",
+   "w": 133,
+   "h": 177,
+   "ax": 82.24,
+   "ay": 157.16,
+   "W": 1.01,
+   "D": 0.571
+  },
+  "bench": {
+   "src": "/office/furniture/bench.webp",
+   "w": 145,
+   "h": 189,
+   "ax": 35.85,
+   "ay": 182.24,
+   "W": 0.431,
+   "D": 1.418
+  },
+  "bike": {
+   "src": "/office/furniture/bike.webp",
+   "w": 134,
+   "h": 187,
+   "ax": 51.72,
+   "ay": 177.37,
+   "W": 0.639,
+   "D": 1.062
+  },
+  "yoga_mat": {
+   "src": "/office/furniture/yoga_mat.webp",
+   "w": 176,
+   "h": 148,
+   "ax": 115.73,
+   "ay": 128.94,
+   "W": 1.423,
+   "D": 0.768
+  },
+  "plant": {
+   "src": "/office/furniture/plant.webp",
+   "w": 106,
+   "h": 156,
+   "ax": 58.51,
+   "ay": 144.95,
+   "W": 0.717,
+   "D": 0.596
+  }
+ }
+}

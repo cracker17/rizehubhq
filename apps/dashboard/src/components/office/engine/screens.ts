@@ -1,0 +1,278 @@
+// Live monitors: every assigned desk's screens show a small picture of the agent's actual work (the
+// task they are on, its progress, the kind of app they use for it), redrawn a couple of times a second.
+// Each screen is its own little canvas mapped onto the monitor (affine: the monitors are parallelograms
+// in the picture) and sorted just in front of its desk, so a seated person's head still covers it.
+import * as Phaser from 'phaser';
+import { LAYOUT, PROJ } from '../logic/layout';
+import type { OfficeMap } from '../logic/map';
+import type { ScreenApp } from '../logic/director';
+import type { Pt } from '../logic/iso';
+import type { FurnitureLayer } from './furniture';
+
+const S = LAYOUT.image.scale;
+const RES = 2; // canvas px per world px (crisp when zoomed in)
+const CW = 160; // logical screen content size
+const CH = 100;
+
+export interface ScreenInfo {
+  app: ScreenApp; title: string; progress?: number; color: string; name: string;
+  /** Real screen content from agent_screens (text of the draft / code, current step, deliverable image). */
+  content?: string | null; note?: string | null; image?: string | null;
+}
+
+// Deliverable images (agent_screens.image_url), loaded CORS-clean so they can be drawn into the canvas.
+const images = new Map<string, HTMLImageElement | null>();
+function imageFor(url: string | null | undefined): HTMLImageElement | null {
+  if (!url || typeof Image === 'undefined') return null;
+  if (images.has(url)) { const im = images.get(url)!; return im && im.complete && im.naturalWidth ? im : null; }
+  const im = new Image();
+  im.crossOrigin = 'anonymous';
+  im.onerror = () => images.set(url, null);
+  im.src = url;
+  images.set(url, im);
+  return null;
+}
+
+/** One canvas per desk (all its monitors); drawn as slices matching the desk's own slices. */
+interface Slot { key: string; agentId: string; quads: Pt[][]; x0: number; y0: number; tex: Phaser.Textures.CanvasTexture; imgs: Phaser.GameObjects.Image[] }
+
+const hashStr = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+
+export class ScreenLayer {
+  private slots: Slot[] = [];
+  private info = new Map<string, ScreenInfo>();
+  private last = 0;
+
+  constructor(private scene: Phaser.Scene, private furniture: FurnitureLayer) {}
+
+  setMap(map: OfficeMap) {
+    this.clear();
+    for (const d of map.desks) {
+      const placed = d.deskId ? this.furniture.placed.get(d.deskId) : undefined;
+      if (placed?.item.screens) {
+        // Same footprint and slicing as the desk sprite: each monitor column sorts exactly like the desk under it.
+        const { origin, item } = placed;
+        const key = `screen:${d.agentId}`;
+        const tex = this.makeTex(key, item.w, item.h);
+        if (!tex) continue;
+        const imgs = placed.slices.map((sl) => this.scene.add.image(origin.x, origin.y, key).setOrigin(0, 0).setScale(1 / RES)
+          .setCrop(sl.cx * RES, 0, sl.w * RES, item.h * RES).setDepth(sl.depth + 0.05));
+        const quads = (item.screens ?? []).map((q) => q.map(([x, y]) => ({ x: origin.x + x, y: origin.y + y })));
+        this.slots.push({ key, agentId: d.agentId, quads, x0: origin.x, y0: origin.y, tex, imgs });
+      } else if (d.screens.length) {
+        // Painted monitors: one canvas over their bounding box, just behind the person sitting there.
+        const quads = d.screens.map((q) => q.map((p) => ({ x: p.x * S, y: p.y * S })));
+        const all = quads.flat();
+        const x0 = Math.floor(Math.min(...all.map((p) => p.x))); const x1 = Math.ceil(Math.max(...all.map((p) => p.x)));
+        const y0 = Math.floor(Math.min(...all.map((p) => p.y))); const y1 = Math.ceil(Math.max(...all.map((p) => p.y)));
+        const key = `screen:${d.agentId}`;
+        const tex = this.makeTex(key, x1 - x0, y1 - y0);
+        if (!tex) continue;
+        const img = this.scene.add.image(x0, y0, key).setOrigin(0, 0).setScale(1 / RES).setDepth(PROJ_Y(d.x, d.y) - 1);
+        this.slots.push({ key, agentId: d.agentId, quads, x0, y0, tex, imgs: [img] });
+      }
+    }
+    this.last = 0;
+  }
+
+  private makeTex(key: string, w: number, h: number) {
+    if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
+    return this.scene.textures.createCanvas(key, Math.max(2, Math.ceil(w * RES)), Math.max(2, Math.ceil(h * RES)));
+  }
+
+  private clear() {
+    this.slots.forEach((s) => { s.imgs.forEach((i) => i.destroy()); this.scene.textures.remove(s.key); });
+    this.slots = [];
+  }
+
+  setInfo(agentId: string, info: ScreenInfo) { this.info.set(agentId, info); }
+
+  update(t: number) {
+    if (t - this.last < 0.45) return;
+    this.last = t;
+    for (const s of this.slots) this.draw(s, t);
+  }
+
+  private draw(s: Slot, t: number) {
+    const ctx = s.tex.getContext();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, s.tex.width, s.tex.height);
+    const info = this.info.get(s.agentId);
+    if (info) {
+      s.quads.forEach((quad, i) => {
+        // map the content rect (0..CW, 0..CH) onto the monitor: affine from its TL, TR, BL corners
+        const [tl, tr, , bl] = quad.map((p) => ({ x: (p.x - s.x0) * RES, y: (p.y - s.y0) * RES }));
+        ctx.save();
+        ctx.setTransform((tr.x - tl.x) / CW, (tr.y - tl.y) / CW, (bl.x - tl.x) / CH, (bl.y - tl.y) / CH, tl.x, tl.y);
+        ctx.beginPath(); ctx.rect(0, 0, CW, CH); ctx.clip();
+        drawApp(ctx, info, t, i, s.quads.length, s.agentId);
+        ctx.restore();
+      });
+    }
+    s.tex.refresh();
+  }
+
+  destroy() { this.clear(); }
+}
+// Seat tile → world y (used to sort painted monitors behind their seated user).
+function PROJ_Y(tx: number, ty: number) { return PROJ.toImage(tx, ty).y * S; }
+
+// ---------------------------------------------------------------- the pictures on the screens
+function bar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, c: string) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+
+function text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, color: string, maxW: number, weight = 600) {
+  ctx.fillStyle = color;
+  ctx.font = `${weight} ${size}px ui-sans-serif, system-ui, sans-serif`;
+  let str = s;
+  while (str.length > 3 && ctx.measureText(str).width > maxW) str = `${str.slice(0, -2)}…`;
+  ctx.fillText(str, x, y);
+}
+
+function progressBar(ctx: CanvasRenderingContext2D, p: number | undefined, y: number, color: string) {
+  if (p === undefined) return;
+  bar(ctx, 8, y, CW - 16, 4, 'rgba(255,255,255,.15)');
+  bar(ctx, 8, y, (CW - 16) * Math.max(0.03, Math.min(1, p / 100)), 4, color);
+}
+
+function drawApp(ctx: CanvasRenderingContext2D, info: ScreenInfo, t: number, index: number, count: number, agentId: string) {
+  const seed = hashStr(agentId + info.title);
+  const rnd = (i: number) => ((Math.sin(seed * 0.001 + i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+  const app = info.app;
+  if (app === 'off') { bar(ctx, 0, 0, CW, CH, '#07080c'); return; }
+  if (app === 'screensaver') {
+    const g = ctx.createLinearGradient(0, 0, CW, CH);
+    g.addColorStop(0, '#1d1848'); g.addColorStop(1, '#3b2f7a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
+    const x = 30 + Math.sin(t * 0.4 + index) * 40 + 40; const y = 50 + Math.cos(t * 0.33 + index) * 25;
+    text(ctx, 'RizeHub', x - 30, y, 16, 'rgba(255,255,255,.75)', 120, 800);
+    return;
+  }
+  // A second monitor shows the "result" side (preview / tests / chart) of the same work.
+  const side = count > 1 && index === count - 1;
+  const title = info.title || 'Working';
+  const lines = (info.content ?? '').split(/\r?\n/).map((l) => l.replace(/\t/g, '  ')).filter((l, i, a) => l.trim() || (i > 0 && a[i - 1].trim()));
+  const img = imageFor(info.image);
+  if (img && (app === 'design' || app === 'browser' || side)) {
+    // The actual deliverable (a design, a page screenshot…), letterboxed.
+    bar(ctx, 0, 0, CW, CH, '#101218');
+    const k = Math.min(CW / img.naturalWidth, (CH - (info.note ? 12 : 0)) / img.naturalHeight);
+    const w = img.naturalWidth * k; const h = img.naturalHeight * k;
+    ctx.drawImage(img, (CW - w) / 2, (CH - (info.note ? 12 : 0) - h) / 2, w, h);
+    if (info.note) { bar(ctx, 0, CH - 12, CW, 12, 'rgba(0,0,0,.72)'); text(ctx, info.note, 4, CH - 3.5, 7, '#fff', CW - 8, 600); }
+    return;
+  }
+  switch (app) {
+    case 'editor': {
+      if (side) { // live preview of the page being built
+        bar(ctx, 0, 0, CW, CH, '#f4f6fb'); bar(ctx, 0, 0, CW, 12, '#dfe3ec');
+        [0, 1, 2].forEach((i) => bar(ctx, 6 + i * 7, 4, 4, 4, ['#ff5f57', '#febc2e', '#28c840'][i]));
+        bar(ctx, 8, 18, CW - 16, 30, info.color); text(ctx, title, 12, 37, 10, '#fff', CW - 24, 800);
+        for (let i = 0; i < 3; i++) { bar(ctx, 8 + i * 49, 54, 44, 30, '#e3e8f2'); bar(ctx, 12 + i * 49, 76, 30, 4, '#b8c1d3'); }
+        progressBar(ctx, info.progress, CH - 8, '#39d98a');
+        return;
+      }
+      bar(ctx, 0, 0, CW, CH, '#11151f'); bar(ctx, 0, 0, CW, 11, '#1b2130');
+      text(ctx, `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 22)}.tsx`, 6, 8.5, 7, '#9fb3d9', CW - 12, 500);
+      if (lines.length) {
+        ctx.font = '500 6.4px ui-monospace, SFMono-Regular, Menlo, monospace';
+        const start = lines.length > 11 ? Math.floor(t * 0.8) % (lines.length - 10) : 0;
+        for (let i = 0; i < 11 && start + i < lines.length; i++) {
+          const y = 20 + i * 7.6;
+          ctx.fillStyle = '#4d5873'; ctx.fillText(String(start + i + 1), 3, y + 3);
+          ctx.fillStyle = ['#c3e88d', '#89ddff', '#e6edf7', '#ffcb6b'][(start + i) % 4];
+          ctx.fillText(lines[start + i].slice(0, 44), 16, y + 3);
+        }
+        if (info.note) text(ctx, info.note, 6, CH - 10, 6, '#9fb3d9', CW - 12, 500);
+        progressBar(ctx, info.progress, CH - 6, '#39d98a');
+        return;
+      }
+      const scroll = Math.floor(t * 1.4) % 12;
+      for (let i = 0; i < 11; i++) {
+        const k = i + scroll; const y = 17 + i * 7.6;
+        text(ctx, String(k + 1), 3, y + 3, 5.5, '#4d5873', 12, 500);
+        const ind = (Math.floor(rnd(k) * 3)) * 6;
+        const w1 = 12 + rnd(k + 1) * 30; const w2 = 10 + rnd(k + 2) * 50;
+        bar(ctx, 16 + ind, y, w1, 3.4, ['#c792ea', '#82aaff', '#f78c6c'][k % 3]);
+        bar(ctx, 20 + ind + w1, y, w2, 3.4, ['#c3e88d', '#89ddff', '#ffcb6b'][(k + 1) % 3]);
+      }
+      if (Math.floor(t * 2) % 2) bar(ctx, 60, 17 + 10 * 7.6, 1.5, 5, '#fff');
+      progressBar(ctx, info.progress, CH - 6, '#39d98a');
+      return;
+    }
+    case 'design': {
+      bar(ctx, 0, 0, CW, CH, '#2a2b31'); bar(ctx, 0, 0, 14, CH, '#1f2025'); bar(ctx, CW - 26, 0, 26, CH, '#1f2025');
+      bar(ctx, 20, 8, CW - 52, CH - 16, '#f7f3ea');
+      ctx.fillStyle = info.color; ctx.beginPath(); ctx.arc(52 + Math.sin(t * 0.6) * 4, 40, 16, 0, Math.PI * 2); ctx.fill();
+      bar(ctx, 76, 26, 40, 8, '#1e2530'); bar(ctx, 76, 38, 30, 5, '#8a93a3');
+      bar(ctx, 30, 62, CW - 72, 14, '#ffd166'); text(ctx, title, 34, 72, 7.5, '#1e2530', CW - 80, 800);
+      ['#ff6b6b', '#ffd166', '#06d6a0', '#118ab2', info.color].forEach((c, i) => bar(ctx, CW - 21, 8 + i * 12, 16, 9, c));
+      progressBar(ctx, info.progress, CH - 5, '#ff8fb1');
+      return;
+    }
+    case 'leads':
+    case 'sheet': {
+      bar(ctx, 0, 0, CW, CH, '#ffffff'); bar(ctx, 0, 0, CW, 13, app === 'leads' ? '#1f9d6b' : '#2563eb');
+      text(ctx, title, 5, 9.5, 7.5, '#fff', CW - 10, 800);
+      const cols = [8, 62, 108];
+      ['Company', 'Stage', 'Next'].forEach((h, i) => text(ctx, h, cols[i], 22, 6.5, '#475569', 50, 800));
+      const stages = ['New', 'Researched', 'Contacted', 'Replied', 'Proposal'];
+      for (let r = 0; r < 7; r++) {
+        const y = 26 + r * 9.5;
+        bar(ctx, 4, y, CW - 8, 0.6, '#e2e8f0');
+        bar(ctx, cols[0], y + 3, 26 + rnd(r) * 22, 3.2, '#334155');
+        const st = stages[Math.floor(rnd(r + 9) * stages.length)];
+        text(ctx, st, cols[1], y + 7.2, 6, ['#64748b', '#2563eb', '#7c3aed', '#16a34a', '#b45309'][stages.indexOf(st)], 44, 700);
+        bar(ctx, cols[2], y + 3, 18 + rnd(r + 4) * 20, 3.2, '#94a3b8');
+      }
+      if (Math.floor(t) % 3 === 0) bar(ctx, 4, 26 + (Math.floor(t) % 7) * 9.5, CW - 8, 9, 'rgba(37,99,235,.10)');
+      return;
+    }
+    case 'review': {
+      bar(ctx, 0, 0, CW, CH, '#0f1720');
+      text(ctx, side ? 'Checks' : `QA · ${title}`, 6, 11, 8, '#e2f7ec', CW - 12, 800);
+      const n = 7;
+      const done = Math.floor((t * 0.8) % (n + 3));
+      for (let i = 0; i < n; i++) {
+        const y = 20 + i * 10.5;
+        const state = i < done ? (rnd(i + 3) < 0.86 ? 'ok' : 'x') : i === done ? 'run' : 'wait';
+        const c = state === 'ok' ? '#39d98a' : state === 'x' ? '#ff6b6b' : state === 'run' ? '#ffd166' : '#3b4a5a';
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(10, y + 3, 3, 0, Math.PI * 2); ctx.fill();
+        bar(ctx, 18, y + 1.5, 40 + rnd(i) * 70, 3.4, state === 'wait' ? '#2b3746' : '#a9b8c9');
+      }
+      progressBar(ctx, info.progress, CH - 6, '#39d98a');
+      return;
+    }
+    case 'browser': {
+      bar(ctx, 0, 0, CW, CH, '#f8fafc'); bar(ctx, 0, 0, CW, 12, '#e2e8f0'); bar(ctx, 20, 3, CW - 40, 6, '#ffffff');
+      text(ctx, 'rizehub.ph', 24, 8, 5.5, '#64748b', 80, 500);
+      bar(ctx, 8, 18, CW - 16, 26, info.color); text(ctx, title, 12, 34, 9, '#fff', CW - 24, 800);
+      for (let i = 0; i < 4; i++) bar(ctx, 8, 52 + i * 9, 60 + rnd(i) * 80, 4, '#cbd5e1');
+      return;
+    }
+    default: { // doc
+      bar(ctx, 0, 0, CW, CH, '#eceff4'); bar(ctx, 20, 4, CW - 40, CH, '#ffffff');
+      text(ctx, title, 26, 17, 9, '#111827', CW - 52, 800);
+      if (lines.length) {
+        ctx.font = '500 6px ui-serif, Georgia, serif'; ctx.fillStyle = '#374151';
+        const words = lines.join(' ').split(/\s+/);
+        const rows: string[] = []; let row = '';
+        for (const w of words) { const nx = row ? `${row} ${w}` : w; if (ctx.measureText(nx).width > CW - 56) { rows.push(row); row = w; } else row = nx; if (rows.length > 40) break; }
+        if (row) rows.push(row);
+        const start = rows.length > 9 ? Math.floor(t * 0.5) % (rows.length - 8) : 0;
+        rows.slice(start, start + 9).forEach((r, i) => ctx.fillText(r, 26, 29 + i * 7.4));
+        if (info.note) text(ctx, info.note, 26, CH - 10, 6, '#6b7280', CW - 52, 600);
+        progressBar(ctx, info.progress, CH - 6, info.color);
+        return;
+      }
+      const nLines = 10;
+      const typed = (t * 3) % (nLines * 3);
+      for (let i = 0; i < nLines; i++) {
+        const w = (i % 4 === 3 ? 50 : 95) * (0.7 + rnd(i) * 0.3);
+        const shown = Math.min(1, Math.max(0, typed / 3 - i));
+        if (shown > 0) bar(ctx, 26, 25 + i * 7, w * shown, 3, '#9ca3af');
+      }
+      if (Math.floor(t * 2) % 2) { const i = Math.min(nLines - 1, Math.floor(typed / 3)); bar(ctx, 27 + 95 * 0.8, 24 + i * 7, 1, 5, '#111827'); }
+      progressBar(ctx, info.progress, CH - 6, info.color);
+    }
+  }
+}

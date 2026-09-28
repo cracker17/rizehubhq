@@ -51,7 +51,7 @@ function PlanDetail({ ap }: { ap: ApprovalRow }) {
               return (
                 <tr key={t.key} className="border-t border-[var(--color-line)] align-top">
                   <td className="py-3 pr-3">
-                    <span className="flex items-center gap-2"><Avatar name={a?.name ?? t.agent_id} color={a?.avatar?.color ?? '#6D4AFF'} size={28} /><span className="min-w-0 leading-snug">{a?.name ?? t.agent_id}</span></span>
+                    <span className="flex items-center gap-2"><Avatar id={t.agent_id} name={a?.name ?? t.agent_id} color={a?.avatar?.color ?? '#6D4AFF'} size={28} /><span className="min-w-0 leading-snug">{a?.name ?? t.agent_id}</span></span>
                   </td>
                   <td className="py-3 pr-3"><p className="font-medium">{t.title}</p><p className="text-xs text-[var(--color-muted)]">{t.work_type}</p></td>
                   <td className="py-3 pr-3 text-[var(--color-muted)]">{t.depends_on?.length ? t.depends_on.map(titleOf).join(', ') : '—'}</td>
@@ -67,7 +67,7 @@ function PlanDetail({ ap }: { ap: ApprovalRow }) {
             return (
               <li key={t.key} className="rounded-xl border border-[var(--color-line)] p-3">
                 <div className="flex items-center gap-2.5">
-                  <Avatar name={a?.name ?? t.agent_id} color={a?.avatar?.color ?? '#6D4AFF'} size={30} />
+                  <Avatar id={t.agent_id} name={a?.name ?? t.agent_id} color={a?.avatar?.color ?? '#6D4AFF'} size={30} />
                   <div className="min-w-0">
                     <p className="text-sm font-medium leading-snug">{t.title}</p>
                     <p className="text-xs text-[var(--color-muted)]">{a?.name ?? t.agent_id} · {t.work_type}</p>

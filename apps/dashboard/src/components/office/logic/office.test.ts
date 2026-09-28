@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { OFFICE, assignmentsFor, buildOfficeMap, deskFor } from './map';
 import { findPath, nearestNode } from './pathfinding';
+import { ambientAt, manilaMinutes } from './ambient';
 import { LAYOUT, PROJ } from './layout';
 import { assignSpots, partnerSpot } from './spots';
 import { createMotion, setGoal, tick, trigger, isAtGoal, MICRO_MAX, type Goal, type Motion } from './motion';
@@ -42,11 +43,11 @@ test('map: the six agents sit where the brief says (seat ids from layout.json)',
 
 test('map: rooms from the reference, spare desks stay as furniture, a new hire gets a desk by seat id', () => {
   const rooms = OFFICE.rooms.map((r) => r.id).sort();
-  assert.deepEqual(rooms, ['boardroom', 'ceo', 'coffee', 'design', 'dev', 'game', 'growth', 'lobby', 'lounge', 'qa_lab'].sort());
+  assert.deepEqual(rooms, ['boardroom', 'ceo', 'coffee', 'design', 'dev', 'game', 'growth', 'gym', 'lobby', 'lounge', 'qa_lab'].sort());
   const count = (room: string) => OFFICE.seats.filter((s) => s.room === room && s.kind !== 'board' && s.kind !== 'ceo').length;
   assert.equal(count('dev'), 4);
   assert.equal(count('design'), 2);
-  assert.ok(count('growth') >= 4);
+  assert.equal(count('growth'), 2);
   assert.equal(count('qa_lab'), 2);
   // agents.desk.id overrides the default (and frees the old owner's seat)
   const a = assignmentsFor([{ id: 'seo', desk: { id: 'dev-2' } }, { id: 'web-dev', desk: { id: 'dev-2' } }]);
@@ -58,7 +59,7 @@ test('map: rooms from the reference, spare desks stay as furniture, a new hire g
 });
 
 test('map: required spot kinds exist (pairs come in twos)', () => {
-  for (const k of ['coffee', 'lounge_sofa', 'lobby', 'ping_pong', 'foosball', 'chat', 'boardroom', 'boardroom_head', 'ceo'] as const) {
+  for (const k of ['coffee', 'lounge_sofa', 'lobby', 'ping_pong', 'foosball', 'chat', 'gym', 'boardroom', 'boardroom_head', 'ceo'] as const) {
     assert.ok(OFFICE.spots.some((s) => s.kind === k), k);
   }
   const pairs = new Map<string, number>();
@@ -94,7 +95,7 @@ test('pathfinding: paths start and end exactly on the points and follow graph ed
   const inner = path.slice(1, -1).map(isNode);
   assert.ok(inner.every((i) => i >= 0), 'inner points are graph nodes');
   for (let i = 1; i < inner.length; i++) assert.ok(OFFICE.graph.adj[inner[i - 1]].includes(inner[i]), 'consecutive nodes are connected');
-  assert.ok(['gs-a', 'gs-b'].includes(nearestNode(OFFICE, desk).id));
+  assert.ok(['gs-1', 'gs-2'].includes(nearestNode(OFFICE, desk).id));
 });
 
 // ---------------------------------------------------------------- spots
@@ -291,8 +292,32 @@ test('sprites: pose follows the motion (walk frames, back views, seated, coffee)
   assert.equal(pickPose(m, has).flip, true);
   m.phase = 'standing'; m.loop = 'coffee'; m.facing = 'left';
   assert.equal(pickPose(m, has).pose, 'coffee');
+  // sofa facing away from us: the back view (if the character has it), else the front sofa pose mirrored
   m.loop = 'sofa'; m.phase = 'seated'; m.facing = 'up';
-  assert.deepEqual(pickPose(m, has), { pose: 'sofa', flip: true });
+  assert.deepEqual(pickPose(m, has), { pose: 'sofa_back', flip: false });
+  assert.deepEqual(pickPose(m, (p) => p !== 'sofa_back'), { pose: 'sofa', flip: true });
+  // far side of the game tables and the gym
+  m.phase = 'standing'; m.loop = 'pingpong'; m.facing = 'up';
+  assert.equal(pickPose(m, has).pose, 'pingpong');
+  m.facing = 'down';
+  assert.equal(pickPose(m, has).pose, 'action');
+  m.loop = 'curl';
+  assert.equal(pickPose(m, has).pose, 'curl');
+  m.loop = 'treadmill'; m.facing = 'up'; m.at = 'spot:gym-tread';
+  const run = new Set<string>();
+  for (let i = 0; i < 12; i++) { m.clock = i * 0.07; run.add(pickPose(m, has).pose); }
+  assert.deepEqual([...run].sort(), ['stand_back', 'walk_back']);
+});
+
+test('ambient: the office light follows the Manila clock', () => {
+  const noon = ambientAt(12 * 60); const midnight = ambientAt(0); const sunset = ambientAt(17 * 60 + 40);
+  assert.equal(noon.phase, 'day'); assert.equal(midnight.phase, 'night'); assert.equal(sunset.phase, 'golden');
+  assert.ok(noon.alpha < 0.05 && noon.lamps === 0);
+  assert.ok(midnight.alpha > 0.4 && midnight.lamps > 0.5);
+  assert.ok(sunset.alpha > noon.alpha && sunset.alpha < midnight.alpha);
+  // continuous: no jumps between neighbouring minutes
+  for (let t = 0; t < 1440; t++) assert.ok(Math.abs(ambientAt(t + 1).alpha - ambientAt(t).alpha) < 0.02);
+  assert.equal(manilaMinutes(new Date('2026-09-28T04:30:00Z')), 12 * 60 + 30);
 });
 
 // ---------------------------------------------------------------- demo simulator
@@ -333,4 +358,18 @@ test('demo simulator: overlay survives a new base snapshot (CEO actions still ap
   const base2: HqSnapshot = { ...base, approvals: base.approvals.map((a) => ({ ...a, status: 'approved' as const })) };
   const view = applyOverlay(base2, overlay);
   assert.ok(view.approvals.every((a) => a.status === 'approved'));
+});
+
+test('gym: reachable from the lobby, equipment spots have their loops', () => {
+  const tread = OFFICE.spots.find((s) => s.id === 'gym-tread')!;
+  const curl = OFFICE.spots.find((s) => s.id === 'gym-curl')!;
+  assert.equal(tread.loop, 'treadmill');
+  assert.equal(curl.loop, 'curl');
+  const from = OFFICE.entrance;
+  assert.ok(findPath(OFFICE, from, tread), 'gym is reachable from the entrance');
+  assert.ok(findPath(OFFICE, deskFor(OFFICE, 'web-dev')!, curl), 'gym is reachable from the Dev Team');
+  const out = assignSpots(OFFICE, [{ id: 'a', activity: 'gym' }, { id: 'b', activity: 'gym' }, { id: 'c', activity: 'gym' }]);
+  assert.equal(OFFICE.spots.find((s) => s.id === out.get('a'))!.kind, 'gym');
+  assert.equal(OFFICE.spots.find((s) => s.id === out.get('b'))!.kind, 'gym');
+  assert.notEqual(OFFICE.spots.find((s) => s.id === out.get('c'))!.kind, 'gym'); // two machines: the third falls back
 });

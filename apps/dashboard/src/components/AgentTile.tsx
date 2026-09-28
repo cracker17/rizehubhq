@@ -14,7 +14,7 @@ export function AgentTile({ agent, onOpen }: { agent: Agent; onOpen: (a: Agent) 
   return (
     <button onClick={() => onOpen(agent)} aria-label={`${agent.name}: ${stateText}${line ? `, ${line}` : ''}. Open details`} className="item group flex w-full flex-col gap-3 p-4 text-left transition-colors hover:border-[var(--color-line-active)]">
       <div className="flex items-center gap-3">
-        <Avatar name={agent.name} color={agent.color} status={agent.status} />
+        <Avatar id={agent.id} name={agent.name} color={agent.color} status={agent.status} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-medium">{agent.name}</p>
           <p className="flex items-center gap-1.5 truncate text-[13px]" style={{ color: STATUS_COLOR[agent.status] }}>

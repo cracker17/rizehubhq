@@ -11,6 +11,7 @@ export const IDLE_LABEL: Record<IdleActivity, string> = {
   ping_pong: 'Playing ping-pong',
   foosball: 'Playing foosball',
   chat: 'Chatting',
+  gym: 'Working out in the gym',
 };
 
 const VERBS: [RegExp, string][] = [

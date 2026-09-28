@@ -5,12 +5,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { AlertTriangle, Hand, Hourglass, Maximize2, MessageSquareMore, Minus, Moon, Plus, Scan, Sun } from 'lucide-react';
+import { AlertTriangle, Expand, Hand, Hourglass, Maximize2, MessageSquareMore, Minimize, Minus, Moon, Plus, Scan, Sun, SunMoon, Volume2, VolumeX } from 'lucide-react';
 import type { HqSnapshot } from '@/lib/data/types';
 import { deriveOffice, diffEvents, type AgentView, type OfficeModel } from './logic/director';
 import { LAYOUT, type XY } from './logic/layout';
 import type { OfficeController } from './engine/game';
 import type { FrameInfo } from './engine/OfficeScene';
+import { officeAudio } from './engine/audio';
+import { DAY_LIGHT, NIGHT_LIGHT, ambientAt, manilaMinutes } from './logic/ambient';
 
 const DOT: Record<string, string> = {
   working: '#1f9d6b', idle: '#f5a524', waiting: '#7c5cff', blocked: '#e5484d', offline: '#6e6a9e',
@@ -21,9 +23,10 @@ const WORLD_H = LAYOUT.image.height * S;
 const COMPACT_BELOW = 0.34;
 
 export function manilaNight(d = new Date()) {
-  const h = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Asia/Manila' }).format(d));
-  return h >= 19 || h < 6;
+  const p = ambientAt(manilaMinutes(d)).phase;
+  return p === 'night' || p === 'dusk';
 }
+type LightMode = 'auto' | 'day' | 'night';
 
 /** CSS matrix3d that maps a w×h box onto a quad (world px): used to paint HTML onto the wall screens. */
 export function rectToQuad(w: number, h: number, q: XY[]): string {
@@ -58,8 +61,11 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
   const [model, setModel] = useState<OfficeModel | null>(null);
   const [compact, setCompact] = useState(variant === 'panel');
   const [followId, setFollowId] = useState<string>('');
-  const [night, setNight] = useState<boolean>(() => manilaNight());
-  const [nightManual, setNightManual] = useState(false);
+  const [minute, setMinute] = useState(() => manilaMinutes());
+  const [lightMode, setLightMode] = useState<LightMode>('auto');
+  const [music, setMusic] = useState(() => officeAudio.musicOn);
+  useEffect(() => officeAudio.onChange(setMusic), []);
+  const light = lightMode === 'day' ? DAY_LIGHT : lightMode === 'night' ? NIGHT_LIGHT : ambientAt(minute);
   const [near, setNear] = useState<string | null>(null);
   const [avatar, setAvatar] = useState(false);
   const tagEls = useRef(new Map<string, HTMLElement>());
@@ -69,6 +75,19 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
   const nearRef = useRef<string | null>(null);
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
+  const rootEl = useRef<HTMLDivElement>(null);
+  const [isFs, setIsFs] = useState(false);
+  useEffect(() => {
+    const sync = () => setIsFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+  const toggleFs = useCallback(() => {
+    // Browser full screen (desktop + Android); iOS Safari and some app views don't allow it — the map already fills the window there.
+    const el = variant === 'full' ? document.documentElement : rootEl.current;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else void el?.requestFullscreen?.().catch(() => {});
+  }, [variant]);
 
   // ---- model from data (+ a slow clock so the COO alternates tasks)
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 10_000); return () => clearInterval(t); }, []);
@@ -151,15 +170,11 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
   useEffect(() => {
     if (!ctrl) return;
     if (model) ctrl.setModel(model, []);
-    ctrl.setNight(night);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctrl]);
-  useEffect(() => { ctrl?.setNight(night); }, [ctrl, night]);
-  useEffect(() => {
-    if (nightManual) return;
-    const t = setInterval(() => setNight(manilaNight()), 60_000);
-    return () => clearInterval(t);
-  }, [nightManual]);
+  useEffect(() => { ctrl?.setAmbient({ color: light.color, alpha: light.alpha, lamps: light.lamps }); }, [ctrl, light.color, light.alpha, light.lamps]);
+  // The office light follows the Philippine clock (checked every minute).
+  useEffect(() => { const t = setInterval(() => setMinute(manilaMinutes()), 60_000); return () => clearInterval(t); }, []);
 
   useLayoutEffect(() => {
     for (const [id, el] of tagEls.current) widths.current.set(id, el.offsetWidth + 4);
@@ -170,7 +185,7 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
   const nearAgent = near ? agents.find((a) => a.id === near) : null;
   const pending = useMemo(() => snap.approvals.filter((a) => a.status === 'pending'), [snap.approvals]);
   const board = useMemo(() => salesBoard(snap), [snap]);
-  const today = useMemo(() => todayBoard(snap, pending.length), [snap, pending.length]);
+  const live = useMemo(() => liveBoard(snap, pending.length, now), [snap, pending.length, now]);
 
   const setTag = (id: string) => (el: HTMLElement | null) => { if (el) tagEls.current.set(id, el); else tagEls.current.delete(id); };
   const at = ([x, y]: XY) => ({ left: x * S, top: y * S });
@@ -180,7 +195,7 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
   const mat = LAYOUT.doormat;
 
   return (
-    <div className="relative h-full w-full select-none overflow-hidden bg-[#15131f]">
+    <div ref={rootEl} className="relative h-full w-full select-none overflow-hidden bg-[#15131f]">
       <div ref={host} className="absolute inset-0 touch-none" role="application" aria-label="RizeHub HQ office. Tap a person or their name tag to open their screen and chat." />
 
       {/* world-space overlays (follow the camera) */}
@@ -206,15 +221,8 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
             </div>
           )}
           {tvQuad && (
-            <div className="absolute left-0 top-0 origin-top-left overflow-hidden" style={{ width: 320, height: 200, transform: rectToQuad(320, 200, wq(tvQuad)) }} aria-hidden>
-              <div className="flex h-full w-full flex-col gap-2 bg-gradient-to-br from-[#eaf1ff] to-[#d7e6ff] p-4 font-sans text-[#162033]">
-                <div className="text-[20px] font-bold tracking-tight">RizeHub HQ · Today</div>
-                {today.map((r) => (
-                  <div key={r.label} className="flex items-center justify-between rounded-md bg-white/70 px-3 py-1.5 text-[16px]">
-                    <span className="font-medium">{r.label}</span><span className="font-bold tabular-nums" style={{ color: r.color }}>{r.value}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="absolute left-0 top-0 origin-top-left overflow-hidden" style={{ width: 360, height: 220, transform: rectToQuad(360, 220, wq(tvQuad)) }} aria-hidden>
+              <LiveTv board={live} minute={minute} />
             </div>
           )}
 
@@ -268,7 +276,7 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
       </div>
 
       {/* toolbar */}
-      <div className="absolute right-2 top-2 flex items-center gap-1 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/90 p-1 shadow-lg backdrop-blur sm:right-3 sm:top-3">
+      <div className={clsx('absolute right-2 flex items-center gap-1 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel)]/90 p-1 shadow-lg backdrop-blur sm:right-3', variant === 'full' ? 'top-14' : 'top-2 sm:top-3')}>
         <ToolButton label="Zoom in" onClick={() => ctrl?.zoomBy(1.25)}><Plus size={16} /></ToolButton>
         <ToolButton label="Zoom out" onClick={() => ctrl?.zoomBy(0.8)}><Minus size={16} /></ToolButton>
         <ToolButton label="Reset view" onClick={() => { setFollowId(''); ctrl?.resetView(); }}><Scan size={16} /></ToolButton>
@@ -280,8 +288,16 @@ export default function OfficeMap({ snap, variant, onOpen }: OfficeMapProps) {
           <option value="ceo">You (CEO)</option>
           {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
-        <ToolButton label={night ? 'Switch to day' : 'Switch to night'} onClick={() => { setNightManual(true); setNight((n) => !n); }}>
-          {night ? <Moon size={16} /> : <Sun size={16} />}
+        <ToolButton label={isFs ? 'Exit full screen' : 'Full screen'} onClick={toggleFs}>
+          {isFs ? <Minimize size={16} /> : <Expand size={16} />}
+        </ToolButton>
+        <ToolButton label={music ? 'Mute music' : 'Play music'} onClick={() => officeAudio.setMusic(!music)}>
+          {music ? <Volume2 size={16} /> : <VolumeX size={16} />}
+        </ToolButton>
+        <ToolButton
+          label={lightMode === 'auto' ? `Light follows Philippine time (${light.phase}) · click for day` : lightMode === 'day' ? 'Always day · click for night' : 'Always night · click for Philippine time'}
+          onClick={() => setLightMode((m) => (m === 'auto' ? 'day' : m === 'day' ? 'night' : 'auto'))}>
+          {lightMode === 'auto' ? <SunMoon size={16} /> : lightMode === 'day' ? <Sun size={16} /> : <Moon size={16} />}
         </ToolButton>
         {variant === 'panel' && (
           <Link href="/office" aria-label="Full-screen office" title="Full-screen office"
@@ -334,17 +350,88 @@ export function salesBoard(snap: HqSnapshot) {
   return rows.map((r) => ({ ...r, pct: Math.round((r.value / max) * 100) }));
 }
 
-/** The Boardroom TV: what needs the CEO and what the team is doing right now. */
-export function todayBoard(snap: HqSnapshot, pending: number) {
+/** The Boardroom TV: what needs the CEO, what the team is doing, and the last 7 days of output. */
+export function liveBoard(snap: HqSnapshot, pending: number, nowMs = Date.now()) {
   const working = snap.agents.filter((a) => a.status === 'working').length;
-  const qa = snap.tasks.filter((t) => t.status === 'qa_pending' || t.status === 'qa_reviewing').length;
+  const review = snap.tasks.filter((t) => t.status === 'qa_pending' || t.status === 'qa_reviewing' || t.status === 'awaiting_ceo').length;
   const open = snap.requests.filter((r) => !['done', 'cancelled', 'rejected'].includes(r.status as string)).length;
-  return [
-    { label: 'Waiting for your approval', value: pending, color: pending ? '#7c3aed' : '#1e293b' },
-    { label: 'Agents working', value: working, color: '#15803d' },
-    { label: 'In QA review', value: qa, color: '#b45309' },
-    { label: 'Open requests', value: open, color: '#1e293b' },
-  ];
+  const dayKey = (ms: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(ms);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const ms = nowMs - (6 - i) * 86_400_000;
+    return { key: dayKey(ms), label: new Intl.DateTimeFormat('en-US', { weekday: 'narrow', timeZone: 'Asia/Manila' }).format(ms), done: 0 };
+  });
+  const byKey = new Map(days.map((d) => [d.key, d]));
+  for (const t of snap.tasks) {
+    if (t.status !== 'done' && t.status !== 'awaiting_ceo') continue;
+    const at = t.completed_at ?? t.updated_at;
+    const d = at ? byKey.get(dayKey(Date.parse(at))) : undefined;
+    if (d) d.done++;
+  }
+  const weekAgo = nowMs - 7 * 86_400_000;
+  const reviews = (snap.qaReviews ?? []).filter((r) => Date.parse(r.created_at) >= weekAgo);
+  const passRate = reviews.length ? Math.round((reviews.filter((r) => r.verdict === 'pass').length / reviews.length) * 100) : null;
+  const active = snap.tasks.filter((t) => t.status === 'working');
+  const progress = snap.screens.filter((x) => active.some((t) => t.id === x.task_id) && x.progress != null).map((x) => x.progress as number);
+  const avgProgress = progress.length ? Math.round(progress.reduce((a, b) => a + b, 0) / progress.length) : null;
+  return {
+    kpis: [
+      { label: 'Waiting for you', value: pending, color: '#7c3aed' },
+      { label: 'Agents working', value: working, color: '#15803d' },
+      { label: 'In review', value: review, color: '#b45309' },
+      { label: 'Open requests', value: open, color: '#1d4ed8' },
+    ],
+    days,
+    weekDone: days.reduce((a, d) => a + d.done, 0),
+    passRate,
+    avgProgress,
+  };
+}
+/** Kept for the Grid view / tests: the four headline numbers. */
+export function todayBoard(snap: HqSnapshot, pending: number) {
+  return liveBoard(snap, pending).kpis.map((k) => ({ label: k.label, value: k.value, color: k.color }));
+}
+
+function LiveTv({ board, minute }: { board: ReturnType<typeof liveBoard>; minute: number }) {
+  const max = Math.max(1, ...board.days.map((d) => d.done));
+  const ring = board.passRate ?? board.avgProgress ?? 0;
+  const hh = String(Math.floor(minute / 60)).padStart(2, '0'); const mm = String(minute % 60).padStart(2, '0');
+  return (
+    <div className="flex h-full w-full flex-col gap-2 bg-[#0d1426] p-3 font-sans text-white">
+      <div className="flex items-center justify-between">
+        <span className="text-[17px] font-bold tracking-tight">RizeHub HQ <span className="font-medium text-white/60">· Live</span></span>
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold tabular-nums text-white/70"><span className="h-2 w-2 animate-pulse rounded-full bg-[#34d399]" />{hh}:{mm} PHT</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {board.kpis.map((k) => (
+          <div key={k.label} className="rounded-md bg-white/[0.07] px-1.5 py-1">
+            <div className="text-[22px] font-extrabold leading-none tabular-nums" style={{ color: k.value ? '#fff' : 'rgba(255,255,255,.55)' }}>{k.value}</div>
+            <div className="mt-0.5 flex items-center gap-1 text-[9.5px] font-semibold uppercase leading-tight tracking-wide text-white/65"><span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: k.color }} />{k.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex min-h-0 flex-1 gap-2">
+        <div className="flex min-w-0 flex-1 flex-col rounded-md bg-white/[0.05] px-2 pb-1 pt-1.5">
+          <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wide text-white/60"><span>Tasks done · 7 days</span><span className="tabular-nums text-white">{board.weekDone}</span></div>
+          <div className="mt-1 grid flex-1 grid-cols-7 items-end gap-1">
+            {board.days.map((d, i) => (
+              <div key={d.key} className="flex h-full flex-col justify-end">
+                <div className="rounded-t-[3px]" style={{ height: `${Math.max(4, (d.done / max) * 100)}%`, background: i === 6 ? '#34d399' : '#6366f1' }} />
+                <div className="mt-0.5 text-center text-[9px] font-semibold text-white/55">{d.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex w-[92px] flex-col items-center justify-center rounded-md bg-white/[0.05]">
+          <svg viewBox="0 0 42 42" className="h-[58px] w-[58px] -rotate-90">
+            <circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="5" />
+            <circle cx="21" cy="21" r="16" fill="none" stroke="#34d399" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(ring / 100) * 100.5} 100.5`} />
+          </svg>
+          <div className="-mt-[42px] mb-[22px] text-[13px] font-extrabold tabular-nums">{board.passRate ?? board.avgProgress ?? '–'}{(board.passRate ?? board.avgProgress) !== null ? '%' : ''}</div>
+          <div className="text-center text-[9px] font-semibold uppercase leading-tight tracking-wide text-white/60">{board.passRate !== null ? 'QA pass rate' : 'Avg progress'}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ToolButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {

@@ -40,6 +40,19 @@ body {
   border: 1px solid var(--color-line);
   border-radius: var(--radius-item);
 }
+/* Frosted glass for drawers, dialogs and pop-ups: the page shows through, text stays crisp.
+   Text sits on a tinted, blurred layer with enough opacity for WCAG AA contrast on light ink. */
+.glass {
+  background: color-mix(in oklab, #120f33 68%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  box-shadow: 0 18px 60px rgba(0,0,0,.45), inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+.glass-scrim { background: rgb(8 7 26 / 0.18); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: color-mix(in oklab, #120f33 94%, transparent); }
+}
 .scroll-thin { scrollbar-width: thin; scrollbar-color: var(--color-line) transparent; }
 :focus-visible { outline: 2px solid var(--color-line-active); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

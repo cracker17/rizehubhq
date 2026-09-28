@@ -44,7 +44,7 @@ function Card({ t }: { t: TaskRow }) {
         </div>
       )}
       <div className="mt-2.5 flex items-center gap-2 border-t border-[var(--color-line)] pt-2.5">
-        <Avatar name={agent?.name ?? t.agent_id} color={agent?.avatar?.color ?? '#6D4AFF'} size={22} />
+        <Avatar id={t.agent_id} name={agent?.name ?? t.agent_id} color={agent?.avatar?.color ?? '#6D4AFF'} size={22} />
         <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--color-muted)]">{agent?.name ?? t.agent_id}</span>
         <span className="shrink-0 text-[11px] text-[var(--color-dim)]">{revision ? 'Revision' : STATUS_TEXT[t.status] ?? t.status}</span>
       </div>

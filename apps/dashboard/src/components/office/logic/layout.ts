@@ -9,8 +9,22 @@ import type { Pt } from './iso';
 export type Facing = 'up' | 'down' | 'left' | 'right'; // up = up-right, right = down-right, down = down-left, left = up-left
 export type XY = [number, number];
 
-export interface LayoutDesk { id: string; room: string; at: XY; face: Facing; kind: string; via: string; screens: XY[][] }
-export interface LayoutSpot { id: string; kind: string; at: XY; face: Facing; pose: 'stand' | 'sit'; room: string; via: string; pair?: string }
+export interface LayoutDesk {
+  id: string; room: string; at: XY; face: Facing; kind: string; via: string; screens: XY[][];
+  /** Furniture id of the sprite desk this seat belongs to (its monitors carry the live screens). */
+  desk?: string;
+  /** An animated office chair stands at this seat (painted chairs: false). */
+  chair?: boolean;
+}
+export interface LayoutSpot { id: string; kind: string; at: XY; face: Facing; pose: 'stand' | 'sit'; room: string; via: string; pair?: string; loop?: string }
+/** A sprite from public/office/furniture placed with its floor anchor at `at`. */
+export interface LayoutFurniture { id: string; sprite: string; at: XY; flip?: boolean }
+/** A swinging door: floor edge of the leaf from hinge to free end, leaf height (all 1x picture px). */
+export interface LayoutDoor { id: string; kind: 'glass' | 'wood'; hinge: XY; free: XY; h: number; swing: 1 | -1; opening?: XY[]; painted?: boolean }
+/** A glass wall drawn by the scene (not in the picture): floor line + height. */
+export interface LayoutGlassWall { id: string; base: XY[]; h: number }
+/** A piece of the picture (polygon) redrawn over people standing behind it; `base` is its floor line. */
+export interface LayoutOccluder { id: string; kind: 'glass' | 'solid'; poly: XY[]; base: XY[] }
 export interface LayoutRoom { id: string; name: string; label: XY }
 export interface OfficeLayout {
   version: number;
@@ -25,6 +39,10 @@ export interface OfficeLayout {
   entrance: XY;
   graph: { nodes: Record<string, XY>; edges: [string, string][] };
   wallScreens: { id: string; room: string; quad: XY[] }[];
+  furniture?: LayoutFurniture[];
+  doors?: LayoutDoor[];
+  glassWalls?: LayoutGlassWall[];
+  occluders?: LayoutOccluder[];
 }
 
 export const LAYOUT = raw as unknown as OfficeLayout;

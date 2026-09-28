@@ -59,8 +59,8 @@ export function PrefillRequestDialog({ open, onClose, title, intro, fields, buil
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-4" onClick={onClose}>
-      <div role="dialog" aria-modal aria-labelledby="prefill-title" className="card max-h-[92vh] w-full max-w-xl overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="glass-scrim fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-4" onClick={onClose}>
+      <div role="dialog" aria-modal aria-labelledby="prefill-title" className="glass max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[20px] p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-center justify-between gap-3">
           <h2 id="prefill-title" className="text-lg font-semibold">{title}</h2>
           <button onClick={onClose} aria-label="Close" className="text-[var(--color-muted)] hover:text-white"><X size={20} /></button>

@@ -15,15 +15,21 @@ export interface Room {
 
 export type DeskKind = 'standard' | 'dual' | 'designer' | 'qa' | 'board' | 'ceo';
 /** A seat: (x, y) in tile coordinates is where the person sits, `face` is where they look (the desk). */
-export interface Seat { id: string; x: number; y: number; face: Facing; kind: DeskKind; room: RoomId; via: number; screens: Pt[][] }
+export interface Seat {
+  id: string; x: number; y: number; face: Facing; kind: DeskKind; room: RoomId; via: number; screens: Pt[][];
+  /** Sprite desk (furniture id) whose monitors show this seat's screen. */
+  deskId?: string;
+  /** An animated chair stands here. */
+  chair: boolean;
+}
 /** A seat assigned to an agent. */
 export interface Desk extends Seat { agentId: string }
 
 export type SpotKind =
   | 'coffee' | 'lounge_sofa' | 'lobby' | 'ping_pong' | 'foosball' | 'chat'
-  | 'boardroom' | 'boardroom_head' | 'qa_bench' | 'whiteboard' | 'ceo';
+  | 'boardroom' | 'boardroom_head' | 'qa_bench' | 'whiteboard' | 'ceo' | 'gym';
 export type Pose = 'stand' | 'sit';
-export interface Spot { id: string; kind: SpotKind; x: number; y: number; face: Facing; pose: Pose; pair?: string; room: RoomId; via?: number }
+export interface Spot { id: string; kind: SpotKind; x: number; y: number; face: Facing; pose: Pose; pair?: string; room: RoomId; via?: number; loop?: string }
 
 export interface OfficeMap {
   rooms: Room[];
@@ -69,6 +75,8 @@ export function buildOfficeMap(assign?: Record<string, string>, l: OfficeLayout 
     const s: Seat = {
       id: d.id, x: t.x, y: t.y, face: d.face, kind: seatKind(d.kind), room: d.room, via: node(d.via),
       screens: d.screens.map((q) => q.map(([x, y]) => ({ x, y }))),
+      chair: d.chair ?? false,
+      ...(d.desk ? { deskId: d.desk } : {}),
     };
     joins.set(key(t.x, t.y), s.via);
     return s;
@@ -78,6 +86,7 @@ export function buildOfficeMap(assign?: Record<string, string>, l: OfficeLayout 
     const spot: Spot = {
       id: s.id, kind: s.kind as SpotKind, x: t.x, y: t.y, face: s.face, pose: s.pose, room: s.room, via: node(s.via),
       ...(s.pair ? { pair: s.pair } : {}),
+      ...(s.loop ? { loop: s.loop } : {}),
     };
     joins.set(key(t.x, t.y), spot.via!);
     return spot;

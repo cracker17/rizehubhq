@@ -12,8 +12,8 @@ export function NewRequestDialog({ open, onClose }: { open: boolean; onClose: ()
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center" onClick={onClose}>
-      <div role="dialog" aria-modal aria-labelledby="nr-title" className="card w-full max-w-xl p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="glass-scrim fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center" onClick={onClose}>
+      <div role="dialog" aria-modal aria-labelledby="nr-title" className="glass w-full max-w-xl rounded-[20px] p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h2 id="nr-title" className="text-lg font-semibold">New request</h2>
           <button onClick={onClose} aria-label="Close" className="text-[var(--color-muted)] hover:text-white"><X size={20} /></button>

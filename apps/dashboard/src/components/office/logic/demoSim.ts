@@ -60,7 +60,7 @@ const WORK: Record<string, { title: string; work_type: string; app: string; step
   ],
 };
 const MEETINGS = ['Brisbane Coffee Co onboarding', 'Vinyl Icons Q4 SEO plan', 'LvlUp site refresh', 'IO holiday campaign'];
-const ACTIVITIES: [IdleActivity, number][] = [['coffee', 30], ['lounge_sofa', 20], ['lobby', 15], ['ping_pong', 10], ['foosball', 10], ['chat', 15]];
+const ACTIVITIES: [IdleActivity, number][] = [['coffee', 28], ['lounge_sofa', 18], ['lobby', 12], ['ping_pong', 10], ['foosball', 10], ['chat', 14], ['gym', 10]];
 const PAIRED: IdleActivity[] = ['ping_pong', 'foosball', 'chat'];
 const PROTECTED = new Set(['coo']); // the COO's day is driven by planning, not random breaks
 

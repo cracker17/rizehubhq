@@ -13,7 +13,7 @@ export const LEAD_EMAIL_STATUS = ['draft','pending_approval','approved','sent','
 export const MODEL_ROLES = ['lead','specialist','dev','design','writer','sales','reports','qa','light'] as const;
 /** Where an agent's task loop runs: the worker's AI SDK runner, or a Hermes Agent instance (docs/04). */
 export const AGENT_RUNTIME = ['worker','hermes'] as const;
-export const IDLE_ACTIVITIES = ['coffee','lounge_sofa','lobby','ping_pong','foosball','chat'] as const;
+export const IDLE_ACTIVITIES = ['coffee','lounge_sofa','lobby','ping_pong','foosball','chat','gym'] as const;
 
 export type RequestStatus = (typeof REQUEST_STATUS)[number];
 export type TaskStatus = (typeof TASK_STATUS)[number];

@@ -33,9 +33,9 @@ export function Dialog({ open, onClose, title, children, wide }: { open: boolean
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-4" onClick={onClose}>
+    <div className="glass-scrim fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center sm:p-4" onClick={onClose}>
       <div role="dialog" aria-modal aria-label={title} onClick={(e) => e.stopPropagation()}
-        className={clsx('card scroll-thin max-h-[92vh] w-full overflow-y-auto p-5 sm:p-6', wide ? 'max-w-2xl' : 'max-w-md')}>
+        className={clsx('glass scroll-thin max-h-[92vh] w-full overflow-y-auto rounded-[20px] p-5 sm:p-6', wide ? 'max-w-2xl' : 'max-w-md')}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button onClick={onClose} aria-label="Close" className="text-[var(--color-muted)] hover:text-white"><X size={20} /></button>

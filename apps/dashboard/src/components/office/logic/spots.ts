@@ -8,7 +8,7 @@ export interface IdleAgent { id: string; activity: IdleActivity | null }
 
 const PAIRED: SpotKind[] = ['ping_pong', 'foosball', 'chat'];
 /** Where to send someone when their activity's spots are full (solo spots first). */
-const FALLBACK: SpotKind[] = ['coffee', 'lounge_sofa', 'lobby', 'chat'];
+const FALLBACK: SpotKind[] = ['coffee', 'lounge_sofa', 'lobby', 'chat', 'gym'];
 
 function kindFor(a: IdleActivity | null): SpotKind {
   return (a ?? 'coffee') as SpotKind;

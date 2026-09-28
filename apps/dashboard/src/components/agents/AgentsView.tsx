@@ -48,7 +48,7 @@ function Row({ a }: { a: RosterAgent }) {
     <tr className="border-t border-[var(--color-line)] hover:bg-[var(--color-panel-2)]">
       <td className="py-2.5 pl-4 pr-2">
         <Link href={`/agents/${a.id}`} className="flex items-center gap-3">
-          <Avatar name={a.name} color={a.color} status={status} size={34} />
+          <Avatar id={a.id} name={a.name} color={a.color} status={status} size={34} />
           <span className="min-w-0"><span className="block truncate font-medium">{a.name}</span><span className="block text-xs text-[var(--color-dim)]">{a.id}</span></span>
         </Link>
       </td>
@@ -69,7 +69,7 @@ function MobileCard({ a }: { a: RosterAgent }) {
   return (
     <li>
       <Link href={`/agents/${a.id}`} className="item flex items-center gap-3 p-3">
-        <Avatar name={a.name} color={a.color} status={status} size={40} />
+        <Avatar id={a.id} name={a.name} color={a.color} status={status} size={40} />
         <div className="min-w-0 flex-1">
           <p className="flex items-center justify-between gap-2"><span className="truncate font-medium">{a.name}</span><EnabledToggle on={a.enabled} /></p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-[var(--color-muted)]">{dept(a.department)} · {a.model_role}<StatusBadge status={status} /></p>
@@ -151,7 +151,7 @@ export function AgentDetailView({ detail, error }: { detail: AgentDetail; error?
     <>
       <Link href="/agents" className="inline-flex w-fit items-center gap-1 text-sm text-[var(--color-muted)] hover:text-white"><ArrowLeft size={15} aria-hidden />Agents</Link>
       <div className="flex flex-wrap items-center gap-4">
-        <Avatar name={a.name} color={a.color} status={status} size={56} />
+        <Avatar id={a.id} name={a.name} color={a.color} status={status} size={56} />
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">{a.name}</h1>
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-muted)]">{dept(a.department)} · model role <b className="font-medium text-white">{a.model_role}</b>{a.model_override ? ` (override ${a.model_override})` : ''}<StatusBadge status={status} /></p>

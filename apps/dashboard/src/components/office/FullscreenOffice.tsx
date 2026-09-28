@@ -21,8 +21,8 @@ export function FullscreenOffice() {
   const needs = agents.filter((a) => a.status === 'waiting' || a.status === 'blocked').length;
 
   return (
-    <div className="fixed inset-0 z-[45] flex flex-col bg-[var(--color-bg)]">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--color-line)] px-3 sm:px-4">
+    <div className="fixed inset-0 z-[45] bg-[#15131f]">
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-12 items-center gap-3 bg-gradient-to-b from-[#0b0a1f]/85 to-transparent px-3 pt-[env(safe-area-inset-top,0px)] sm:px-4 [&>*]:pointer-events-auto">
         <Link href="/" className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-[var(--color-muted)] hover:bg-[var(--color-panel-2)] hover:text-white">
           <ArrowLeft size={16} /> <span className="hidden sm:inline">Dashboard</span>
         </Link>
@@ -35,7 +35,7 @@ export function FullscreenOffice() {
           <span className="sr-only">working, on break, need you</span>
         </p>
       </header>
-      <main className="relative min-h-0 flex-1">
+      <main className="absolute inset-0">
         <OfficeMap snap={snap} variant="full" onOpen={setOpenId} />
       </main>
       <AgentPanel key={open?.id} agent={open} onClose={() => setOpenId(null)} />

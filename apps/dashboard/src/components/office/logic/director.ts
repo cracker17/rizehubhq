@@ -25,6 +25,8 @@ export interface AgentView {
   badge: Badge;
   progress?: number;
   screen: ScreenApp;
+  /** What is literally on their screen (agent_screens): text, an image of the deliverable, the step. */
+  work?: { content: string | null; image: string | null; note: string | null };
 }
 
 export interface OfficeModel {
@@ -58,6 +60,7 @@ const SPOT_LOOP: Record<string, (s: Spot) => LoopName> = {
   ping_pong: () => 'pingpong',
   foosball: () => 'foosball',
   chat: () => 'chat',
+  gym: (s) => (s.loop === 'curl' ? 'curl' : 'treadmill'),
 };
 
 function hash(s: string) {
@@ -154,6 +157,7 @@ export function deriveOffice(snap: HqSnapshot, opts: DeriveOptions): OfficeModel
     const base = {
       id: t.id, name: t.name, short: SHORT[t.id] ?? t.name, status: t.status, color: t.color, department: t.department,
       progress: t.progress,
+      ...(t.screen ? { work: { content: t.screen.content, image: t.screen.image_url, note: t.screen.step_note } } : {}),
     };
     const task = t.task ? clip(t.task, 48) : undefined;
     if (!t.row.enabled || t.status === 'offline') {

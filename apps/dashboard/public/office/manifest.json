@@ -1,6 +1,6 @@
 {
  "version": 2,
- "notes": "Pose sprites generated with Magnific (one pose sheet per character, same art style as the office background). Front poses face down-left; back poses face up-right; the scene mirrors them for the other two facings. anchor = the point (fraction of width/height) that sits on the floor spot (feet, or the seat for sitting poses). standHeight = how tall a standing figure is, in pixels of the 1x reference picture.",
+ "notes": "Pose sprites generated with Magnific (one pose sheet per character, same art style as the office background). Front poses face down-left; back poses face up-right; the scene mirrors them for the other two facings. anchor = the point (fraction of width/height) that sits on the floor spot (feet, or the seat for sitting poses). standHeight = how tall a standing figure is, in pixels of the 1x reference picture. Extra poses (run, curl, foosball, sofa_back, pingpong: back views for the far side of the game tables and the lounge) come from a second Magnific sheet per agent (build_poses.py).",
  "standHeight": 102,
  "characters": {
   "coo": {
@@ -60,6 +60,41 @@
      "h": 383,
      "ax": 0.817,
      "ay": 1.0
+    },
+    "curl": {
+     "src": "/office/sprites/coo/curl.webp",
+     "w": 167,
+     "h": 377,
+     "ax": 0.605,
+     "ay": 1.0
+    },
+    "foosball": {
+     "src": "/office/sprites/coo/foosball.webp",
+     "w": 198,
+     "h": 334,
+     "ax": 0.364,
+     "ay": 1.0
+    },
+    "pingpong": {
+     "src": "/office/sprites/coo/pingpong.webp",
+     "w": 217,
+     "h": 342,
+     "ax": 0.45,
+     "ay": 1.0
+    },
+    "run": {
+     "src": "/office/sprites/coo/run.webp",
+     "w": 142,
+     "h": 361,
+     "ax": 0.47,
+     "ay": 1.0
+    },
+    "sofa_back": {
+     "src": "/office/sprites/coo/sofa_back.webp",
+     "w": 222,
+     "h": 230,
+     "ax": 0.42,
+     "ay": 0.7
     }
    },
    "heightPx": 380
@@ -121,6 +156,41 @@
      "h": 365,
      "ax": 0.382,
      "ay": 1.0
+    },
+    "curl": {
+     "src": "/office/sprites/web-dev/curl.webp",
+     "w": 163,
+     "h": 376,
+     "ax": 0.598,
+     "ay": 1.0
+    },
+    "foosball": {
+     "src": "/office/sprites/web-dev/foosball.webp",
+     "w": 202,
+     "h": 333,
+     "ax": 0.356,
+     "ay": 1.0
+    },
+    "pingpong": {
+     "src": "/office/sprites/web-dev/pingpong.webp",
+     "w": 242,
+     "h": 322,
+     "ax": 0.45,
+     "ay": 1.0
+    },
+    "run": {
+     "src": "/office/sprites/web-dev/run.webp",
+     "w": 158,
+     "h": 349,
+     "ax": 0.47,
+     "ay": 1.0
+    },
+    "sofa_back": {
+     "src": "/office/sprites/web-dev/sofa_back.webp",
+     "w": 214,
+     "h": 230,
+     "ax": 0.42,
+     "ay": 0.7
     }
    },
    "heightPx": 380
@@ -182,6 +252,41 @@
      "h": 358,
      "ax": 0.698,
      "ay": 1.0
+    },
+    "curl": {
+     "src": "/office/sprites/designer/curl.webp",
+     "w": 164,
+     "h": 377,
+     "ax": 0.54,
+     "ay": 1.0
+    },
+    "foosball": {
+     "src": "/office/sprites/designer/foosball.webp",
+     "w": 229,
+     "h": 344,
+     "ax": 0.376,
+     "ay": 1.0
+    },
+    "pingpong": {
+     "src": "/office/sprites/designer/pingpong.webp",
+     "w": 232,
+     "h": 341,
+     "ax": 0.45,
+     "ay": 1.0
+    },
+    "run": {
+     "src": "/office/sprites/designer/run.webp",
+     "w": 162,
+     "h": 348,
+     "ax": 0.47,
+     "ay": 1.0
+    },
+    "sofa_back": {
+     "src": "/office/sprites/designer/sofa_back.webp",
+     "w": 187,
+     "h": 300,
+     "ax": 0.42,
+     "ay": 0.7
     }
    },
    "heightPx": 380
@@ -243,6 +348,41 @@
      "h": 373,
      "ax": 0.907,
      "ay": 1.0
+    },
+    "curl": {
+     "src": "/office/sprites/writer/curl.webp",
+     "w": 175,
+     "h": 376,
+     "ax": 0.586,
+     "ay": 1.0
+    },
+    "foosball": {
+     "src": "/office/sprites/writer/foosball.webp",
+     "w": 191,
+     "h": 325,
+     "ax": 0.364,
+     "ay": 1.0
+    },
+    "pingpong": {
+     "src": "/office/sprites/writer/pingpong.webp",
+     "w": 199,
+     "h": 359,
+     "ax": 0.45,
+     "ay": 1.0
+    },
+    "run": {
+     "src": "/office/sprites/writer/run.webp",
+     "w": 151,
+     "h": 323,
+     "ax": 0.47,
+     "ay": 1.0
+    },
+    "sofa_back": {
+     "src": "/office/sprites/writer/sofa_back.webp",
+     "w": 211,
+     "h": 244,
+     "ax": 0.42,
+     "ay": 0.7
     }
    },
    "heightPx": 380
@@ -304,6 +444,41 @@
      "h": 362,
      "ax": 0.389,
      "ay": 1.0
+    },
+    "curl": {
+     "src": "/office/sprites/sales/curl.webp",
+     "w": 203,
+     "h": 369,
+     "ax": 0.591,
+     "ay": 1.0
+    },
+    "foosball": {
+     "src": "/office/sprites/sales/foosball.webp",
+     "w": 210,
+     "h": 335,
+     "ax": 0.362,
+     "ay": 1.0
+    },
+    "pingpong": {
+     "src": "/office/sprites/sales/pingpong.webp",
+     "w": 237,
+     "h": 355,
+     "ax": 0.45,
+     "ay": 1.0
+    },
+    "run": {
+     "src": "/office/sprites/sales/run.webp",
+     "w": 155,
+     "h": 353,
+     "ax": 0.47,
+     "ay": 1.0
+    },
+    "sofa_back": {
+     "src": "/office/sprites/sales/sofa_back.webp",
+     "w": 214,
+     "h": 274,
+     "ax": 0.42,
+     "ay": 0.7
     }
    },
    "heightPx": 380
@@ -365,6 +540,41 @@
      "h": 358,
      "ax": 0.405,
      "ay": 1.0
+    },
+    "curl": {
+     "src": "/office/sprites/qa-lead/curl.webp",
+     "w": 172,
+     "h": 376,
+     "ax": 0.578,
+     "ay": 1.0
+    },
+    "foosball": {
+     "src": "/office/sprites/qa-lead/foosball.webp",
+     "w": 183,
+     "h": 327,
+     "ax": 0.44,
+     "ay": 1.0
+    },
+    "pingpong": {
+     "src": "/office/sprites/qa-lead/pingpong.webp",
+     "w": 226,
+     "h": 321,
+     "ax": 0.45,
+     "ay": 1.0
+    },
+    "run": {
+     "src": "/office/sprites/qa-lead/run.webp",
+     "w": 137,
+     "h": 339,
+     "ax": 0.47,
+     "ay": 1.0
+    },
+    "sofa_back": {
+     "src": "/office/sprites/qa-lead/sofa_back.webp",
+     "w": 203,
+     "h": 245,
+     "ax": 0.42,
+     "ay": 0.7
     }
    },
    "heightPx": 380

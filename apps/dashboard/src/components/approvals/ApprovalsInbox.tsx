@@ -195,11 +195,11 @@ export function ApprovalsInbox({ initialId }: { initialId?: string }) {
       </div>
       {/* Phones / tablets: detail as a sheet */}
       {desktop === false && sheet && selected && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-bg)]" role="dialog" aria-modal aria-label={selected.title}>
+        <div className="glass fixed inset-0 z-50 flex flex-col border-0" role="dialog" aria-modal aria-label={selected.title}>
           <div className="flex items-center gap-2 border-b border-[var(--color-line)] px-4 py-3">
             <button onClick={() => setSheet(false)} className="flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm text-[var(--color-muted)] hover:text-white"><ArrowLeft size={18} /> Approvals</button>
           </div>
-          <div className="scroll-thin flex-1 overflow-y-auto bg-[var(--color-panel)] px-4 pt-4">{detail}</div>
+          <div className="scroll-thin flex-1 overflow-y-auto px-4 pt-4">{detail}</div>
         </div>
       )}
     </>

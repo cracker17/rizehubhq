@@ -13,6 +13,14 @@ import { hashString, mulberry32 } from '../logic/rng';
 import { CEO_LOOK, lookFor } from './looks';
 import { loadManifestSheets, manifestFactory, type CharacterFactory, type CharacterView, type OfficeManifest } from './characters';
 import type { Item } from './pose';
+import { FurnitureLayer, loadFurniture, type SeatUser } from './furniture';
+import { OccluderLayer } from './occluders';
+import { DoorLayer } from './doors';
+import { ScreenLayer } from './screens';
+import { officeAudio } from './audio';
+
+/** Ambient light for the time of day (Asia/Manila): a tint over the picture and how bright the lamps are. */
+export interface Ambient { color: number; alpha: number; lamps: number }
 
 /** Background texture scale relative to the 1x layout coordinates. */
 export const S = LAYOUT.image.scale;
@@ -62,13 +70,9 @@ interface Char {
   agent: AgentView | null;
   hidden: boolean;
   carry: Item;
+  /** Seat the person last sat at (chairs stay pulled out until they have walked off). */
+  seat: string | null;
 }
-interface ScreenSlot { agentId: string; quads: Pt[][]; app: ScreenApp; reviewing: boolean }
-
-const APP_TINT: Record<ScreenApp, number> = {
-  off: 0x000000, screensaver: 0x6d5cff, editor: 0x39d98a, browser: 0x5aa9ff, doc: 0xe8eefc, sheet: 0x6fdc8c,
-  leads: 0xffc15a, review: 0x6ff0a8, timeline: 0xb48cff, audio: 0x4fd1c5, design: 0xff8fb1,
-};
 
 // Night: warm lamps and the fireplace (1x picture px, radius).
 const LAMPS: [number, number, number][] = [
@@ -82,26 +86,27 @@ export class OfficeScene extends Phaser.Scene {
   private map: OfficeMap = OFFICE;
   private factory!: CharacterFactory;
   private chars = new Map<string, Char>();
-  private screens = new Map<string, ScreenSlot>();
+  private furniture!: FurnitureLayer;
+  private occluders!: OccluderLayer;
+  private doors!: DoorLayer;
+  private screenLayer!: ScreenLayer;
+  private ambient: Ambient = { color: 0x0b1030, alpha: 0, lamps: 0 };
   private pending: { model: OfficeModel; events: OfficeEvent[] } | null = null;
   private camX = WORLD_W / 2;
   private camY = WORLD_H / 2;
   private zoomLevel = 0.5; // CSS zoom (device zoom = zoomLevel * dpr)
   private userCamera = false;
   private followId: string | null = null;
-  private night = false;
   private nightRect!: Phaser.GameObjects.Rectangle;
   private glows: Phaser.GameObjects.Image[] = [];
   private fire!: Phaser.GameObjects.Image;
   private fx!: Phaser.GameObjects.Graphics;
-  private screenFx!: Phaser.GameObjects.Graphics;
   private keys = new Set<string>();
   private drag: { x: number; y: number; moved: boolean; camX: number; camY: number } | null = null;
   private pinch: { d: number; zoom: number } | null = null;
   private near: string | null = null;
   private readyFired = false;
   private cleanup: (() => void)[] = [];
-  private qaReviewing = false;
 
   constructor() { super('office'); }
 
@@ -115,6 +120,7 @@ export class OfficeScene extends Phaser.Scene {
     const base = process.env.NEXT_PUBLIC_OFFICE_ASSETS || '/office';
     this.load.image('office-bg', LAYOUT.image.src.replace(/^\/office/, base));
     this.load.json('office-manifest', `${base}/manifest.json`);
+    loadFurniture(this, base);
     this.load.once('filecomplete-json-office-manifest', (_k: string, _t: string, data: OfficeManifest) => {
       if (data && Object.keys(data.characters ?? {}).length) loadManifestSheets(this, data, (src) => src.replace(/^\/office/, base));
     });
@@ -127,7 +133,15 @@ export class OfficeScene extends Phaser.Scene {
     const bg = this.add.image(0, 0, 'office-bg').setOrigin(0, 0).setDepth(-100_000);
     bg.setDisplaySize(WORLD_W, WORLD_H);
     this.makeGlowTexture();
-    this.screenFx = this.add.graphics().setDepth(-50_000);
+    this.furniture = new FurnitureLayer(this);
+    this.furniture.create(this.map);
+    this.occluders = new OccluderLayer(this);
+    this.occluders.create('office-bg');
+    this.doors = new DoorLayer(this);
+    this.doors.create();
+    this.screenLayer = new ScreenLayer(this, this.furniture);
+    this.screenLayer.setMap(this.map);
+    officeAudio.arm();
     this.fx = this.add.graphics().setDepth(FX_DEPTH);
     this.nightRect = this.add.rectangle(WORLD_W / 2, WORLD_H / 2, WORLD_W * 3, WORLD_H * 3, 0x0b1030, 0).setDepth(NIGHT_DEPTH);
     for (const [x, y, r] of LAMPS) {
@@ -171,13 +185,13 @@ export class OfficeScene extends Phaser.Scene {
     const rng = mulberry32(hashString(id) || 1);
     const motion = createMotion(start, rng);
     const view = this.factory.create(this, id, look);
-    const c: Char = { id, view, motion, agent, hidden: false, carry: (look.prop as Item) ?? null };
+    const c: Char = { id, view, motion, agent, hidden: false, carry: (look.prop as Item) ?? null, seat: null };
     this.chars.set(id, c);
     return c;
   }
 
   private applyModel(model: OfficeModel, events: OfficeEvent[]) {
-    if (model.map !== this.map) { this.map = model.map; this.screens.clear(); }
+    if (model.map !== this.map) { this.map = model.map; this.furniture.setMap(this.map); this.screenLayer.setMap(this.map); }
     const seen = new Set<string>([CEO_ID]);
     for (const a of model.agents) {
       seen.add(a.id);
@@ -202,27 +216,20 @@ export class OfficeScene extends Phaser.Scene {
         }
         setGoal(c.motion, a.goal);
       }
-      this.setScreen(a.id, a.status === 'offline' ? 'off' : a.screen);
+      const busy = a.status === 'working' || a.status === 'waiting' || a.status === 'blocked';
+      const app: ScreenApp = a.status === 'offline' ? 'off' : busy ? a.screen : 'screensaver';
+      this.screenLayer.setInfo(a.id, { app, title: a.tag.replace(/^[^·]*·\s*/, '').replace(/\s*·\s*\d+%$/, ''), progress: a.progress, color: a.color, name: a.name, content: busy ? a.work?.content : null, note: busy ? a.work?.note : null, image: busy ? a.work?.image : null });
     }
     for (const [id, c] of this.chars) if (!seen.has(id)) { c.view.destroy(); this.chars.delete(id); }
-    const qa = model.agents.find((a) => a.id === 'qa-lead');
-    this.qaReviewing = !!qa && qa.status === 'working' && qa.screen === 'review';
-  }
-
-  private setScreen(agentId: string, app: ScreenApp) {
-    let s = this.screens.get(agentId);
-    const d = this.map.desks.find((x) => x.agentId === agentId);
-    if (!d) { this.screens.delete(agentId); return; }
-    if (!s) { s = { agentId, quads: d.screens.map((q) => q.map((p) => W(p.x, p.y))), app, reviewing: false }; this.screens.set(agentId, s); }
-    s.app = app;
   }
 
   // ---------------------------------------------------------------- controls from React
-  setNight(night: boolean) {
-    this.night = night;
+  setAmbient(a: Ambient) {
+    this.ambient = a;
     if (!this.nightRect) return;
-    this.tweens.add({ targets: this.nightRect, fillAlpha: night ? 0.38 : 0, duration: 900 });
-    for (const g of this.glows) this.tweens.add({ targets: g, alpha: night ? 0.5 : 0, duration: 900 });
+    this.nightRect.fillColor = a.color;
+    this.tweens.add({ targets: this.nightRect, fillAlpha: a.alpha, duration: 1200 });
+    for (const g of this.glows) this.tweens.add({ targets: g, alpha: a.lamps, duration: 1200 });
   }
 
   zoomBy(f: number) {
@@ -241,18 +248,14 @@ export class OfficeScene extends Phaser.Scene {
   setAvatar(on: boolean) { this.opts.avatar = on; }
 
   // ---------------------------------------------------------------- camera
-  private fitZoom() {
-    const w = this.scale.width / this.opts.dpr;
-    const h = this.scale.height / this.opts.dpr;
-    return Math.min(w / WORLD_W, h / WORLD_H);
-  }
   /** Cover: the picture fills the viewport (no bars) at the smallest zoom. */
   private coverZoom() {
     const w = this.scale.width / this.opts.dpr;
     const h = this.scale.height / this.opts.dpr;
     return Math.max(w / WORLD_W, h / WORLD_H);
   }
-  private minZoom() { return Math.min(this.fitZoom(), this.coverZoom()); }
+  /** Never zoom out past "cover": the office always fills the whole viewport, no bars at any aspect ratio. */
+  private minZoom() { return this.coverZoom(); }
   private maxZoom() { return 1.6; }
 
   private fitView() {
@@ -263,7 +266,7 @@ export class OfficeScene extends Phaser.Scene {
       const c = W(420, 330);
       this.camX = c.x; this.camY = c.y;
     } else {
-      this.zoomLevel = this.fitZoom();
+      this.zoomLevel = this.coverZoom();
       this.camX = WORLD_W / 2;
       this.camY = WORLD_H / 2;
     }
@@ -470,13 +473,26 @@ export class OfficeScene extends Phaser.Scene {
     let nearD = 1.6;
     const ceo = this.chars.get(CEO_ID);
 
+    const users = new Map<string, SeatUser>();
+    const people: { pos: Pt; walking: boolean }[] = [];
     for (const c of this.chars.values()) {
       if (c.hidden) continue;
       tick(c.motion, dt, env);
       const m = c.motion;
-      const wp = world(m.pos.x, m.pos.y);
-      // Painter's order by the feet on screen; seated people sit just in front of their chair.
-      c.view.place(wp.x, wp.y, wp.y + (m.phase === 'seated' ? 2 : 0));
+      const goalSeat = m.goal?.key.startsWith('desk:') ? this.map.desks.find((d) => d.agentId === m.goal!.key.slice(5))?.id ?? null : null;
+      if (goalSeat) c.seat = goalSeat;
+      else if (c.seat) {
+        const s = this.map.seats.find((x) => x.id === c.seat);
+        if (!s || Math.hypot(m.pos.x - s.x, m.pos.y - s.y) > 1.6) c.seat = null;
+      }
+      if (c.seat) users.set(c.seat, { id: c.id, motion: m, hidden: c.hidden });
+      people.push({ pos: m.pos, walking: m.phase === 'walking' });
+      const onChair = c.seat && (m.phase === 'seated' || m.phase === 'sitting_down' || m.phase === 'standing_up');
+      const rp = onChair ? this.furniture.seatPos(c.seat!, m.pos) : m.pos;
+      const wp = world(rp.x, rp.y);
+      // Painter's order by the feet on screen; seated people sit just in front of their chair; someone on
+      // the treadmill stands on its belt (in front of the machine).
+      c.view.place(wp.x, wp.y, wp.y + (m.phase === 'seated' ? 2 : 0) + (m.loop === 'treadmill' && m.at ? 90 : 0));
       const onScreen = wp.x > vx0 && wp.x < vx1 && wp.y > vy0 && wp.y < vy1;
       c.view.object.setVisible(onScreen);
       if (!onScreen) continue;
@@ -492,7 +508,9 @@ export class OfficeScene extends Phaser.Scene {
     }
     this.near = near;
 
-    this.drawScreens(t);
+    this.furniture.update(dt, users, t);
+    this.doors.update(dt, people, time);
+    this.screenLayer.update(t);
     this.drawFx(t, rally);
 
     if (this.followId) {
@@ -509,34 +527,6 @@ export class OfficeScene extends Phaser.Scene {
     if (!this.readyFired) { this.readyFired = true; this.hooks.onReady(); }
   }
 
-  /** Live monitors: a soft tinted glow with scrolling lines while someone works; QA Lab lights up while reviewing. */
-  private drawScreens(t: number) {
-    const g = this.screenFx;
-    g.clear();
-    for (const s of this.screens.values()) {
-      const qa = s.agentId === 'qa-lead';
-      const live = qa ? this.qaReviewing : s.app !== 'off' && s.app !== 'screensaver';
-      if (!live) continue;
-      const tint = qa ? APP_TINT.review : APP_TINT[s.app];
-      s.quads.forEach((q, i) => {
-        const pulse = qa ? 0.28 + 0.14 * Math.sin(t * 3 + i) : 0.16 + 0.05 * Math.sin(t * 1.3 + i * 1.7);
-        g.fillStyle(tint, pulse);
-        g.fillPoints(q, true);
-        // scrolling "content" lines (drawn along the quad)
-        const [a, b, , d] = q;
-        const n = 5;
-        g.lineStyle(1.4 * S, 0xffffff, qa ? 0.35 : 0.22);
-        for (let k = 0; k < n; k++) {
-          const f = ((k / n + t * 0.12 + i * 0.13) % 1) * 0.86 + 0.07;
-          const w = 0.35 + ((hashString(`${s.agentId}${k}`) % 50) / 100);
-          const p0 = { x: a.x + (d.x - a.x) * f, y: a.y + (d.y - a.y) * f };
-          const ex = { x: (b.x - a.x) * w, y: (b.y - a.y) * w };
-          g.lineBetween(p0.x + ex.x * 0.12, p0.y + ex.y * 0.12, p0.x + ex.x, p0.y + ex.y);
-        }
-      });
-    }
-  }
-
   private drawFx(t: number, rally: number) {
     const g = this.fx;
     g.clear();
@@ -548,7 +538,7 @@ export class OfficeScene extends Phaser.Scene {
       g.fillCircle(m.x + Math.sin(t * 2 + i * 2) * 3 * S, m.y - k * 22 * S, (2 + k * 4) * S);
     }
     // fireplace flicker
-    this.fire.setAlpha((this.night ? 0.42 : 0.16) + Math.sin(t * 7.3) * 0.03 + Math.sin(t * 13.1) * 0.02);
+    this.fire.setAlpha(0.16 + this.ambient.lamps * 0.5 + Math.sin(t * 7.3) * 0.03 + Math.sin(t * 13.1) * 0.02);
     // ping-pong ball when both players are at the table
     const at = (key: string) => [...this.chars.values()].find((c) => !c.hidden && c.motion.goal?.key === key && c.motion.at === key);
     if (at('spot:pp-a') && at('spot:pp-b')) {

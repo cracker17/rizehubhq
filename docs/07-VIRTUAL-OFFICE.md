@@ -36,13 +36,23 @@ coordinate data in **`apps/dashboard/office/layout.json`**, in pixels of the 1x 
 | Key | What |
 |---|---|
 | `grid` | Affine picture ⇄ tile transform (tile x = down-right, tile y = down-left), so the iso facings still work |
-| `rooms` | Dev Team, Design Studio, Growth & Sales, QA Lab, Boardroom, CEO Office, Reception, Coffee Corner, Lounge (fireplace), Game Hall — each with its sign position (HTML pill) |
-| `desks` | Every desk seat in the picture (4 Dev, 2 Design, 4 Growth & Sales, 2 QA Lab, the Boardroom head seat, the CEO desk) with facing and monitor quads |
+| `rooms` | Dev Team, Design Studio, Growth & Sales, QA Lab, Boardroom, CEO Office, Reception, Coffee Corner, Lounge (fireplace), Game Hall, Gym — each with its sign position (HTML pill) |
+| `desks` | Every desk seat (4 Dev, 2 Design, 2 Growth & Sales, 2 QA Lab, the Boardroom head seat, the CEO desk) with facing, `chair` (an animated office chair stands there) and either monitor quads (painted desks) or `desk` (the sprite desk whose monitors it uses) |
+| `furniture` | Sprite desks and gym equipment (`public/office/furniture`), placed by their floor anchor; drawn in depth-sorted slices so people pass in front of and behind them |
+| `doors` | Doors that swing open (with a sound) when someone walks through: glass doors of the Dev Team, Boardroom, Game Hall, Growth & Sales and the gym; the wooden front doors (they light the doorway) |
+| `glassWalls` | Glass the scene draws itself (the gym front) |
+| `occluders` | Pieces of the picture redrawn over people standing behind them: the Dev Team's glass front, the lounge sofa's back, the boardroom table |
 | `assignments` | `web-dev → dev-1`, `designer → design-1` (nearest the Dev Team), `writer → sales-1`, `sales → sales-2`, `qa-lead → qa-1`, `coo → board-head`. An agent's own `agents.desk.id` overrides this, so a new hire gets a desk without a code change. Unassigned desks stay plain furniture. |
-| `spots` | Idle spots: espresso bar, fireside chats, lounge sofas, ping-pong (pair), foosball (pair), arcade, reception; boardroom seats; the CEO chair |
+| `spots` | Idle spots: espresso bar, fireside chats, lounge sofas, ping-pong (pair), foosball (pair), arcade, reception, the gym (treadmill, dumbbells); boardroom seats; the CEO chair |
 | `visits` | Where the COO stands when handing a desk a task |
 | `graph` | Walking network (corridors, doors, aisles). Every seat and spot joins at its `via` node; tests check every pair is reachable |
-| `wallScreens` | The Growth & Sales board (live sales pipeline) and the Boardroom TV (today: approvals, agents working, QA, open requests) |
+| `wallScreens` | The Growth & Sales board (live sales pipeline) and the Boardroom TV (live: waiting for your approval, agents working, in review, open requests, tasks done per day for 7 days, QA pass rate) |
+
+Around the picture:
+- **Chairs** slide out and swivel towards the aisle when someone walks up or stands up, turn back to the desk as they sit, and fidget a little while they work.
+- **Monitors** show what the agent is actually doing: the text / code / deliverable image from `agent_screens`, the current step and progress, in the app that fits the work (editor, doc, design canvas, CRM table, QA checklist).
+- **Light** follows the Philippine clock (Asia/Manila): dawn, day, golden hour, dusk and night blend into each other and the lamps and fireplace glow brighter as it gets dark. The toolbar can pin day or night.
+- **Music**: a quiet generative lo-fi loop (WebAudio, no files) with a mute button; doors whoosh and click. Sound starts after the first click (browser rule) and the choice is remembered.
 
 ## 4. Behaviour: status → what you see
 
@@ -90,7 +100,7 @@ Every character is always doing something natural, like a real person at work. E
 ## 5. Idle life (random but shared)
 
 The **worker** decides idle activities so every screen shows the same office:
-- Every 60–120 s each idle agent may switch activity (weights: coffee 30%, sofa 20%, lobby 15%, ping-pong 10%, foosball 10%, chat with another idle agent 15%).
+- Every 60–120 s each idle agent may switch activity (weights: coffee 28%, sofa 18%, lobby 12%, ping-pong 10%, foosball 10%, chat with another idle agent 14%, gym 8%).
 - Paired activities (ping-pong, foosball, chat) need two idle agents; the worker pairs them, otherwise picks a solo spot.
 - Spot capacity is respected; nobody stands on the same tile.
 - Writes `agents.idle_activity` (+ `idle_spot`) → Realtime → characters walk there.

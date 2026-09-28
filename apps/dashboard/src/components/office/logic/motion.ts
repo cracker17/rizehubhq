@@ -13,7 +13,7 @@ export type LoopName =
   // state loops
   | 'wait_qa' | 'raise_hand' | 'head_in_hands' | 'desk_idle'
   // idle activities
-  | 'coffee' | 'sofa' | 'lobby_sit' | 'lobby_stand' | 'pingpong' | 'foosball' | 'chat'
+  | 'coffee' | 'sofa' | 'lobby_sit' | 'lobby_stand' | 'pingpong' | 'foosball' | 'chat' | 'treadmill' | 'curl'
   // CEO / generic
   | 'stand' | 'ceo_desk';
 
@@ -49,6 +49,8 @@ export const MICROS: Record<LoopName, MicroName[]> = {
   pingpong: ['celebrate', 'groan'],
   foosball: ['celebrate', 'groan'],
   chat: ['laugh', 'nod', 'point_phone'],
+  treadmill: [],
+  curl: ['stretch'],
   stand: ['look_view', 'stretch'],
   ceo_desk: ['lean_back', 'sip', 'glance'],
 };

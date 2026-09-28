@@ -59,7 +59,8 @@ export function scaledProceduralFactory(scale: number): CharacterFactory {
  * office background). Front poses face down-left and back poses face up-right; the view mirrors them for
  * the other two facings, and adds breathing, typing and walking motion so nobody is ever frozen.
  */
-export type PoseName = 'stand' | 'walk' | 'stand_back' | 'walk_back' | 'sit_type' | 'coffee' | 'sofa' | 'action';
+export type PoseName = 'stand' | 'walk' | 'stand_back' | 'walk_back' | 'sit_type' | 'coffee' | 'sofa' | 'action'
+  | 'run' | 'curl' | 'foosball' | 'sofa_back' | 'pingpong';
 export interface PoseEntry { src: string; w: number; h: number; ax: number; ay: number }
 export interface PoseCharacter { poses: Partial<Record<PoseName, PoseEntry>>; heightPx: number }
 export interface OfficeManifest { version: number; standHeight?: number; characters: Record<string, PoseCharacter> }
@@ -92,12 +93,17 @@ export function pickPose(m: Motion, has: (p: PoseName) => boolean, isCeo = false
     case 'sitting_down':
     case 'standing_up': {
       if (m.phase !== 'seated' && m.phaseT < 0.3) return byFacing('stand', 'stand_back');
+      if (SEATED_SOFA.has(m.loop) && BACK(f) && has('sofa_back')) return back('sofa_back');
       if (SEATED_SOFA.has(m.loop) || !BACK(f)) return { pose: 'sofa', flip: f === 'right' || f === 'up' };
       return back('sit_type');
     }
     default: break;
   }
   if (m.loop === 'coffee' || m.micro?.name === 'sip') return front('coffee');
+  if (m.loop === 'treadmill' && m.at) return back(Math.sin(m.clock * 9) > 0 ? 'walk_back' : 'stand_back');
+  if (m.loop === 'curl' && has('curl')) return front('curl');
+  if (m.loop === 'foosball' && BACK(f) && has('foosball')) return back('foosball');
+  if (m.loop === 'pingpong' && BACK(f) && has('pingpong')) return back('pingpong');
   if (m.loop === 'pingpong' && !isCeo) return front('action');
   if ((m.loop === 'present' || m.loop === 'whiteboard') && !BACK(f) && !isCeo) return front('action');
   if (isCeo && m.micro?.name === 'look_view') return front('action');
@@ -125,18 +131,20 @@ class PoseView implements CharacterView {
     const key = poseKey(this.who, pose);
     if (key !== this.current) { this.img.setTexture(key); this.current = key; }
     const s = this.base;
-    const seated = pose === 'sit_type' || pose === 'sofa';
+    const seated = pose === 'sit_type' || pose === 'sofa' || pose === 'sofa_back';
     const t = time + m.seed * 10;
     // micro-motion: breathing, typing, walking bounce, gestures
     let bob = 0;
     let sy = 1 + Math.sin(t * 2.1) * 0.012;
     let rot = Math.sin(t * 0.7) * 0.006;
     if (m.phase === 'walking') { bob = -Math.abs(Math.sin(m.walkCycle)) * 0.035 * s * this.c.heightPx; rot = Math.sin(m.walkCycle) * 0.03; }
+    else if (m.loop === 'treadmill' && m.at) { bob = -Math.abs(Math.sin(m.clock * 9)) * 0.03 * s * this.c.heightPx - 0.035 * s * this.c.heightPx; rot = Math.sin(m.clock * 9) * 0.025; }
+    else if (m.loop === 'curl' && pose === 'curl') { sy += Math.sin(t * 3.2) * 0.01; rot = Math.sin(t * 3.2) * 0.012; }
     else if (seated && ['type', 'write', 'draw', 'review', 'call', 'ceo_desk'].includes(m.loop)) { bob = Math.sin(t * 13) * 0.006 * s * this.c.heightPx; }
     if (m.gesture) { const g = m.gesture.t / m.gesture.dur; bob -= Math.sin(g * Math.PI * 3) * (m.gesture.name === 'done' ? 0.07 : 0.03) * s * this.c.heightPx; }
     if (m.micro?.name === 'stretch') sy += Math.sin((m.micro.t / m.micro.dur) * Math.PI) * 0.05;
     if (m.phase === 'sitting_down' || m.phase === 'standing_up') sy *= 0.94;
-    const sitLift = (seated ? (pose === 'sit_type' ? 0.28 : 0.25) : 0) * s * this.c.heightPx;
+    const sitLift = (seated ? (pose === 'sit_type' ? 0.28 : pose === 'sofa_back' ? 0.2 : 0.25) : 0) * s * this.c.heightPx;
     this.img.setOrigin(flip ? 1 - e.ax : e.ax, e.ay);
     this.img.setScale(flip ? -s : s, s * sy);
     this.img.setPosition(0, bob - sitLift);

@@ -7,15 +7,26 @@ function initials(name: string) {
   return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase();
 }
 
-export function Avatar({ name, color, status, size = 44 }: { name: string; color: string; status?: AgentStatus; size?: number }) {
+/** Painted portraits (Magnific, same art style as the office) for the team and the CEO. */
+const PORTRAITS = new Set(['coo', 'web-dev', 'designer', 'writer', 'sales', 'qa-lead', 'ceo']);
+const ASSETS = process.env.NEXT_PUBLIC_OFFICE_ASSETS || '/office';
+export function portraitUrl(id?: string | null) {
+  return id && PORTRAITS.has(id) ? `${ASSETS}/portraits/${id}.webp` : null;
+}
+
+export function Avatar({ id, name, color, status, size = 44 }: { id?: string | null; name: string; color: string; status?: AgentStatus; size?: number }) {
+  const src = portraitUrl(id);
   return (
     <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
       <span
-        className="flex h-full w-full items-center justify-center rounded-full text-[13px] font-semibold text-white"
+        className="flex h-full w-full items-center justify-center overflow-hidden rounded-full text-[13px] font-semibold text-white"
         style={{ background: `radial-gradient(circle at 30% 25%, ${color}, color-mix(in oklab, ${color} 55%, #0b0a1f))`, boxShadow: `0 0 0 2px color-mix(in oklab, ${color} 40%, transparent)` }}
         aria-hidden
       >
-        {initials(name)}
+        {src
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={src} alt="" width={size} height={size} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+          : initials(name)}
       </span>
       {status && (
         <span
