@@ -13,3 +13,4 @@ supabase/.branches/
 dist-preview/
 scripts/office/lama.onnx
 scripts/office/__pycache__/
+*.tsbuildinfo
