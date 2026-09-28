@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>We Work Remotely: Front-End Programming Jobs</title>
+    <link>https://weworkremotely.com/categories/remote-front-end-programming-jobs</link>
+    <item>
+      <title>Kestrel Goods: Senior Shopify Developer (Liquid, OS 2.0)</title>
+      <region>Anywhere in the World</region>
+      <category>Front-End Programming</category>
+      <type>Contract</type>
+      <description>&lt;p&gt;We need a &lt;strong&gt;Shopify&lt;/strong&gt; developer to rebuild our theme sections &amp;amp; improve Core Web Vitals.&lt;/p&gt;&lt;p&gt;Rate: $45&amp;ndash;60/hr&lt;/p&gt;</description>
+      <pubDate>Fri, 25 Sep 2026 10:15:00 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/kestrel-goods-senior-shopify-developer</guid>
+      <link>https://weworkremotely.com/remote-jobs/kestrel-goods-senior-shopify-developer?utm_source=rss&amp;utm_medium=feed</link>
+    </item>
+    <item>
+      <title><![CDATA[Northgate Labs: Webflow Developer & Designer]]></title>
+      <region>USA Only</region>
+      <description><![CDATA[<p>Own our Webflow site: CMS collections, interactions, and landing pages.</p>]]></description>
+      <pubDate>Sat, 26 Sep 2026 08:00:00 +0000</pubDate>
+      <link>https://weworkremotely.com/remote-jobs/northgate-labs-webflow-developer-designer</link>
+    </item>
+    <item>
+      <title>Plainfield Data: Senior Golang Engineer</title>
+      <description>Distributed systems, Kafka, Kubernetes.</description>
+      <pubDate>Sat, 26 Sep 2026 09:00:00 +0000</pubDate>
+      <link>https://weworkremotely.com/remote-jobs/plainfield-data-senior-golang-engineer</link>
+    </item>
+    <item>
+      <title>Oldfield Co: WordPress Developer (WooCommerce)</title>
+      <description>WooCommerce store maintenance.</description>
+      <pubDate>Mon, 01 Jun 2026 09:00:00 +0000</pubDate>
+      <link>https://weworkremotely.com/remote-jobs/oldfield-wordpress-developer</link>
+    </item>
+  </channel>
+</rss>

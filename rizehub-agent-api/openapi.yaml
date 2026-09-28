@@ -1,0 +1,697 @@
+openapi: 3.1.0
+info:
+  title: RizeHub Agent API
+  version: 1.0.0
+  summary: The private API RizeHub exposes to RizeHub HQ (the AI employee team).
+  description: |
+    Contract from RizeHub HQ docs/12-RIZEHUB-INTEGRATION.md. HQ never touches RizeHub's database; every change goes
+    through these endpoints so RizeHub's validation, permissions and audit log apply.
+
+    **Network.** Internal only: HQ calls `http://rizehub-app:8080/agent-api/v1` over the shared Docker network
+    `rizehub-internal`. Do not route `/agent-api` through the public Nginx.
+
+    **Auth.** `Authorization: Bearer <key>`. One key per agent group (LEADS, ONBOARDING, REPORTS, READONLY), stored
+    hashed (sha256), with scopes, a label, `revoked_at` and `last_used_at`. Scope per operation is in `x-scope`.
+
+    **Audit headers.** Every request carries `X-HQ-Task-Id` and `X-HQ-Agent-Id`; write both into the audit log.
+
+    **Writes.** Every write carries `Idempotency-Key` (`<task id>:<step>`; dry runs use `<task id>:<step>:dry_run`).
+    Same key + same request (method, path, dry_run, canonical JSON body) → return the first response again with
+    `Idempotent-Replayed: true`. Same key + different request → `409 idempotency_conflict`. Scope keys per API key and
+    keep them at least 24 h. Do not store 5xx responses.
+
+    **Dry run.** `?dry_run=true` on every write validates everything, returns the same errors the real call would, and
+    on success returns `DryRunResult` without changing anything. In a dry run the path id `new` refers to the account
+    or workspace that the same onboarding would create (`/accounts/new/workspaces`, `/workspaces/new/config`, …).
+
+    **Long jobs.** Lead searches and report generation answer `202` with `job_id`; HQ polls `GET /jobs/{id}` and you
+    also send the `job.completed` / `job.failed` webhook.
+
+    **Errors.** Always `{"error": {"code", "message", "retryable"}}`. HQ retries `retryable: true` (and 429/5xx) with
+    backoff, honouring `Retry-After`. Send `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` on every
+    response.
+servers:
+  - url: http://rizehub-app:8080/agent-api/v1
+    description: Production (Docker network rizehub-internal only)
+  - url: http://localhost:8080/agent-api/v1
+    description: Staging / HQ's mock (pnpm --filter worker mock:rizehub)
+security:
+  - agentKey: []
+tags:
+  - name: Lead Finder
+  - name: Jobs
+  - name: Accounts & workspaces
+  - name: Reports
+paths:
+  /leads/search:
+    post:
+      tags: [Lead Finder]
+      operationId: searchLeads
+      summary: Run a Lead Finder search (async)
+      x-scope: leads:search
+      x-approval: none (internal)
+      parameters: [{ $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadSearchParams' }
+            example: { industry: skincare DTC, location: Australia, platform: shopify, signals: [slow_site, hiring_dev], limit: 60 }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '200': { $ref: '#/components/responses/DryRun' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '5XX': { $ref: '#/components/responses/ServerError' }
+  /jobs/{id}:
+    get:
+      tags: [Jobs]
+      operationId: getJob
+      summary: Job status and result (lead ids or report id)
+      x-scope: jobs:read
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }]
+      responses:
+        '200':
+          description: Job
+          headers: { $ref: '#/components/headers/RateLimitSet' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Job' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /leads/{id}:
+    get:
+      tags: [Lead Finder]
+      operationId: getLead
+      summary: Lead details (business contact only)
+      x-scope: leads:read
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }]
+      responses:
+        '200': { description: Lead, content: { application/json: { schema: { $ref: '#/components/schemas/Lead' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Lead Finder]
+      operationId: setLeadStage
+      summary: Change the lead's stage
+      description: HQ sets `contacted` / `proposal` only after the CEO approved and the outreach was sent. A lead never moves back to `new` (409 invalid_stage).
+      x-scope: leads:write_stage
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage]
+              properties:
+                stage: { $ref: '#/components/schemas/LeadStage' }
+                note: { type: string, maxLength: 500 }
+      responses:
+        '200': { description: Updated lead (or DryRunResult), content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/Lead' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /leads/{id}/notes:
+    post:
+      tags: [Lead Finder]
+      operationId: addLeadNotes
+      summary: Agent research notes, fit score and recommended angle (moves new → researched)
+      x-scope: leads:write_notes
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 4000 }
+                fit_score: { type: [integer, 'null'], minimum: 0, maximum: 100 }
+                angle: { type: [string, 'null'], maxLength: 500 }
+                findings: { type: array, maxItems: 10, items: { type: string, maxLength: 500 } }
+            example: { body: 'Mobile LCP 6.2 s on /collections/all (PageSpeed, 2026-09-28).', fit_score: 84, angle: 'Speed fix before BFCM', findings: ['LCP 6.2 s', 'Debut theme'] }
+      responses:
+        '200': { description: Updated lead (or DryRunResult), content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/Lead' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /lists:
+    post:
+      tags: [Lead Finder]
+      operationId: createList
+      summary: Create (or reuse by name) a lead list and add leads
+      x-scope: lists:write
+      parameters: [{ $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 120, examples: ['2026-10 skincare AU shopify'] }
+                lead_ids: { type: array, items: { type: string } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/LeadList' } } } }
+        '200': { description: Existing list with that name (leads added) or DryRunResult, content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/LeadList' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /lists/{id}/leads:
+    post:
+      tags: [Lead Finder]
+      operationId: addLeadsToList
+      summary: Add leads to a list
+      x-scope: lists:write
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [lead_ids], properties: { lead_ids: { type: array, minItems: 1, items: { type: string } } } } } }
+      responses:
+        '200': { description: List, content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/LeadList' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /accounts:
+    get:
+      tags: [Accounts & workspaces]
+      operationId: searchAccounts
+      summary: Find accounts by company name or domain (duplicate check before onboarding)
+      x-scope: accounts:read
+      parameters:
+        - { $ref: '#/components/parameters/TaskId' }
+        - { $ref: '#/components/parameters/AgentId' }
+        - { name: q, in: query, schema: { type: string }, description: Case-insensitive company name contains }
+        - { name: domain, in: query, schema: { type: string }, description: 'Exact domain; ignore scheme, "www." and path' }
+      responses:
+        '200': { description: Matches, content: { application/json: { schema: { type: object, required: [accounts], properties: { accounts: { type: array, items: { $ref: '#/components/schemas/Account' } } } } } } }
+    post:
+      tags: [Accounts & workspaces]
+      operationId: createAccount
+      summary: Create a client account
+      description: 'External: HQ only calls this for real after the CEO approved the dry-run preview. `test: true` accounts are hidden from real dashboards and auto-deleted after 7 days.'
+      x-scope: accounts:create
+      x-approval: required (CEO, bundled with the workspace)
+      parameters: [{ $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AccountInput' } } }
+      responses:
+        '201': { description: Created (also emits account.created), content: { application/json: { schema: { $ref: '#/components/schemas/Account' } } } }
+        '200': { $ref: '#/components/responses/DryRun' }
+        '409': { description: 'account_exists (same company or domain) or idempotency_conflict', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /accounts/{id}:
+    get:
+      tags: [Accounts & workspaces]
+      operationId: getAccount
+      summary: Read an account back (QA verification)
+      x-scope: accounts:read
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }]
+      responses:
+        '200': { description: Account, content: { application/json: { schema: { $ref: '#/components/schemas/Account' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /accounts/{id}/workspaces:
+    post:
+      tags: [Accounts & workspaces]
+      operationId: createWorkspace
+      summary: Create a workspace from a template
+      description: '`{id}` may be `new` in a dry run. One workspace per template per account (409 workspace_exists).'
+      x-scope: workspaces:create
+      x-approval: required (bundled with the account approval)
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [template, name], properties: { template: { type: string, examples: [seo-retainer] }, name: { type: string, maxLength: 120 } } } } }
+      responses:
+        '201': { description: Created (also emits workspace.ready), content: { application/json: { schema: { $ref: '#/components/schemas/Workspace' } } } }
+        '200': { $ref: '#/components/responses/DryRun' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /accounts/{id}/invites:
+    post:
+      tags: [Accounts & workspaces]
+      operationId: draftInvite
+      summary: Prepare the client invite (send=false; nothing is emailed)
+      x-scope: invites:draft
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/TaskId' }
+        - { $ref: '#/components/parameters/AgentId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/DryRun' }
+        - { name: send, in: query, required: true, schema: { type: boolean, const: false }, description: 'Must be false; sending is POST /invites/{id}/send' }
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { email: { type: string, format: email }, role: { type: string, default: owner } } } } }
+      responses:
+        '201': { description: Draft invite, content: { application/json: { schema: { $ref: '#/components/schemas/Invite' } } } }
+        '200': { $ref: '#/components/responses/DryRun' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /invites/{id}/send:
+    post:
+      tags: [Accounts & workspaces]
+      operationId: sendInvite
+      summary: Send the invite email
+      description: Executed by the HQ worker only after the CEO approved it (separate approval). 409 invite_already_sent if repeated with a new key.
+      x-scope: invites:send
+      x-approval: required (CEO, separate)
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        '200': { description: Sent invite (or DryRunResult), content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/Invite' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /workspaces/{id}:
+    get:
+      tags: [Accounts & workspaces]
+      operationId: getWorkspace
+      summary: Read a workspace back (services, config, projects)
+      x-scope: workspaces:read
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }]
+      responses:
+        '200': { description: Workspace, content: { application/json: { schema: { $ref: '#/components/schemas/Workspace' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /workspaces/{id}/config:
+    put:
+      tags: [Accounts & workspaces]
+      operationId: configureWorkspace
+      summary: Settings (site URL, platform, services, report schedule, branding); merged into the current config
+      x-scope: workspaces:configure
+      x-approval: covered by the onboarding approval
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkspaceConfig' } } }
+      responses:
+        '200': { description: Workspace (or DryRunResult), content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/Workspace' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /workspaces/{id}/projects:
+    post:
+      tags: [Accounts & workspaces]
+      operationId: createProjects
+      summary: Create starter projects (same name twice is a no-op)
+      x-scope: workspaces:configure
+      x-approval: covered by the onboarding approval
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [projects], properties: { projects: { type: array, minItems: 1, maxItems: 20, items: { type: object, required: [name], properties: { name: { type: string, maxLength: 120 } } } } } } } }
+      responses:
+        '201': { description: All projects of the workspace, content: { application/json: { schema: { type: object, properties: { projects: { type: array, items: { $ref: '#/components/schemas/Project' } } } } } } }
+        '200': { $ref: '#/components/responses/DryRun' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /workspaces/{id}/metrics:
+    get:
+      tags: [Reports]
+      operationId: getMetrics
+      summary: Raw numbers a report is built from, plus the previous period of equal length
+      x-scope: metrics:read
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/TaskId' }
+        - { $ref: '#/components/parameters/AgentId' }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Metrics, content: { application/json: { schema: { $ref: '#/components/schemas/Metrics' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /workspaces/{id}/reports:
+    post:
+      tags: [Reports]
+      operationId: generateReport
+      summary: Generate a draft report (async)
+      x-scope: reports:generate
+      x-approval: none (draft)
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, period]
+              properties:
+                type: { $ref: '#/components/schemas/ReportType' }
+                period: { $ref: '#/components/schemas/Period' }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '200': { $ref: '#/components/responses/DryRun' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /workspace-templates:
+    get:
+      tags: [Accounts & workspaces]
+      operationId: listTemplates
+      summary: Workspace templates (services, starter projects, report type)
+      x-scope: templates:read
+      parameters: [{ $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }]
+      responses:
+        '200': { description: Templates, content: { application/json: { schema: { type: object, properties: { templates: { type: array, items: { $ref: '#/components/schemas/Template' } } } } } } }
+  /reports/{id}:
+    get:
+      tags: [Reports]
+      operationId: getReport
+      summary: Report data + private preview link + PDF link
+      x-scope: reports:read
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }]
+      responses:
+        '200': { description: Report, content: { application/json: { schema: { $ref: '#/components/schemas/Report' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /reports/{id}/notes:
+    post:
+      tags: [Reports]
+      operationId: addReportNotes
+      summary: Agent-written summary, insights and next steps (replaces previous notes; 409 once published)
+      x-scope: reports:write_notes
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [summary]
+              properties:
+                summary: { type: string, maxLength: 4000 }
+                insights: { type: array, maxItems: 12, items: { type: string } }
+                next_steps: { type: array, maxItems: 12, items: { type: string } }
+      responses:
+        '200': { description: Report (or DryRunResult), content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/Report' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /reports/{id}/publish:
+    post:
+      tags: [Reports]
+      operationId: publishReport
+      summary: Make the report visible to the client and optionally email it
+      description: Executed by the HQ worker only after the CEO approved it. Requires notes (422 otherwise); 409 report_published if already published.
+      x-scope: reports:publish
+      x-approval: required (CEO)
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/TaskId' }, { $ref: '#/components/parameters/AgentId' }, { $ref: '#/components/parameters/IdempotencyKey' }, { $ref: '#/components/parameters/DryRun' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { notify_client: { type: boolean, default: false } } } } }
+      responses:
+        '200': { description: Published report (or DryRunResult), content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/Report' }, { $ref: '#/components/schemas/DryRunResult' }] } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+webhooks:
+  rizehubEvent:
+    post:
+      summary: RizeHub → HQ event (POST http://hq-worker:4000/hooks/rizehub)
+      description: |
+        Sign the exact raw body: `X-RizeHub-Signature: <hex HMAC-SHA256(RIZEHUB_WEBHOOK_SECRET, rawBody)>` (a `sha256=` prefix
+        is accepted) and send `X-RizeHub-Timestamp: <unix seconds>` for this attempt; HQ rejects unsigned requests, bad
+        signatures and timestamps more than 5 minutes off (401). HQ is idempotent by `id`: reuse the same id on retries.
+        Retry on 5xx / network errors with backoff for up to 24 h; a 4xx means fix the secret or the clock.
+        HQ reactions: job.completed/job.failed → resume the waiting agent task; client.signed_up / payment.received →
+        "Onboard <company> on <package>" request; lead.replied → Pipeline follow-up request; report.viewed → activity;
+        account.created / workspace.ready → onboarding bookkeeping.
+      parameters:
+        - { name: X-RizeHub-Signature, in: header, required: true, schema: { type: string, pattern: '^(sha256=)?[0-9a-f]{64}$' } }
+        - { name: X-RizeHub-Timestamp, in: header, required: true, schema: { type: string, pattern: '^[0-9]{10}$' } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEvent' } } }
+      responses:
+        '200': { description: 'Stored (`{"ok": true, "id": "...", "duplicate": false}`); duplicate = true for a replay of the same event id' }
+        '400': { description: Body is not JSON or lacks id / event }
+        '401': { description: Missing or bad signature / timestamp }
+        '503': { description: HQ not configured or starting; retry }
+components:
+  securitySchemes:
+    agentKey:
+      type: http
+      scheme: bearer
+      description: 'Service key for one agent group. Store only sha256(key). Scopes: LEADS = leads:search, leads:read, leads:write_notes, leads:write_stage, lists:write, jobs:read · ONBOARDING = accounts:create, accounts:read, workspaces:create, workspaces:configure, workspaces:read, invites:draft, invites:send, templates:read, jobs:read · REPORTS = reports:generate, reports:read, reports:write_notes, reports:publish, metrics:read, workspaces:read, jobs:read · READONLY = *:read'
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_-]+$' } }
+    TaskId: { name: X-HQ-Task-Id, in: header, required: true, schema: { type: string, maxLength: 100 }, description: HQ task id (audit log) }
+    AgentId: { name: X-HQ-Agent-Id, in: header, required: true, schema: { type: string, maxLength: 100, examples: [prospector] }, description: HQ agent id (audit log) }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 255, examples: ['7d1c0e7e-2f7e-4b53-9a57-1c0b6f1e9a10:onboarding:account'] } }
+    DryRun: { name: dry_run, in: query, schema: { type: boolean, default: false }, description: Validate and preview; change nothing }
+  headers:
+    RateLimitSet:
+      X-RateLimit-Limit: { schema: { type: integer } }
+      X-RateLimit-Remaining: { schema: { type: integer } }
+      X-RateLimit-Reset: { schema: { type: integer }, description: Seconds until the window resets }
+  responses:
+    Accepted:
+      description: Job started
+      content: { application/json: { schema: { type: object, required: [job_id, status], properties: { job_id: { type: string }, status: { type: string, enum: [queued, running] } } } } }
+    DryRun:
+      description: Dry run passed; nothing changed
+      content: { application/json: { schema: { $ref: '#/components/schemas/DryRunResult' } } }
+    BadRequest: { description: 'missing_hq_headers, missing_idempotency_key, invalid_json', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthorized: { description: 'unauthorized (missing, unknown or revoked key)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: 'forbidden (key lacks the scope)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: not_found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: 'workspace_exists, account_exists, invalid_stage, invite_already_sent, report_published, idempotency_conflict', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    ValidationFailed: { description: 'validation_failed (message lists every bad field)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    RateLimited:
+      description: rate_limited (retryable)
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ServerError: { description: 'internal / unavailable (retryable)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    ApiError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code: { type: string, examples: [workspace_exists] }
+        message: { type: string }
+        retryable: { type: boolean }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/ApiError' }
+    DryRunResult:
+      type: object
+      required: [dry_run, valid, would, warnings]
+      properties:
+        dry_run: { const: true }
+        valid: { type: boolean }
+        would: { description: What the real call would create or change (same shape as the real response where possible) }
+        warnings: { type: array, items: { type: string } }
+    Platform: { type: string, enum: [shopify, webflow, wordpress, other] }
+    LeadStage: { type: string, enum: [new, researched, drafted, contacted, replied, proposal, won, lost] }
+    SignalKey: { type: string, enum: [slow_site, no_ssl, hiring_dev, outdated_theme, broken_links, missing_meta, low_mobile_score, no_analytics] }
+    LeadSearchParams:
+      type: object
+      properties:
+        industry: { type: string, maxLength: 120 }
+        location: { type: string, maxLength: 120, description: 'Country and optional region/city; accept AU/US/UK aliases' }
+        platform: { $ref: '#/components/schemas/Platform' }
+        signals: { type: array, items: { $ref: '#/components/schemas/SignalKey' }, description: Match leads with any of these }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    LeadSignal:
+      type: object
+      required: [key, label, detected_at]
+      properties:
+        key: { $ref: '#/components/schemas/SignalKey' }
+        label: { type: string, examples: [Slow mobile LCP] }
+        value: { type: string, examples: [LCP 6.2 s] }
+        metric: { type: object, properties: { name: { type: string }, value: { type: number }, unit: { type: string } } }
+        evidence_url: { type: string, format: uri }
+        detected_at: { type: string, format: date-time }
+    LeadNote:
+      type: object
+      properties:
+        id: { type: string }
+        body: { type: string }
+        fit_score: { type: [integer, 'null'] }
+        angle: { type: [string, 'null'] }
+        findings: { type: array, items: { type: string } }
+        author: { type: string, description: API key label }
+        created_at: { type: string, format: date-time }
+    Lead:
+      type: object
+      required: [id, company, website, platform, signals, score, stage, app_url]
+      properties:
+        id: { type: string }
+        company: { type: string }
+        website: { type: string, format: uri }
+        platform: { $ref: '#/components/schemas/Platform' }
+        industry: { type: string }
+        location: { type: object, properties: { country: { type: string }, region: { type: string }, city: { type: string } } }
+        contact:
+          type: [object, 'null']
+          description: Published business contact only (no personal data)
+          properties: { name: { type: string }, role: { type: string }, email: { type: string }, source: { type: string } }
+        signals: { type: array, items: { $ref: '#/components/schemas/LeadSignal' } }
+        score: { type: integer, minimum: 0, maximum: 100, description: Lead Finder score }
+        stage: { $ref: '#/components/schemas/LeadStage' }
+        fit_score: { type: [integer, 'null'] }
+        angle: { type: [string, 'null'] }
+        notes: { type: array, items: { $ref: '#/components/schemas/LeadNote' } }
+        list_ids: { type: array, items: { type: string } }
+        app_url: { type: string, format: uri, description: Open in RizeHub Lead Finder }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    LeadList:
+      type: object
+      properties: { id: { type: string }, name: { type: string }, lead_ids: { type: array, items: { type: string } }, created_at: { type: string, format: date-time } }
+    Job:
+      type: object
+      required: [id, type, status, progress]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [lead_search, report_generate] }
+        status: { type: string, enum: [queued, running, completed, failed] }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        result:
+          type: [object, 'null']
+          properties: { lead_ids: { type: array, items: { type: string } }, total: { type: integer }, report_id: { type: string } }
+        error: { oneOf: [{ type: 'null' }, { $ref: '#/components/schemas/ApiError' }] }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }
+    Contact:
+      type: object
+      required: [name, email]
+      properties: { name: { type: string }, email: { type: string, format: email }, role: { type: string } }
+    AccountInput:
+      type: object
+      required: [company, primary_contact, plan]
+      properties:
+        company: { type: string, maxLength: 120 }
+        domain: { type: string }
+        primary_contact: { $ref: '#/components/schemas/Contact' }
+        plan: { type: string, examples: [seo-retainer] }
+        country: { type: string }
+        time_zone: { type: string, examples: [Australia/Brisbane] }
+        test: { type: boolean, default: false }
+    Account:
+      allOf:
+        - $ref: '#/components/schemas/AccountInput'
+        - type: object
+          required: [id, status, workspace_ids, created_at]
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [active, paused] }
+            workspace_ids: { type: array, items: { type: string } }
+            created_at: { type: string, format: date-time }
+    ReportType: { type: string, enum: [seo-monthly, site-audit, ads-performance, lead-report] }
+    Period:
+      type: object
+      required: [from, to]
+      properties: { from: { type: string, format: date }, to: { type: string, format: date } }
+    WorkspaceConfig:
+      type: object
+      properties:
+        site_url: { type: string, format: uri }
+        platform: { $ref: '#/components/schemas/Platform' }
+        services_enabled: { type: array, items: { type: string } }
+        report_schedule:
+          type: [object, 'null']
+          required: [type, day_of_month]
+          properties:
+            type: { $ref: '#/components/schemas/ReportType' }
+            day_of_month: { type: integer, minimum: 1, maximum: 28 }
+            time_zone: { type: string }
+        branding: { const: rizehub }
+    Project:
+      type: object
+      properties: { id: { type: string }, name: { type: string }, status: { type: string, enum: [open, done] }, created_at: { type: string, format: date-time } }
+    Workspace:
+      type: object
+      required: [id, account_id, name, template, config, projects, app_url]
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        name: { type: string }
+        template: { type: string }
+        config: { $ref: '#/components/schemas/WorkspaceConfig' }
+        projects: { type: array, items: { $ref: '#/components/schemas/Project' } }
+        app_url: { type: string, format: uri }
+        created_at: { type: string, format: date-time }
+    Template:
+      type: object
+      properties:
+        id: { type: string, examples: [shopify-growth] }
+        name: { type: string }
+        services: { type: array, items: { type: string } }
+        projects: { type: array, items: { type: string } }
+        report_type: { oneOf: [{ $ref: '#/components/schemas/ReportType' }, { type: 'null' }] }
+    Invite:
+      type: object
+      properties:
+        id: { type: string }
+        account_id: { type: string }
+        email: { type: string, format: email }
+        role: { type: string }
+        status: { type: string, enum: [draft, sent] }
+        preview: { type: object, properties: { subject: { type: string }, body: { type: string } } }
+        sent_at: { type: [string, 'null'], format: date-time }
+    MetricSet:
+      type: object
+      properties:
+        sessions: { type: integer }
+        users: { type: integer }
+        conversions: { type: integer }
+        revenue: { type: number }
+        organic_clicks: { type: integer }
+        impressions: { type: integer }
+        ctr: { type: number, description: Percent, 1 decimal }
+        avg_position: { type: number }
+    Metrics:
+      type: object
+      properties:
+        workspace_id: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        metrics: { $ref: '#/components/schemas/MetricSet' }
+        previous: { $ref: '#/components/schemas/MetricSet' }
+        currency: { type: string }
+    Report:
+      type: object
+      required: [id, workspace_id, type, period, status, data, preview_url]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        type: { $ref: '#/components/schemas/ReportType' }
+        period: { $ref: '#/components/schemas/Period' }
+        status: { type: string, enum: [draft, published] }
+        data:
+          type: object
+          properties:
+            metrics: { $ref: '#/components/schemas/MetricSet' }
+            previous: { $ref: '#/components/schemas/MetricSet' }
+            top_pages: { type: array, items: { type: object, properties: { path: { type: string }, clicks: { type: integer } } } }
+            top_queries: { type: array, items: { type: object, properties: { query: { type: string }, clicks: { type: integer }, position: { type: number } } } }
+        notes:
+          type: [object, 'null']
+          properties: { summary: { type: string }, insights: { type: array, items: { type: string } }, next_steps: { type: array, items: { type: string } }, author: { type: string }, updated_at: { type: string, format: date-time } }
+        preview_url: { type: string, format: uri, description: Private link (token), not guessable }
+        pdf_url: { type: string, format: uri }
+        published_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+    WebhookEvent:
+      type: object
+      required: [id, event, created_at, data]
+      properties:
+        id: { type: string, pattern: '^[A-Za-z0-9_.:-]{1,100}$', description: Unique event id; reuse on retries }
+        event: { type: string, enum: [job.completed, job.failed, account.created, workspace.ready, client.signed_up, payment.received, lead.replied, report.viewed] }
+        created_at: { type: string, format: date-time }
+        data:
+          type: object
+          description: |
+            job.completed / job.failed: {job_id, type, status, result, error}
+            account.created: {account_id, company} · workspace.ready: {workspace_id, account_id, template}
+            client.signed_up / payment.received: {account_id?, company, package, website?, contact?: {name, email}, amount?, currency?}
+            lead.replied: {lead_id, company?, website?, channel} (no message body; HQ reads the thread itself)
+            report.viewed: {report_id, workspace_id}
+      examples:
+        - { id: evt_1, event: job.completed, created_at: '2026-09-28T02:00:00Z', data: { job_id: job_1, type: lead_search, status: completed, result: { lead_ids: [ld_1001], total: 1 } } }

@@ -12,7 +12,7 @@ function env(name: string) {
   return v && v.trim() ? v.trim() : undefined;
 }
 
-const PUBLIC = ['/login', '/api/health'];
+const PUBLIC = ['/login', '/api/health', '/access'];
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');

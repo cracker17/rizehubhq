@@ -8,7 +8,9 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "check:roles": "tsx src/checkRoles.ts",
-    "test": "tsx --test"
+    "test": "tsx --test",
+    "mock:rizehub": "tsx src/rizehub/mockServer.ts",
+    "contract:rizehub": "tsx src/rizehub/contractCheck.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",

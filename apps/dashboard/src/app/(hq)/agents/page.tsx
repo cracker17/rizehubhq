@@ -1,7 +1,10 @@
-import { ComingSoon } from '@/components/ComingSoon';
+import { AgentsView } from '@/components/agents/AgentsView';
+import { loadRoster } from '@/lib/data/vault';
 
 export const metadata = { title: 'Agents · RizeHub HQ' };
+export const dynamic = 'force-dynamic';
 
-export default function Page() {
-  return <ComingSoon title="Agents" milestone="M10">All 22 AI employees: role files, model role, budget, QA stats.</ComingSoon>;
+export default async function Page() {
+  const { data, error } = await loadRoster();
+  return <AgentsView agents={data} error={error} />;
 }

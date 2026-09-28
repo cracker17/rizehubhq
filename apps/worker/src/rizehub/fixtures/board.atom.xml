@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example Remote Board</title>
+  <entry>
+    <title type="html">WordPress &amp;amp; Elementor Developer (part-time)</title>
+    <link rel="alternate" href="https://jobs.example.org/p/1234-wordpress-elementor-developer#apply"/>
+    <id>tag:jobs.example.org,2026:1234</id>
+    <updated>2026-09-27T03:00:00Z</updated>
+    <company>Harbor &amp; Pine Studio</company>
+    <category term="wordpress"/>
+    <summary type="html">&lt;p&gt;Maintain 12 client sites built with Elementor.&lt;/p&gt;</summary>
+  </entry>
+  <entry>
+    <title>Kestrel Goods: Senior Shopify Developer (Liquid, OS 2.0)</title>
+    <link rel="alternate" href="https://www.weworkremotely.com/remote-jobs/kestrel-goods-senior-shopify-developer/"/>
+    <updated>2026-09-25T10:15:00Z</updated>
+  </entry>
+</feed>

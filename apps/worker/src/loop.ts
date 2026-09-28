@@ -7,6 +7,7 @@ import { planNext } from './planner';
 import { reviewNext } from './qa';
 import { runDueReports } from './reportsJob';
 import { runTask } from './runner';
+import { startRizehubBackground } from './rizehub/background';
 
 /** settings.paused may be stored as true or "true". */
 export function isPausedSetting(v: unknown): boolean {
@@ -115,6 +116,8 @@ export class WorkerLoop {
       every(reportsEvery, () => this.runReports(), 'reports');
       void this.runReports(); // catch up right away after a restart
     }
+    // RizeHub (M9b/M9c): webhook events, parked-job polling, approved publish/invite sends, job feeds + follow-ups.
+    this.timers.push(...startRizehubBackground(this.deps));
 
     this.loopDone = (async () => {
       while (!this.stopping) {

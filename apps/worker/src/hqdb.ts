@@ -260,5 +260,11 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
       if (error) throw new Error(`settings: ${error.message}`);
       return Object.fromEntries((data ?? []).map((r: { key: string; value: unknown }) => [r.key, r.value]));
     },
+    ...rizehubSupabaseDb(sb), // RizeHub integration (M9b/M9c)
   };
 }
+
+// ---------- RizeHub integration (M9b/M9c): methods live in ./rizehub/store.ts, merged into HqDb here ----------
+import { rizehubSupabaseDb, type RizehubDb } from './rizehub/store';
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface HqDb extends RizehubDb {}

@@ -1,6 +1,7 @@
 // Specialist task runner (docs/05 [4]): one claimed task → generateText agent loop with the role's
 // tools → submit_output / ask_ceo. Heartbeat, usage + cost logging, budget guard, quota requeue.
 import { generateText, stepCountIs, tool, type StopCondition, type ToolSet } from 'ai';
+import { closeRunSessions } from './vault/browser';
 import { TOOL_FACTORIES } from './tools';
 import { z } from 'zod';
 import type { ClientRow, TaskOutput, TaskRow } from './hqdb';
@@ -263,6 +264,8 @@ export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions 
     return { status: 'failed', reason, costUsd: state.costUsd };
   } finally {
     clearInterval(heartbeat);
+    // Close any logged-in client sessions from vault_login right away (cookies wiped).
+    await closeRunSessions(state).catch(() => undefined);
     if (picked && steps > 0) {
       const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number };
       await db.recordUsage({

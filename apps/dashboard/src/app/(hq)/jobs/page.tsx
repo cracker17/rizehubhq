@@ -1,7 +1,9 @@
-import { ComingSoon } from '@/components/ComingSoon';
+import { JobsView } from '@/components/jobs/JobsView';
+import { loadJobs } from '@/lib/data/rizehub';
 
 export const metadata = { title: 'Jobs · RizeHub HQ' };
 
-export default function Page() {
-  return <ComingSoon title="Jobs" milestone="M9b">Job shortlist with fit scores and ready-to-send drafts.</ComingSoon>;
+export default async function Page({ searchParams }: { searchParams: Promise<{ job?: string }> }) {
+  const [{ job }, data] = await Promise.all([searchParams, loadJobs()]);
+  return <JobsView data={data} initialJobId={typeof job === 'string' ? job : null} />;
 }

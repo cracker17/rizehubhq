@@ -1,7 +1,10 @@
-import { ComingSoon } from '@/components/ComingSoon';
+import { ClientsView } from '@/components/clients/ClientsView';
+import { loadClientSummaries } from '@/lib/data/vault';
 
 export const metadata = { title: 'Clients · RizeHub HQ' };
+export const dynamic = 'force-dynamic';
 
-export default function Page() {
-  return <ComingSoon title="Clients" milestone="M9a">Client profiles, RizeHub workspaces, reports and the Client Vault (Access tab).</ComingSoon>;
+export default async function Page() {
+  const { data, error } = await loadClientSummaries();
+  return <ClientsView clients={data} error={error} />;
 }

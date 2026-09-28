@@ -214,4 +214,25 @@ export class FakeHqDb implements HqDb {
     return this.reports.filter((r) => r.date >= sinceDate).map((r) => ({ kind: r.kind, report_date: r.date, agent_id: r.agentId }));
   }
   async getSettings() { this.log('getSettings'); return { ...this.settings }; }
+
+  // ---------- RizeHub integration (M9b/M9c): delegated to ./rizehub/fakeStore.ts ----------
+  readonly rizehub = new FakeRizehubStore(this);
+  recordRizehubRef(...a: Parameters<RizehubDb['recordRizehubRef']>) { this.log('recordRizehubRef', ...a); return this.rizehub.recordRizehubRef(...a); }
+  listRizehubRefs(...a: Parameters<RizehubDb['listRizehubRefs']>) { return this.rizehub.listRizehubRefs(...a); }
+  parkTaskForJob(...a: Parameters<RizehubDb['parkTaskForJob']>) { this.log('parkTaskForJob', ...a); return this.rizehub.parkTaskForJob(...a); }
+  rizehubJobFinished(...a: Parameters<RizehubDb['rizehubJobFinished']>) { this.log('rizehubJobFinished', ...a); return this.rizehub.rizehubJobFinished(...a); }
+  requestRizehubAction(...a: Parameters<RizehubDb['requestRizehubAction']>) { this.log('requestRizehubAction', ...a); return this.rizehub.requestRizehubAction(...a); }
+  listTaskActions(...a: Parameters<RizehubDb['listTaskActions']>) { return this.rizehub.listTaskActions(...a); }
+  listApprovedRizehubActions(...a: Parameters<RizehubDb['listApprovedRizehubActions']>) { return this.rizehub.listApprovedRizehubActions(...a); }
+  externalActionExec(...a: Parameters<RizehubDb['externalActionExec']>) { this.log('externalActionExec', ...a); return this.rizehub.externalActionExec(...a); }
+  storeWebhookEvent(...a: Parameters<RizehubDb['storeWebhookEvent']>) { this.log('storeWebhookEvent', ...a); return this.rizehub.storeWebhookEvent(...a); }
+  listUnprocessedWebhookEvents(...a: Parameters<RizehubDb['listUnprocessedWebhookEvents']>) { return this.rizehub.listUnprocessedWebhookEvents(...a); }
+  processRizehubEvent(...a: Parameters<RizehubDb['processRizehubEvent']>) { this.log('processRizehubEvent', ...a); return this.rizehub.processRizehubEvent(...a); }
+  upsertJobOpportunity(...a: Parameters<RizehubDb['upsertJobOpportunity']>) { this.log('upsertJobOpportunity', ...a); return this.rizehub.upsertJobOpportunity(...a); }
+  setJobStatus(...a: Parameters<RizehubDb['setJobStatus']>) { this.log('setJobStatus', ...a); return this.rizehub.setJobStatus(...a); }
+  listJobOpportunities(...a: Parameters<RizehubDb['listJobOpportunities']>) { return this.rizehub.listJobOpportunities(...a); }
+  queueJobFollowUps() { return this.rizehub.queueJobFollowUps(); }
 }
+
+import { FakeRizehubStore } from './rizehub/fakeStore';
+import type { RizehubDb } from './rizehub/store';

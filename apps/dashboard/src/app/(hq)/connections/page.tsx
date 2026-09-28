@@ -1,7 +1,10 @@
-import { ComingSoon } from '@/components/ComingSoon';
+import { ConnectionsView } from '@/components/connections/ConnectionsView';
+import { loadConnections } from '@/lib/data/vault';
 
 export const metadata = { title: 'Connections · RizeHub HQ' };
+export const dynamic = 'force-dynamic';
 
-export default function Page() {
-  return <ComingSoon title="Connections" milestone="M9">Every token and login in one place, with status and revoke.</ComingSoon>;
+export default async function Page() {
+  const { data, error } = await loadConnections();
+  return <ConnectionsView data={data} error={error} />;
 }

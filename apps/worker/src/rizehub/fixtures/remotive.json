@@ -1,0 +1,5 @@
+{"job-count":3,"jobs":[
+ {"id":1,"url":"https://remotive.com/remote-jobs/software-dev/shopify-theme-developer-111","title":"Shopify Theme Developer","company_name":"Lumen Supply","tags":["shopify","liquid","javascript"],"salary":"$50/hr","publication_date":"2026-09-27T12:00:00","candidate_required_location":"Worldwide","description":"<p>Build custom sections for our Shopify 2.0 theme.</p>"},
+ {"id":2,"url":"https://remotive.com/remote-jobs/software-dev/data-engineer-222","title":"Data Engineer","company_name":"Quanta","tags":["python","spark"],"salary":"","publication_date":"2026-09-27T12:00:00","candidate_required_location":"USA","description":"ETL"},
+ {"id":3,"url":"","title":"Broken entry","company_name":"X","tags":[],"publication_date":"2026-09-27T12:00:00","description":"shopify"}
+]}
