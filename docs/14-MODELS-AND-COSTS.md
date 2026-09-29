@@ -179,6 +179,26 @@ Where the money goes (Growing, setup B, $187): dev tasks $79 (42%), QA $37, cont
 
 Not included: VPS hosting (you already pay), Supabase (free tier is enough to start), web search tools, and image generation (Magnific credits).
 
+## Claude runtime (Claude Agent SDK) costs
+
+An agent switched to `runtime: claude` (docs/05 "Claude runtime") runs Claude Code as its agent loop instead of the
+built-in runner. It is paid only: it needs `ANTHROPIC_API_KEY` (an Anthropic Console API key; Anthropic does not allow
+products built on the Agent SDK to use a claude.ai Pro/Max login) and `MONTHLY_BUDGET_USD > 0`.
+
+- **Prices**: the same `PRICES` table as every Anthropic call (`models/usage.ts`, table above: Opus 5.5 $4/$20, Sonnet
+  $2/$10, Haiku $1/$5 per million in/out; cache writes 1.25× input, cache reads $0.20 / $0.20 / $0.10). The worker prices
+  each run from the SDK's per-model token totals (`modelUsage`) with this table, records it as `usage.task` with
+  `detail.runtime = 'claude'` (plus `sdk_cost_usd`, Claude Code's own estimate, for comparison) and adds it to the month
+  and day totals the model picker and the budget guards use.
+- **Model**: `CLAUDE_MODEL_<AGENT>` → `CLAUDE_MODEL` → the role's first Anthropic model in the usual order (agent
+  override → `MODEL_ID_<ROLE>` → active profile) → the role in the `claude` profile. Never hard-coded.
+- **Cap per run**: `maxBudgetUsd` = the smallest of the task cap (role `budget_usd_per_task` and `MAX_COST_PER_TASK_USD`),
+  what is left of `MONTHLY_BUDGET_USD` this month and what is left of the daily AI budget today. Claude Code stops the run
+  there and the task fails with "exceeded $X task budget", like the built-in runner. Turns: `max_turns` /
+  `MAX_STEPS_PER_TASK`, whichever is stricter. Less than $0.05 left → the task runs on the built-in runner instead.
+- **Expect** about the dev-task figure above per Claude dev run (Sonnet, ~60 tool steps ≈ $2–3). Raise the role's
+  `budget_usd_per_task` (and `MAX_COST_PER_TASK_USD`) to what one task may cost; the defaults ($1.50) stop long dev tasks early.
+
 ## Recommended path
 
 1. **Now: profile `free`.** Gemini, Groq and OpenRouter; set `MONTHLY_BUDGET_USD=0`. Leads, jobs, reports and content work well; dev agents draft for review.

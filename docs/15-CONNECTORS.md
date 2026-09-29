@@ -83,7 +83,8 @@ Connecting, switching a tool to **Allowed**, and adding agents ask for the 2FA c
 - Routes (`x-hq-secret`): `/connectors/create`, `/connectors/test`, `/connectors/oauth/start`, `/connectors/oauth/finish`,
   `/connectors/delete`. Custom URLs: https only, public hosts only (same SSRF guard as the research tools).
 - Tool bridge in `buildTools`: each granted, active connector adds AI SDK tools named `mcp_<connector>__<tool>`
-  (Allowed → call; Ask me → approval + pause). Hermes agents get them through `/mcp` automatically.
+  (Allowed → call; Ask me → approval + pause). Hermes and Claude-runtime agents get the same tools through `/mcp`
+  (`hermes/mcp.ts` `agentTools` = `buildTools` + `loadMcpTools`), with the same policies.
 - Executor: approved `mcp.call` approvals run in the existing approved-action loop with `external_action_exec`
   (claim → done/failed, max 3 attempts), then the paused task is requeued with the result.
 - Limits: 60 s per call, per-task call cap, result truncation, everything logged (`mcp.tool_call`, arguments not logged).

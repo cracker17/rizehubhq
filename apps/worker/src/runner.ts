@@ -13,6 +13,7 @@ import { WORKER_EXECUTED_ACTIONS } from './rizehub/background';
 import { loadMcpTools, mcpToolEnv } from './tools/mcp';
 import { config } from './config';
 import { runHermesTask, type HermesRunOptions } from './hermes/runner';
+import { runClaudeTask, type ClaudeRunOptions } from './claude/runner';
 import { taskHandoffContext, type UpstreamOptions } from './handoff';
 
 /** Where not-yet-built tools arrive (docs/11-ROADMAP.md). */
@@ -266,19 +267,23 @@ export interface RunOptions {
   limits?: TaskLimits;
   /** Hermes runtime overrides (tests); defaults come from the env (hermes/config.ts). */
   hermes?: HermesRunOptions;
+  /** Claude runtime overrides (tests: fake query, env, workspaces); defaults come from the env (claude/config.ts). */
+  claude?: ClaudeRunOptions;
   /** Design→dev handoff options (tests: workspacesDir); default copies upstream files into WORKSPACES_DIR. */
   handoff?: UpstreamOptions;
 }
 
 /**
  * Runs one claimed task on the agent's runtime: roles with `runtime: hermes` go to their Hermes Agent instance
- * (hermes/runner.ts, which falls back to the built-in runner when Hermes is unavailable); everyone else runs on the
- * built-in AI SDK runner.
+ * (hermes/runner.ts, which falls back to the built-in runner when Hermes is unavailable); roles with `runtime: claude`
+ * run on the Claude Agent SDK (claude/runner.ts; falls back to the built-in runner without key, budget or on SDK
+ * failure); everyone else runs on the built-in AI SDK runner.
  */
 export async function runTask(task: TaskRow, deps: WorkerDeps, opts: RunOptions = {}): Promise<RunResult> {
   let role: Role | null = null;
   try { role = deps.loadRole(task.agent_id); } catch { /* runBuiltinTask reports the broken role file */ }
   if (role?.runtime === 'hermes') return runHermesTask(task, deps, role, opts, runBuiltinTask);
+  if (role?.runtime === 'claude') return runClaudeTask(task, deps, role, opts, runBuiltinTask);
   return runBuiltinTask(task, deps, opts);
 }
 

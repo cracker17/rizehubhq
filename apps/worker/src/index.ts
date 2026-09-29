@@ -15,6 +15,7 @@ import { answerChat } from './chat';
 import type { WorkerDeps } from './deps';
 import { setMcpDeps } from './hermes/mcp';
 import { hermesStartupReport } from './hermes/config';
+import { claudeStartupReport } from './claude/config';
 import { startSalesBackground, stopSalesBackground } from './sales/background';
 import { listApprovedGmailSends, startGmailSender } from './connectors/gmailSend';
 import { executeApprovedMcpCalls, listApprovedMcpCalls } from './connectors/mcpExecute';
@@ -58,11 +59,15 @@ async function main() {
     db, brain: createBrain(), pickModel: picker.pick, loadRole: (id) => loadRole(id),
     agentsDir: config.agentsDir, qaThreshold: config.qaThreshold, monthlyBudgetUsd: config.monthlyBudgetUsd,
     onProviderQuota: (p, detail) => picker.markExhausted(p, detail),
+    spend: picker.spendSnapshot, recordSpend: picker.addSpend,
   };
-  setMcpDeps(deps); // HQ MCP tool server for Hermes agents (POST /mcp)
+  setMcpDeps(deps); // HQ MCP tool server for Hermes and Claude agents (POST /mcp)
   const hermes = hermesStartupReport(roles, workerEnv());
   console.log(hermes.line);
   for (const w of hermes.warnings) console.warn(w);
+  const claude = claudeStartupReport(roles, workerEnv());
+  console.log(claude.line);
+  for (const w of claude.warnings) console.warn(w);
   console.log(`[worker] ${roles.length} agents · profile "${profile}" · budget $${config.monthlyBudgetUsd}/month`
     + `${config.dailyAiBudgetUsd !== null ? ` · $${config.dailyAiBudgetUsd}/day` : ''}`
     + ` · spent $${picker.spentThisMonthUsd.toFixed(2)} · parallel ${config.maxParallelTasks} · QA ≥ ${config.qaThreshold}`);

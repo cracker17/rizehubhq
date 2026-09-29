@@ -1,13 +1,20 @@
-// HQ MCP tool server for Hermes agents (docs/05 "Hermes runtime"): MCP over Streamable HTTP, stateless, JSON
-// responses only (no SSE stream). Minimal JSON-RPC 2.0: initialize, notifications/*, ping, tools/list, tools/call.
+// HQ MCP tool server for Hermes and Claude agents (docs/05 "Hermes runtime", "Claude runtime"): MCP over Streamable
+// HTTP, stateless, JSON responses only (no SSE stream). Minimal JSON-RPC 2.0: initialize, notifications/*, ping,
+// tools/list, tools/call.
 //
-//   POST /mcp   Authorization: Bearer <HQ_MCP_TOKEN_<AGENT>>
-//     token → agent identity → only that role's tools (runner.buildTools with the role file's tool list).
-//     tools/call runs against the agent's CURRENT task (agents.current_task_id, or the `task_id` argument when given),
-//     which must be a `working` task of that same agent. Hermes' MCP headers are static, so the task is resolved
-//     server-side. Every call must also carry `run_id`, the lease of the Hermes attempt HQ started (hermes/mcpState.ts):
-//     once HQ revokes it (fallback to the built-in runner, run ended, newer attempt) calls are refused and change nothing. Approval-gated tools behave exactly as in the built-in runner: they create approvals, never act.
-//     Every call is written to activity_log (action mcp.tool_call; tool name, ok, ms; never the arguments).
+//   POST /mcp   Authorization: Bearer <HQ_MCP_TOKEN_<AGENT>>   (Hermes: static token per agent)
+//            or Authorization: Bearer <per-run token>          (Claude runtime: hermes/mcpState.ts issueRunToken)
+//     token → agent identity → only that role's tools (runner.buildTools with the role file's tool list) plus the
+//     connected MCP apps granted to that agent (tools/mcp.ts loadMcpTools, Admin → Connectors → Apps, docs/15), the
+//     same toolset the built-in runner gives the agent.
+//     Static token: tools/call runs against the agent's CURRENT task (agents.current_task_id, or the `task_id`
+//     argument when given), which must be a `working` task of that same agent. Hermes' MCP headers are static, so the
+//     task is resolved server-side. Every call must also carry `run_id`, the lease of the attempt HQ started
+//     (hermes/mcpState.ts). Per-run token: the token itself names the agent, task and run; task_id / run_id are neither
+//     listed nor needed (given values are ignored).
+//     Once HQ revokes a run (fallback to the built-in runner, run ended, newer attempt) its calls are refused and change
+//     nothing. Approval-gated tools behave exactly as in the built-in runner: they create approvals, never act.
+//     Every call is written to activity_log (action mcp.tool_call; tool name, ok, ms, via; never the arguments).
 //   GET  /mcp   405 (this server offers no server-initiated stream)
 import { timingSafeEqual } from 'node:crypto';
 import type http from 'node:http';
@@ -17,7 +24,8 @@ import type { Route } from '../routes/types';
 import { buildTools } from '../runner';
 import { errMsg, log, type WorkerDeps } from '../deps';
 import type { RunState } from '../runner';
-import { enterHermesLease } from './mcpState';
+import { loadMcpTools, mcpToolEnv } from '../tools/mcp';
+import { enterHermesLease, runForToken, type RunTokenBinding } from './mcpState';
 
 export const MCP_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
 export const MCP_SERVER_INFO = { name: 'rizehub-hq', version: '1.0.0' };
@@ -33,6 +41,9 @@ export interface HqMcpOptions {
   /** token → agent id (hermes/config.ts mcpTokenMap). */
   tokens: () => Map<string, string>;
 }
+
+/** Who is calling: the agent, and for per-run tokens the run the token is bound to. */
+interface Caller { agentId: string; run: RunTokenBinding | null; via: 'hermes' | 'claude' }
 
 function same(a: string, b: string): boolean {
   const x = Buffer.from(a);
@@ -64,22 +75,37 @@ function listingTask(agentId: string): TaskRow {
 /** Tool state for definitions only (listing / name checks); executes never run against it. */
 const listingState = (): RunState => ({ ended: null, costUsd: 0, overBudget: false, toolErrors: 0 });
 
-function roleTools(deps: WorkerDeps, agentId: string, task: TaskRow, state: RunState = listingState()): ToolSet {
+/**
+ * The agent's full HQ toolset for one task: the role's real tools (stubs of not-yet-connected tools are left out) plus
+ * its connected MCP app tools. Built-in and role tools keep their names (an app tool never replaces one).
+ */
+export async function agentTools(deps: WorkerDeps, agentId: string, task: TaskRow = listingTask(agentId), state: RunState = listingState()): Promise<ToolSet> {
   const role = deps.loadRole(agentId);
-  const tools = buildTools({ task, role, deps, state });
-  return Object.fromEntries(Object.entries(tools).filter(([, t]) => !isStub(t)));
+  const ctx = { task, role, deps, state };
+  const tools: ToolSet = Object.fromEntries(Object.entries(buildTools(ctx)).filter(([, t]) => !isStub(t)));
+  const env = mcpToolEnv(ctx);
+  if (env) for (const [n, t] of Object.entries(await loadMcpTools(ctx, env))) if (!(n in tools)) tools[n] = t;
+  return tools;
+}
+
+/** Names of the tools the HQ MCP server offers this agent (the Claude runtime pre-approves exactly these). */
+export async function agentToolNames(deps: WorkerDeps, agentId: string): Promise<string[]> {
+  return Object.keys(await agentTools(deps, agentId));
 }
 
 const TASK_ID_PROP = { type: 'string', description: 'HQ task id you are working on (given in your task prompt). Optional: defaults to your current task.' };
 const RUN_ID_PROP = { type: 'string', description: 'HQ run id given in your task prompt. Required: calls from a run HQ has ended are refused.' };
 
-async function toolList(deps: WorkerDeps, agentId: string) {
-  const tools = roleTools(deps, agentId, listingTask(agentId));
+async function toolList(deps: WorkerDeps, caller: Caller) {
+  const tools = await agentTools(deps, caller.agentId);
   return Object.entries(tools).map(([name, t]) => {
     const js = { ...(asSchema(t.inputSchema).jsonSchema as Record<string, unknown>) };
-    const props = { ...((js.properties as Record<string, unknown> | undefined) ?? {}), task_id: TASK_ID_PROP, run_id: RUN_ID_PROP };
-    const required = [...new Set([...((js.required as string[] | undefined) ?? []), 'run_id'])];
     delete js.$schema;
+    const own = (js.properties as Record<string, unknown> | undefined) ?? {};
+    const ownRequired = (js.required as string[] | undefined) ?? [];
+    // A per-run token already names the task and run: nothing extra to pass.
+    const props = caller.run ? own : { ...own, task_id: TASK_ID_PROP, run_id: RUN_ID_PROP };
+    const required = caller.run ? ownRequired : [...new Set([...ownRequired, 'run_id'])];
     return { name, description: t.description ?? name, inputSchema: { ...js, type: 'object', properties: props, required } };
   });
 }
@@ -98,25 +124,27 @@ async function currentTask(deps: WorkerDeps, agentId: string, explicit: unknown)
   return task;
 }
 
-async function callTool(deps: WorkerDeps, agentId: string, params: unknown) {
+async function callTool(deps: WorkerDeps, caller: Caller, params: unknown) {
+  const { agentId, run, via } = caller;
   const p = (params ?? {}) as { name?: unknown; arguments?: unknown };
   if (typeof p.name !== 'string') throw new RpcError(-32602, 'tools/call needs params.name');
   const args = { ...((p.arguments && typeof p.arguments === 'object' ? p.arguments : {}) as Record<string, unknown>) };
-  const explicitTask = args.task_id;
-  const runId = typeof args.run_id === 'string' && args.run_id.trim() ? args.run_id.trim() : null;
+  // Per-run token: the token decides the task and run, whatever the arguments say.
+  const explicitTask = run ? run.taskId : args.task_id;
+  const runId = run ? run.runId : typeof args.run_id === 'string' && args.run_id.trim() ? args.run_id.trim() : null;
   delete args.task_id;
   delete args.run_id;
 
   // Unknown tool names are protocol errors (checked before touching the task).
-  const listed = roleTools(deps, agentId, listingTask(agentId));
+  const listed = await agentTools(deps, agentId);
   if (!listed[p.name]) throw new RpcError(-32602, `Unknown tool "${p.name}" for ${agentId}`);
 
   const task = await currentTask(deps, agentId, explicitTask);
   if (typeof task === 'string') return textResult(task, true);
-  // The run lease: refused (nothing executed) once HQ revoked this Hermes attempt, e.g. after a fallback.
-  const lease = enterHermesLease(task.id, agentId, runId);
+  // The run lease: refused (nothing executed) once HQ revoked this attempt, e.g. after a fallback.
+  const lease = enterHermesLease(task.id, agentId, runId, run?.label ?? 'Hermes');
   if (typeof lease === 'string') {
-    await deps.db.logActivity(agentId, 'mcp.tool_refused', task.request_id, task.id, { tool: p.name, via: 'hermes', run_id: runId })
+    await deps.db.logActivity(agentId, 'mcp.tool_refused', task.request_id, task.id, { tool: p.name, via, run_id: runId })
       .catch((e) => log(deps, `[mcp] activity log failed`, errMsg(e)));
     return textResult(lease, true);
   }
@@ -124,7 +152,8 @@ async function callTool(deps: WorkerDeps, agentId: string, params: unknown) {
   const started = Date.now();
   let ok = false;
   try {
-    const t = roleTools(deps, agentId, task, lease.state)[p.name]!;
+    const t = (await agentTools(deps, agentId, task, lease.state))[p.name];
+    if (!t) return textResult(`${p.name} is not available for this task any more.`, true);
     const schema = asSchema(t.inputSchema);
     const v = schema.validate ? await schema.validate(args) : { success: true as const, value: args };
     if (!v.success) return textResult(`Invalid arguments for ${p.name}: ${errMsg(v.error).slice(0, 500)}`, true);
@@ -136,7 +165,7 @@ async function callTool(deps: WorkerDeps, agentId: string, params: unknown) {
     return textResult(`Error: ${errMsg(e).slice(0, 1000)}`, true);
   } finally {
     lease.done();
-    await deps.db.logActivity(agentId, 'mcp.tool_call', task.request_id, task.id, { tool: p.name, ok, ms: Date.now() - started, via: 'hermes', run_id: lease.runId })
+    await deps.db.logActivity(agentId, 'mcp.tool_call', task.request_id, task.id, { tool: p.name, ok, ms: Date.now() - started, via, run_id: lease.runId })
       .catch((e) => log(deps, `[mcp] activity log failed`, errMsg(e)));
   }
 }
@@ -145,7 +174,7 @@ class RpcError extends Error {
   constructor(public code: number, message: string) { super(message); }
 }
 
-async function handleOne(deps: WorkerDeps, agentId: string, msg: RpcRequest): Promise<RpcResponse | null> {
+async function handleOne(deps: WorkerDeps, caller: Caller, msg: RpcRequest): Promise<RpcResponse | null> {
   const isNotification = msg.id === undefined;
   const id: Id = msg.id ?? null;
   try {
@@ -157,14 +186,14 @@ async function handleOne(deps: WorkerDeps, agentId: string, msg: RpcRequest): Pr
         const version = (MCP_PROTOCOL_VERSIONS as readonly unknown[]).includes(asked) ? asked : MCP_PROTOCOL_VERSIONS[0];
         result = {
           protocolVersion: version, capabilities: { tools: { listChanged: false } }, serverInfo: MCP_SERVER_INFO,
-          instructions: `RizeHub HQ tools for ${agentId}. Calls act on your current HQ task; anything that publishes, sends, merges, `
-            + 'deploys or spends only creates an approval for the CEO.',
+          instructions: `RizeHub HQ tools for ${caller.agentId}. Calls act on your ${caller.run ? 'assigned' : 'current'} HQ task; anything that `
+            + 'publishes, sends, merges, deploys or spends only creates an approval for the CEO.',
         };
         break;
       }
       case 'ping': result = {}; break;
-      case 'tools/list': result = { tools: await toolList(deps, agentId) }; break;
-      case 'tools/call': result = await callTool(deps, agentId, msg.params); break;
+      case 'tools/list': result = { tools: await toolList(deps, caller) }; break;
+      case 'tools/call': result = await callTool(deps, caller, msg.params); break;
       default:
         if (msg.method.startsWith('notifications/')) return null;
         throw new RpcError(-32601, `Method not found: ${msg.method}`);
@@ -179,10 +208,12 @@ async function handleOne(deps: WorkerDeps, agentId: string, msg: RpcRequest): Pr
 
 /** Returns [status, body]; body undefined = 202 Accepted with no body (notifications only). */
 export async function handleMcpPost(o: HqMcpOptions, req: http.IncomingMessage, raw: Buffer): Promise<[number, unknown]> {
-  const tokens = o.tokens();
-  if (!tokens.size) return [503, { error: 'HQ MCP is not configured (no HQ_MCP_TOKEN_<AGENT> set)' }];
-  const agentId = agentForToken(req.headers.authorization, tokens);
+  const run = runForToken(req.headers.authorization);
+  const tokens = run ? new Map<string, string>() : o.tokens();
+  if (!run && !tokens.size) return [503, { error: 'HQ MCP is not configured (no HQ_MCP_TOKEN_<AGENT> set)' }];
+  const agentId = run ? run.agentId : agentForToken(req.headers.authorization, tokens);
   if (!agentId) return [401, { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'unauthorized' } }];
+  const caller: Caller = { agentId, run, via: run ? 'claude' : 'hermes' };
   const deps = o.deps();
   if (!deps) return [503, { jsonrpc: '2.0', id: null, error: { code: -32002, message: 'worker is starting' } }];
   if (raw.length > MCP_MAX_BODY) return [413, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'body too large' } }];
@@ -193,7 +224,7 @@ export async function handleMcpPost(o: HqMcpOptions, req: http.IncomingMessage, 
   if (!msgs.length) return [400, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } }];
   const out: RpcResponse[] = [];
   for (const m of msgs) {
-    const r = await handleOne(deps, agentId, m && typeof m === 'object' ? m : {});
+    const r = await handleOne(deps, caller, m && typeof m === 'object' ? m : {});
     if (r) out.push(r);
   }
   if (!out.length) return [202, undefined];

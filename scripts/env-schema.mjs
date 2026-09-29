@@ -53,6 +53,8 @@ function supabaseKey(kind) {
 /** Agents that can run on Hermes (agents/roster.yaml runtime: hermes) → env suffix; see apps/worker/src/hermes/config.ts. */
 export const HERMES_AGENTS = { 'web-dev': 'WEB_DEV', designer: 'DESIGNER', writer: 'WRITER', sales: 'SALES' };
 const HERMES_AGENT_SUFFIXES = Object.values(HERMES_AGENTS);
+/** Agents that can be switched to `runtime: claude` (any of the six) → env suffix; see apps/worker/src/claude/config.ts. */
+export const CLAUDE_AGENTS = { coo: 'COO', 'web-dev': 'WEB_DEV', designer: 'DESIGNER', writer: 'WRITER', sales: 'SALES', 'qa-lead': 'QA_LEAD' };
 
 // ---------- schema: every variable the code reads ----------
 // req: services where it is required ('*prod' suffix = only required with --production)
@@ -156,6 +158,13 @@ export const VARS = [
   S({ key: 'HERMES_MODEL', group: 'Hermes', svc: ['worker'], check: (v) => (/^[\w./:-]+$/.test(v) ? null : 'must be a model id like claude-sonnet-5') }),
   S({ key: 'HERMES_FALLBACK', group: 'Hermes', svc: ['worker'], check: (v) => (['on', 'off'].includes(v.toLowerCase()) ? null : 'must be on | off') }),
   S({ key: 'HERMES_TIMEOUT_MS', group: 'Hermes', svc: ['worker'], check: intIn(10_000) }),
+  // Claude Agent SDK runtime (docs/05 "Claude runtime"): off by default; also needs ANTHROPIC_API_KEY + MONTHLY_BUDGET_USD > 0
+  S({ key: 'CLAUDE_RUNTIME_ENABLED', group: 'Claude runtime', svc: ['worker'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
+  S({ key: 'CLAUDE_FILE_TOOLS', group: 'Claude runtime', svc: ['worker'], check: (v) => (['hq', 'native'].includes(v) ? null : 'must be hq | native') }),
+  S({ key: 'CLAUDE_TIMEOUT_MS', group: 'Claude runtime', svc: ['worker'], check: intIn(10_000) }),
+  S({ key: 'CLAUDE_HQ_MCP_URL', group: 'Claude runtime', svc: ['worker'], check: (v) => (isUrl(v) ? null : 'must be a URL, e.g. http://127.0.0.1:4000/mcp') }),
+  ...['', ...Object.values(CLAUDE_AGENTS).map((s) => `_${s}`)].map((s) => S({ key: `CLAUDE_MODEL${s}`, group: 'Claude runtime', svc: ['worker'],
+    check: (v) => (/^(anthropic:)?claude-[\w.-]+$/.test(v) ? null : 'must be an Anthropic model id like claude-sonnet-5') })),
   // Telegram
   S({ key: 'TELEGRAM_BOT_TOKEN', group: 'Telegram', svc: ['bot'], req: ['bot'], secret: true, check: (v) => (/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(v) ? null : 'does not look like a BotFather token (123456:ABC…)') }),
   S({ key: 'TELEGRAM_ALLOWED_USER_IDS', group: 'Telegram', svc: ['bot'], req: ['bot'], check: telegramIds }),

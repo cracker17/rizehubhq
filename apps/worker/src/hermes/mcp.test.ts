@@ -7,8 +7,10 @@ import { FakeHqDb } from '../fakeHqDb';
 import { loadRole } from '../roles';
 import { makeDeps, mockModel } from '../testing';
 import type { WorkerDeps } from '../deps';
-import { createHqMcpRoutes } from './mcp';
-import { acquireHermesLease, activeHermesLease, revokeHermesLease } from './mcpState';
+import { agentToolNames, createHqMcpRoutes } from './mcp';
+import { acquireHermesLease, activeHermesLease, issueRunToken, revokeHermesLease } from './mcpState';
+import type { ConnectorStore } from '../connectors/store';
+import type { McpToolEnv } from '../tools/mcp';
 
 const WRITER_TOKEN = 'writer-token-'.padEnd(48, 'w');
 const SALES_TOKEN = 'sales-token-'.padEnd(48, 's');
@@ -154,5 +156,86 @@ test('MCP run lease: calls need the active run_id; revoked, superseded, missing 
     assert.equal(db.callsOf('submitTaskOutput').length, 0);
     assert.equal(db.activity.filter((a) => a.action === 'mcp.tool_call').length, 1, 'only the accepted call ran');
     assert.equal(db.activity.filter((a) => a.action === 'mcp.tool_refused').length, 5);
+  });
+});
+
+// ---------- connected MCP apps + per-run tokens (Claude runtime) ----------
+
+function appEnv() {
+  const app = { id: 'conn-1', name: 'Magnific', account_email: null, url: 'https://mcp.example/app', auth_type: 'oauth', settings: {}, sealed: null };
+  const store: ConnectorStore = {
+    forAgent: async (agent, kind) => (agent === 'designer' && kind === 'mcp' ? [app] : []),
+    toolsForAgent: async (agent) => (agent === 'designer' ? [
+      { connector_id: 'conn-1', name: 'generate_image', description: 'Generate an image', input_schema: { type: 'object', properties: { prompt: { type: 'string' } } }, policy: 'ask' as const },
+      { connector_id: 'conn-1', name: 'search_stock', description: 'Search stock photos', input_schema: { type: 'object', properties: { q: { type: 'string' } } }, policy: 'allow' as const },
+    ] : []),
+    get: async () => null, insert: async () => 'x', rotate: async () => undefined, mark: async () => undefined,
+  };
+  return { store, keyring: null, open: async () => { throw new Error('not in this test'); } } satisfies McpToolEnv;
+}
+
+async function withDeps(deps: WorkerDeps, fn: (rpc: (body: unknown, token: string) => Promise<{ status: number; body: any }>) => Promise<void>, tokens = new Map<string, string>()) {
+  const routes = createHqMcpRoutes({ deps: () => deps, tokens: () => tokens });
+  const server = createHttpServer({ chat: async () => ({ answer: '' }), health: () => ({}) }, 'internal-secret-not-used-by-mcp', routes);
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const port = (server.address() as AddressInfo).port;
+  const rpc = async (body: unknown, token: string) => {
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) : null };
+  };
+  try { await fn(rpc); } finally { server.close(); }
+}
+
+test('MCP: connected app tools granted to the agent are listed and keep their approval gate (Ask me → mcp.call approval)', async () => {
+  const db = new FakeHqDb();
+  const deps = { ...makeDeps({ db, model: mockModel([]) }), mcp: appEnv() } as WorkerDeps;
+  const DESIGNER_TOKEN = 'designer-token-'.padEnd(48, 'd');
+  await withDeps(deps, async (rpc) => {
+    const list = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, DESIGNER_TOKEN);
+    const names: string[] = list.body.result.tools.map((t: { name: string }) => t.name);
+    assert.ok(names.includes('mcp_magnific__generate_image') && names.includes('mcp_magnific__search_stock'), names.join(','));
+    for (const t of ['submit_output', 'ask_ceo', 'request_external_action', 'workspace_fs']) assert.ok(names.includes(t), `role tool ${t} kept`);
+    assert.equal(names.filter((n) => n.startsWith('mcp_')).length, 2, 'role tools first, then the two app tools');
+    assert.deepEqual(await agentToolNames(deps, 'designer'), names);
+    assert.ok(!(await agentToolNames(deps, 'writer')).some((n) => n.startsWith('mcp_')), 'apps only for agents they are granted to');
+
+    const task = db.addTask({ agent_id: 'designer', status: 'working' });
+    db.agents.get('designer')!.current_task_id = task.id;
+    const run_id = await acquireHermesLease(task.id, 'designer');
+    const r = await rpc(call('mcp_magnific__generate_image', { prompt: 'hero banner', run_id }), DESIGNER_TOKEN);
+    assert.equal(r.body.result.isError, false);
+    assert.match(r.body.result.content[0].text, /Queued for the CEO.s approval/);
+    const ap = db.approvals.filter((a) => a.kind === 'external_action');
+    assert.equal(ap.length, 1);
+    assert.equal((ap[0]!.payload as { action_type: string }).action_type, 'mcp.call');
+    assert.equal(db.activity.filter((a) => a.action === 'mcp.tool_call' && a.detail.tool === 'mcp_magnific__generate_image').length, 1);
+    await revokeHermesLease(task.id, run_id, 'test done');
+  }, new Map([[DESIGNER_TOKEN, 'designer']]));
+});
+
+test('MCP per-run token: works without any HQ_MCP_TOKEN_<AGENT>, pins agent + task + run, refused once revoked', async () => {
+  const db = new FakeHqDb();
+  const deps = makeDeps({ db, model: mockModel([]) });
+  const task = db.addTask({ agent_id: 'writer', status: 'working' });
+  const run = await acquireHermesLease(task.id, 'writer', 'Claude');
+  const token = issueRunToken(task.id, run);
+  assert.match(token, /^[0-9a-f]{64}$/);
+  assert.throws(() => issueRunToken(task.id, 'not-the-run'), /no active run/);
+  await withDeps(deps, async (rpc) => {
+    assert.equal((await rpc({ jsonrpc: '2.0', id: 1, method: 'ping' }, 'x'.repeat(64))).status, 503, 'no static tokens and an unknown token');
+    const list = await rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, token);
+    const names = list.body.result.tools.map((t: { name: string }) => t.name).sort();
+    assert.deepEqual(names, [...new Set(loadRole('writer').tools)].sort());
+    const ok = await rpc(call('report_progress', { percent: 20, note: 'Outlining', run_id: 'ignored', task_id: 'ignored' }), token);
+    assert.equal(ok.body.result.isError, false);
+    assert.equal(db.screens.get('writer')?.step_note, 'Outlining');
+    assert.equal(db.activity.find((a) => a.action === 'mcp.tool_call')!.detail.via, 'claude');
+
+    await revokeHermesLease(task.id, run, 'Claude run ended');
+    const late = await rpc(call('submit_output', { summary: 'late' }), token);
+    assert.equal(late.body.result.isError, true);
+    assert.match(late.body.result.content[0].text, /HQ ended this Claude run .*Claude run ended/);
+    assert.equal(db.callsOf('submitTaskOutput').length, 0);
   });
 });

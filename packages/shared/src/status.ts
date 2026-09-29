@@ -11,8 +11,8 @@ export const LEAD_EMAIL_STATUS = ['draft','pending_approval','approved','sent','
 // Model roles resolve to a model through config/models.yaml (docs/14). design/writer/sales were added with the
 // six-agent roster; specialist/reports stay for older profiles and for report phrasing.
 export const MODEL_ROLES = ['lead','specialist','dev','design','writer','sales','reports','qa','light'] as const;
-/** Where an agent's task loop runs: the worker's AI SDK runner, or a Hermes Agent instance (docs/04). */
-export const AGENT_RUNTIME = ['worker','hermes'] as const;
+/** Where an agent's task loop runs: the worker's AI SDK runner, a Hermes Agent instance, or the Claude Agent SDK (docs/04). */
+export const AGENT_RUNTIME = ['worker','hermes','claude'] as const;
 export const IDLE_ACTIVITIES = ['coffee','lounge_sofa','lobby','ping_pong','foosball','chat','gym'] as const;
 
 export type RequestStatus = (typeof REQUEST_STATUS)[number];

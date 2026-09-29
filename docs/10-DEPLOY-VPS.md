@@ -156,6 +156,17 @@ The worker joins the `hermes` network and serves `POST /mcp` (Bearer `HQ_MCP_TOK
 Hermes only and is never proxied publicly. RAM: budget about 1 GB more per Hermes container you start.
 `deploy/update.sh` does not rebuild the Hermes profile: re-run step 3 after changing `deploy/hermes/`.
 
+## 6c. Claude Agent SDK runtime (optional, off by default)
+An agent with `runtime: claude` runs on the Claude Agent SDK inside the **worker container** (docs/05 "Claude runtime");
+no extra container. Nothing to deploy beyond the normal worker image, which now carries the SDK's native Claude Code
+binary (`@anthropic-ai/claude-agent-sdk-linux-x64`, glibc; the image is Ubuntu 24.04, so it runs as is; the Dockerfile drops
+the unused musl build): expect the worker image to grow by about 240 MB. Each running Claude task is one extra Claude Code
+process (a few hundred MB RAM): with `MAX_PARALLEL_TASKS=2` plus Chromium, watch the worker's `mem_limit: 2g` and raise it
+if you run Claude tasks in parallel. It calls `api.anthropic.com` directly from the worker and its own `/mcp` over
+127.0.0.1 (no new network or port). To turn it on for one agent: `.env.worker` `CLAUDE_RUNTIME_ENABLED=true`,
+`ANTHROPIC_API_KEY`, `MONTHLY_BUDGET_USD` > 0, then the steps in docs/05 "Turning it on for one agent", then
+`docker compose up -d worker`.
+
 ## 7. Firewall & hardening
 ```bash
 sudo ufw status                        # if already active, just make sure 80/443/OpenSSH are allowed
