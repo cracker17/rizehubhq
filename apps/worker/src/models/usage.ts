@@ -81,6 +81,10 @@ export type PickModel = (role: ModelRole, opts?: { override?: string | null }) =
 export const TRANSIENT_STATUSES: readonly number[] = [500, 502, 503, 504, 529];
 /** How long a model is skipped after a transient error before the router tries it again. */
 export const TRANSIENT_BLOCK_MS = 10 * 60_000;
+/** How long a model is skipped after a per-minute rate limit (429 without a daily quota in the message). */
+export const RATE_LIMIT_BLOCK_MS = 2 * 60_000;
+/** A 429 about a daily quota (Gemini "…PerDay…" / free-tier requests, Groq RPD/TPD, OpenRouter free-models-per-day). */
+const DAILY_QUOTA = /per.?day|daily|\bRPD\b|\bTPD\b|free_tier_requests|free-models-per-day/i;
 
 /**
  * True for "try later / another provider" errors: router has no quota, the provider said 429, or the provider no
@@ -97,23 +101,33 @@ export function isQuotaError(e: unknown, depth = 0): boolean {
   return cause ? isQuotaError(cause, depth + 1) : false;
 }
 
-/** HTTP status of the provider error behind e (through RetryError / cause chains), or null. */
-export function providerStatus(e: unknown, depth = 0): number | null {
+/** The provider's APICallError behind e (through RetryError / cause chains), or null. */
+function providerError(e: unknown, depth = 0): InstanceType<typeof APICallError> | null {
   if (!e || depth > 4) return null;
-  if (APICallError.isInstance(e)) return e.statusCode ?? null;
-  if (RetryError.isInstance(e)) return providerStatus(e.lastError, depth + 1);
+  if (APICallError.isInstance(e)) return e;
+  if (RetryError.isInstance(e)) return providerError(e.lastError, depth + 1);
   const cause = (e as { cause?: unknown }).cause;
-  return cause ? providerStatus(cause, depth + 1) : null;
+  return cause ? providerError(cause, depth + 1) : null;
+}
+
+/** HTTP status of the provider error behind e (through RetryError / cause chains), or null. */
+export function providerStatus(e: unknown): number | null {
+  return providerError(e)?.statusCode ?? null;
 }
 
 /**
- * How long to skip just the failing model (the provider's other models still work), or null to block the provider:
- * 404 (model retired) and 413 (request over the model's per-minute size cap, e.g. Groq free tier 8k TPM on a long
- * agent loop) → the rest of the day; overloaded / 5xx → TRANSIENT_BLOCK_MS; anything else (429 quota) → null.
+ * How long to skip just the failing model (the provider's other models still work), or null to block the provider.
+ * Free-tier limits are per model (Gemini: 20 requests/day each; Groq: per-model TPM/RPD), so every provider error
+ * with a status blocks only that model:
+ * 404 (retired) and 413 (over the per-minute size cap, e.g. Groq's 8k TPM on a long agent loop) → rest of the day;
+ * 429 → rest of the day when the message names a daily quota, else RATE_LIMIT_BLOCK_MS; overloaded / 5xx →
+ * TRANSIENT_BLOCK_MS. No provider status (e.g. the router itself had nothing) → null.
  */
 export function modelBlock(e: unknown): 'day' | number | null {
-  const s = providerStatus(e);
+  const err = providerError(e);
+  const s = err?.statusCode ?? null;
   if (s === 404 || s === 413) return 'day';
+  if (s === 429) return DAILY_QUOTA.test(`${err?.message ?? ''} ${err?.responseBody ?? ''}`) ? 'day' : RATE_LIMIT_BLOCK_MS;
   if (s !== null && TRANSIENT_STATUSES.includes(s)) return TRANSIENT_BLOCK_MS;
   return null;
 }
@@ -193,9 +207,9 @@ export class ModelPicker {
   }
 
   /**
-   * After a provider error the router falls back. A 429 uses up the provider's daily cap (all its models) until the next
-   * Manila day; with the failing modelId, a 404/413 skips only that model for the day and an overloaded/5xx model for
-   * TRANSIENT_BLOCK_MS (modelBlock).
+   * After a provider error the router falls back. With the failing modelId only that model is skipped, for as long as
+   * modelBlock() says (daily quota / 404 / 413 → rest of the Manila day; per-minute 429 → 2 min; 5xx → 10 min).
+   * Without a model id (or a status), the provider's daily cap is treated as used up (all its models).
    */
   markExhausted(provider: string, detail: { modelId?: string; error?: unknown } = {}) {
     this.rollDay();

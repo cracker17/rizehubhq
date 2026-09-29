@@ -11,15 +11,17 @@ active_profile: free   # free | paid | hybrid | claude | openai  (env MODEL_PROF
 
 profiles:
   free:
-    lead:       [google:gemini-3.8-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
-    specialist: [google:gemini-3.8-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
-    dev:        [google:gemini-3.8-flash, groq:openai/gpt-oss-120b]
-    design:     [google:gemini-3.8-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
-    writer:     [google:gemini-3.8-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
-    sales:      [google:gemini-3.8-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
-    reports:    [google:gemini-3.8-flash, groq:openai/gpt-oss-120b]
-    qa:         [google:gemini-3.8-flash, groq:openai/gpt-oss-120b]
-    light:      [groq:llama-3.1-8b-instant, google:gemini-3.5-flash-lite, google:gemini-3.8-flash, openrouter:meta-llama/llama-3.3-70b-instruct:free]
+    # Checked 2026-09-29 against HQ's own keys: Gemini free = 20 requests/day PER MODEL; Groq free = 8k tokens/min (too
+    # small for long agent prompts, fine for chat); OpenRouter free account = ~50 requests/day across all :free models.
+    lead:       [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
+    specialist: [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
+    dev:        [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:qwen/qwen3.8-27b:free]
+    design:     [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free]
+    writer:     [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
+    sales:      [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
+    reports:    [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free]
+    qa:         [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free]
+    light:      [groq:openai/gpt-oss-20b, google:gemini-3.5-flash-lite, groq:qwen/qwen3.8-27b, openrouter:google/gemma-4-31b-it:free, google:gemini-3.8-flash]
   # Paid API keys only (Anthropic Console + OpenAI platform; Claude.ai Pro/Max subscriptions can't power agents).
   # Needs ANTHROPIC_API_KEY, OPENAI_API_KEY and MONTHLY_BUDGET_USD > 0. Anthropic calls use prompt caching.
   # IDs below are the defaults; MODEL_ID_<ROLE> env vars override them. DAILY_AI_BUDGET_USD reached → paid providers stop
@@ -43,7 +45,7 @@ profiles:
     sales:      [google:gemini-3.8-flash, groq:openai/gpt-oss-120b]
     reports:    [anthropic:claude-sonnet-5]
     qa:         [anthropic:claude-sonnet-5]
-    light:      [groq:llama-3.1-8b-instant]
+    light:      [groq:openai/gpt-oss-20b]
   claude:
     lead:       [anthropic:claude-opus-5-5]
     specialist: [anthropic:claude-sonnet-5]
@@ -67,6 +69,6 @@ profiles:
 
 # Free-tier guard rails (router): switch provider at 90% of these daily request caps.
 daily_request_caps:
-  google: 1000
+  google: 40       # 20 per model per day on the free tier (2 models); a daily 429 also skips just that model
   groq: 1000
-  openrouter: 50
+  openrouter: 50   # free account; ~1000/day after a one-time $10 credit purchase (OpenRouter policy)

@@ -40,7 +40,7 @@ test('isQuotaError: 429 and 404 (retired model) fall back to the next provider; 
   assert.equal(isQuotaError(mk(400)), false);
 });
 
-test('markExhausted: 413/404 block only the failing model for the day; 429 blocks the provider', async () => {
+test('markExhausted: 413/404 skip only the failing model for the day; a per-minute 429 only that model for 2 minutes', async () => {
   const { APICallError } = await import('ai');
   const { ModelPicker } = await import('./usage');
   const mk = (statusCode: number) => new APICallError({ message: `HTTP ${statusCode}`, url: 'x', requestBodyValues: {}, statusCode });
@@ -92,4 +92,40 @@ test('overloaded model (Gemini 503 "high demand", Anthropic 529): fall back, ski
   assert.equal(await id('light'), 'google:lite', 'other Google models stay usable');
   now = new Date(now.getTime() + TRANSIENT_BLOCK_MS + 1000);
   assert.equal(await id('lead'), 'google:flash', 'tried again after the skip window');
+});
+
+test('429: a daily quota (Gemini free: 20/day per model) skips that model until tomorrow; a per-minute limit for 2 minutes', async () => {
+  const { APICallError } = await import('ai');
+  const { ModelPicker, RATE_LIMIT_BLOCK_MS, modelBlock } = await import('./usage');
+  const rate = (message: string, responseBody?: string) =>
+    new APICallError({ message, url: 'x', requestBodyValues: {}, statusCode: 429, responseBody });
+  const gemini = rate('You exceeded your current quota. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.8-flash',
+    '{"error":{"details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}');
+  const tpm = rate('Rate limit reached for model `openai/gpt-oss-120b` on tokens per minute (TPM): Limit 8000, Used 7900');
+  assert.equal(modelBlock(gemini), 'day');
+  assert.equal(modelBlock(rate('Rate limit exceeded: free-models-per-day')), 'day', 'OpenRouter free daily cap');
+  assert.equal(modelBlock(tpm), RATE_LIMIT_BLOCK_MS);
+
+  const specs = ['google:flash', 'google:lite', 'groq:big'];
+  const cfg = {
+    active_profile: 'free', daily_request_caps: { google: 40, groq: 1000 },
+    profiles: { free: { lead: specs, specialist: specs, dev: specs, reports: specs, qa: specs, light: specs } },
+  };
+  let now = new Date('2026-09-29T03:36:00Z');
+  const picker = new ModelPicker({
+    cfg, env: { GROQ_API_KEY: 'g', GOOGLE_GENERATIVE_AI_API_KEY: 'k' }, monthlyBudgetUsd: 0,
+    create: async () => ({}) as never, now: () => now,
+  });
+  const id = async () => { const m = await picker.pick('lead'); return `${m.provider}:${m.modelId}`; };
+  picker.markExhausted('google', { modelId: 'flash', error: gemini });
+  assert.equal(await id(), 'google:lite', 'the other Gemini model has its own daily quota');
+  picker.markExhausted('google', { modelId: 'lite', error: tpm });
+  assert.equal(await id(), 'groq:big');
+  now = new Date(now.getTime() + RATE_LIMIT_BLOCK_MS + 1000);
+  assert.equal(await id(), 'google:lite', 'per-minute limit over');
+  now = new Date('2026-09-29T15:00:00Z'); // still 29 Sep in Manila? 23:00 → same day
+  picker.markExhausted('google', { modelId: 'lite', error: gemini });
+  assert.equal(await id(), 'groq:big');
+  now = new Date('2026-09-29T16:30:00Z'); // 00:30 on 30 Sep in Manila
+  assert.equal(await id(), 'google:flash', 'daily quotas reset with the Manila day');
 });
