@@ -1,5 +1,19 @@
 // /budget: today's and this month's model spend (activity_log.cost_usd) in the HQ timezone.
+import { effectiveDailyBudget, effectiveMonthlyBudget, parseDashboardAi } from '@rizehubhq/shared';
 import type { SpendRow } from './types';
+
+/**
+ * The caps /budget shows, with the worker's precedence (packages/shared aiSettings.ts): the CEO's dashboard value
+ * (Admin → API & AI) → the .env value → default (monthly 0; daily: older settings.daily_budget_usd, else none).
+ */
+export function budgetCaps(env: { monthlyBudgetUsd: number | null; dailyBudgetUsd: number | null }, settings: Record<string, unknown>): { monthly: number; daily: number | null } {
+  const dash = parseDashboardAi(settings);
+  const str = (n: number | null) => (n === null ? undefined : String(n));
+  return {
+    monthly: effectiveMonthlyBudget(dash.monthlyBudgetUsd, str(env.monthlyBudgetUsd)).usd,
+    daily: effectiveDailyBudget(dash.dailyBudgetUsd, str(env.dailyBudgetUsd), settings.daily_budget_usd).usd,
+  };
+}
 
 export interface SpendSummary { today: number; month: number; topToday: { actor: string; usd: number }[] }
 

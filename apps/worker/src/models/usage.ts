@@ -174,7 +174,10 @@ export class ModelPicker {
   spentTodayUsd = 0;
   dailyBudgetUsd: number | null;
 
-  constructor(private opts: ModelPickerOptions) {
+  private opts: ModelPickerOptions;
+
+  constructor(opts: ModelPickerOptions) {
+    this.opts = { ...opts }; // configure() changes this copy, never the caller's object
     const now = this.now();
     this.day = manilaDay(now);
     this.month = manilaMonth(now);
@@ -188,6 +191,41 @@ export class ModelPicker {
     this.rollDay();
     const b = this.dailyBudgetUsd;
     return b !== null && Number.isFinite(b) && b > 0 && this.spentTodayUsd >= b;
+  }
+
+  /**
+   * Applies the CEO's dashboard settings (settings/runtime.ts, every ~60 s and on /settings/reload): profile, monthly
+   * budget, and the env the router checks keys and MODEL_ID_<ROLE> in. Takes effect on the next pick; running calls
+   * keep the model they have.
+   */
+  configure(u: { profile?: string; monthlyBudgetUsd?: number; env?: Record<string, string | undefined>; dailyBudgetUsd?: number | null }): void {
+    if (u.profile !== undefined) {
+      if (!this.opts.cfg.profiles[u.profile]) throw new Error(`Unknown model profile "${u.profile}"`);
+      this.opts.profile = u.profile;
+    }
+    if (u.monthlyBudgetUsd !== undefined && Number.isFinite(u.monthlyBudgetUsd)) this.opts.monthlyBudgetUsd = u.monthlyBudgetUsd;
+    if (u.env) this.opts.env = u.env;
+    if (u.dailyBudgetUsd !== undefined) this.dailyBudgetUsd = u.dailyBudgetUsd;
+  }
+
+  /** The active profile and monthly budget (after configure()). */
+  get settings(): { profile: string; monthlyBudgetUsd: number } {
+    return { profile: this.opts.profile ?? this.opts.cfg.active_profile, monthlyBudgetUsd: this.opts.monthlyBudgetUsd };
+  }
+
+  /** Which model a role would get right now (no model is created, nothing is counted). */
+  preview(role: ModelRole, override?: string | null): { provider: string; modelId: string } | { error: string } {
+    this.rollDay();
+    try {
+      const c = chooseCandidate(role, this.opts.cfg, {
+        profile: this.opts.profile, env: this.opts.env, monthlyBudgetUsd: this.opts.monthlyBudgetUsd, override: override ?? null,
+        paidBlocked: this.paidBlocked,
+        usage: { requestsToday: this.requestsToday, spentThisMonthUsd: this.spentThisMonthUsd, blockedModels: this.activeBlocks() },
+      });
+      return { provider: c.provider, modelId: c.modelId };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
   }
 
   /** Feeds today's DB total (and the resolved cap) from the loop's budget check. Never lowers today's figure. */

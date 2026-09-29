@@ -59,8 +59,9 @@ export const BUDGET_ALERT_LEVELS = [80, 100] as const;
 export interface GlobalBudgetCheck { over: boolean; spentUsd: number; budgetUsd: number | null; day: string; pct: number | null }
 
 /**
- * The daily cap: DAILY_AI_BUDGET_USD when set, else settings.daily_budget_usd, else none. 0 means "no cap" (an
- * explicit DAILY_AI_BUDGET_USD=0 also ignores settings); values that are not a finite number ≥ 0 are ignored.
+ * The daily cap: the given value (the dashboard's ai_daily_budget_usd, else DAILY_AI_BUDGET_USD: settings/runtime.ts
+ * loopDailyBudget) when set, else settings.daily_budget_usd, else none. 0 means "no cap" (an explicit 0 also ignores
+ * settings); values that are not a finite number ≥ 0 are ignored.
  */
 export function resolveDailyBudget(envValue: number | null | undefined, settings: Record<string, unknown> = {}): number | null {
   const ok = (v: unknown) => { const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN; return Number.isFinite(n) && n >= 0 ? n : null; };
@@ -76,7 +77,8 @@ export class GlobalDailyBudget {
 
   constructor(
     private db: Pick<HqDb, 'spendSinceUsd' | 'recordBudgetAlert' | 'getSettings'>,
-    private o: { budgetUsd?: number | null; now?: () => Date; cacheMs?: number; log?: (m: string) => void } = {},
+    /** budgetUsd: a fixed cap, or a function read on every check (the dashboard can change it, settings/runtime.ts). */
+    private o: { budgetUsd?: number | null | (() => number | null); now?: () => Date; cacheMs?: number; log?: (m: string) => void } = {},
   ) {}
 
   private now() { return this.o.now?.() ?? new Date(); }
@@ -86,7 +88,8 @@ export class GlobalDailyBudget {
     const now = this.now();
     const day = manilaDay(now);
     if (this.cache && this.cache.check.day === day && now.getTime() - this.cache.at < (this.o.cacheMs ?? 30_000)) return this.cache.check;
-    const budgetUsd = resolveDailyBudget(this.o.budgetUsd, this.o.budgetUsd == null ? await this.db.getSettings() : {});
+    const fixed = typeof this.o.budgetUsd === 'function' ? this.o.budgetUsd() : this.o.budgetUsd;
+    const budgetUsd = resolveDailyBudget(fixed, fixed == null ? await this.db.getSettings() : {});
     const spentUsd = budgetUsd === null ? 0 : await this.db.spendSinceUsd(manilaDayStartIso(now));
     const pct = budgetUsd ? Math.round((spentUsd / budgetUsd) * 1000) / 10 : null;
     const check: GlobalBudgetCheck = { over: isOverDaily(spentUsd, budgetUsd), spentUsd, budgetUsd, day, pct };
@@ -116,5 +119,5 @@ export function freeFallbackNote(c: GlobalBudgetCheck): string {
 
 export function globalBudgetNote(c: GlobalBudgetCheck): string {
   return `Daily AI budget reached: $${c.spentUsd.toFixed(2)} spent of $${(c.budgetUsd ?? 0).toFixed(2)} today (Asia/Manila ${c.day}). `
-    + 'No new planning, tasks or QA reviews start until midnight Manila time or until DAILY_AI_BUDGET_USD is raised; running work finishes.';
+    + 'No new planning, tasks or QA reviews start until midnight Manila time or until the daily budget is raised (Admin → API & AI); running work finishes.';
 }
