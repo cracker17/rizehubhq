@@ -158,6 +158,16 @@ Status → color mapping (use everywhere: dots, bubbles, progress bars):
 - **Security** `/admin/security`: *CEO password* card (current password, new twice, 2FA code when on; live rule hints; "Show passwords") and the *Two-factor sign-in* card (set up; turn off with password + code, e.g. for a new phone). Spec: docs/09 "CEO password" + "Two-factor (TOTP)".
 - Sign-in page: *Forgot password?* → email a reset link → `/auth/confirm` → 2FA step (when on) → `/reset-password`.
 
+### Voice input
+- A **mic button** sits next to Send in the agent chat and in the New Request box. Tap to record, tap again to stop (Esc
+  cancels, 2 minutes max). The clip goes to `/api/transcribe` (CEO session only) → worker `POST /transcribe` →
+  Whisper from `config/models.yaml` `transcription:` (Groq `whisper-large-v3-turbo`, then `whisper-large-v3`), and the
+  text is added to the box to check before sending. The audio is never stored; `activity_log` gets `usage.transcribe`
+  (model, seconds, source; no text). Browsers record WebM/Opus (Chrome, Edge, Firefox) or MP4 (Safari).
+- **Voice mode** (agent chat, remembered per browser): what you say is sent straight away and the reply is read aloud
+  with the browser's built-in voice (free, on-device).
+- Telegram voice notes are the next step (the bot has no worker secret, so they go through Supabase).
+
 ## Agent panel (click any character/tile)
 Tabs: **Screen** (live POV monitor, 07 §6) · **Chat** (07 §7) · **Task** · **Today**.
 

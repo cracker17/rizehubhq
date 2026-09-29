@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useHq } from '@/lib/data/store';
 import type { Priority } from '@/lib/data/types';
+import { VoiceButton } from './VoiceButton';
+import { appendSpoken } from '@/lib/voice';
 
 const field = 'h-10 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 text-sm outline-none focus:border-[var(--color-line-active)]';
 
@@ -39,6 +41,8 @@ export function NewRequestForm({ autoFocus, onDone, rows = 5 }: { autoFocus?: bo
         className="w-full resize-none rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] p-4 text-[15px] outline-none placeholder:text-[var(--color-dim)] focus:border-[var(--color-line-active)]"
       />
       <div className="mt-3 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center">
+        <VoiceButton source="new-request" onText={(t) => { setText((cur) => appendSpoken(cur, t)); ref.current?.focus(); }}
+          className="col-span-2 h-10 bg-[var(--color-panel-2)] sm:col-auto" />
         <select value={client} onChange={(e) => setClient(e.target.value)} className={`${field} col-span-2 sm:col-auto sm:max-w-[200px]`} aria-label="Client (optional)">
           <option value="">No client</option>
           {snap.clients.map((c) => <option key={c.id} value={c.slug}>{c.name}</option>)}

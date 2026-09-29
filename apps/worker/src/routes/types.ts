@@ -8,6 +8,8 @@ export interface Route {
   method: 'GET' | 'POST';
   path: string;
   auth: 'secret' | 'self';
+  /** 'self' routes only: largest body accepted (default 1 MB). */
+  maxBody?: number;
   /** rawBody is the exact bytes received (needed for HMAC checks). Return [status, json]. */
   handle(req: http.IncomingMessage, rawBody: Buffer): Promise<[number, unknown]>;
 }

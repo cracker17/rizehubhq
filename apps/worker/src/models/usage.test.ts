@@ -46,7 +46,7 @@ test('markExhausted: 413/404 skip only the failing model for the day; a per-minu
   const mk = (statusCode: number) => new APICallError({ message: `HTTP ${statusCode}`, url: 'x', requestBodyValues: {}, statusCode });
   const specs = ['groq:big', 'groq:small', 'google:flash'];
   const cfg = {
-    active_profile: 'free', daily_request_caps: { groq: 1000, google: 1000 },
+    active_profile: 'free', transcription: [], daily_request_caps: { groq: 1000, google: 1000 },
     profiles: { free: { lead: specs, specialist: specs, dev: specs, reports: specs, qa: specs, light: ['groq:small', 'google:flash'] } },
   };
   let now = new Date('2026-09-29T02:00:00Z');
@@ -78,7 +78,7 @@ test('overloaded model (Gemini 503 "high demand", Anthropic 529): fall back, ski
   for (const s of [500, 502, 503, 504, 529]) assert.equal(isQuotaError(mk(s)), true, String(s));
   const specs = ['google:flash', 'groq:big'];
   const cfg = {
-    active_profile: 'free', daily_request_caps: { groq: 1000, google: 1000 },
+    active_profile: 'free', transcription: [], daily_request_caps: { groq: 1000, google: 1000 },
     profiles: { free: { lead: specs, specialist: specs, dev: specs, reports: specs, qa: specs, light: ['google:lite', 'groq:big'] } },
   };
   let now = new Date('2026-09-29T02:50:00Z');
@@ -108,7 +108,7 @@ test('429: a daily quota (Gemini free: 20/day per model) skips that model until 
 
   const specs = ['google:flash', 'google:lite', 'groq:big'];
   const cfg = {
-    active_profile: 'free', daily_request_caps: { google: 40, groq: 1000 },
+    active_profile: 'free', transcription: [], daily_request_caps: { google: 40, groq: 1000 },
     profiles: { free: { lead: specs, specialist: specs, dev: specs, reports: specs, qa: specs, light: specs } },
   };
   let now = new Date('2026-09-29T03:36:00Z');

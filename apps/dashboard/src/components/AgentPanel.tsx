@@ -1,11 +1,13 @@
 'use client';
-import { X, MonitorPlay, MessageSquare, ListChecks, CalendarDays, Send } from 'lucide-react';
+import { X, MonitorPlay, MessageSquare, ListChecks, CalendarDays, Send, Headphones } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { IDLE_LABEL, isToday, timeHM, type TileAgent as Agent } from '@/lib/data/derive';
 import { useHq } from '@/lib/data/store';
 import { STATUS_COLOR, STATUS_LABEL } from '@/lib/status';
 import { Avatar } from './Avatar';
+import { VoiceButton } from './VoiceButton';
+import { appendSpoken, readVoiceMode, saveVoiceMode, speakText, stopSpeaking } from '@/lib/voice';
 
 const TABS = [
   { id: 'screen', label: 'Screen', icon: MonitorPlay },
@@ -74,6 +76,10 @@ function Chat({ agent }: { agent: Agent }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [waiting, setWaiting] = useState(false);
+  // Voice mode: what you say is sent right away and replies are read aloud (docs/06 "Voice input").
+  const [voiceMode, setVoiceMode] = useState(false);
+  useEffect(() => { setVoiceMode(readVoiceMode()); return () => stopSpeaking(); }, []);
+  const toggleVoiceMode = () => setVoiceMode((on) => { saveVoiceMode(!on); if (on) stopSpeaking(); return !on; });
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [msgs.length, waiting]);
 
@@ -86,7 +92,13 @@ function Chat({ agent }: { agent: Agent }) {
     const res = await ask(agent.id, question);
     setWaiting(false);
     if (!res) return;
-    setMsgs((m) => [...m, res.live && res.answer ? { from: 'agent', text: res.answer } : { from: 'agent', text: demoReply(agent), demo: true }]);
+    const reply: Msg = res.live && res.answer ? { from: 'agent', text: res.answer } : { from: 'agent', text: demoReply(agent), demo: true };
+    setMsgs((m) => [...m, reply]);
+    if (voiceMode) speakText(reply.text);
+  };
+  const onSpoken = (spoken: string) => {
+    if (voiceMode) void send(appendSpoken(text, spoken));
+    else setText((t) => appendSpoken(t, spoken));
   };
 
   return (
@@ -108,10 +120,19 @@ function Chat({ agent }: { agent: Agent }) {
         )}
         <div ref={end} />
       </div>
+      <div className="flex justify-end">
+        <button type="button" onClick={toggleVoiceMode} aria-pressed={voiceMode}
+          title="Voice mode: what you say is sent right away and replies are read aloud"
+          className={clsx('inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors',
+            voiceMode ? 'border-[var(--color-line-active)] bg-[var(--color-panel-2)] text-white' : 'border-[var(--color-line)] text-[var(--color-muted)] hover:text-white')}>
+          <Headphones size={14} aria-hidden /> Voice mode {voiceMode ? 'on' : 'off'}
+        </button>
+      </div>
       <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="sticky bottom-0 flex gap-2 bg-[var(--color-bg)] pt-1">
         <label htmlFor={`chat-${agent.id}`} className="sr-only">Message {agent.name}</label>
         <input id={`chat-${agent.id}`} value={text} onChange={(e) => setText(e.target.value)} placeholder={`Ask ${agent.name}…`}
           className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--color-line)] bg-[#231f55]/65 px-4 text-[15px] outline-none placeholder:text-[var(--color-dim)] focus:border-[var(--color-line-active)]" />
+        <VoiceButton onText={onSpoken} source="agent-chat" disabled={waiting} />
         <button disabled={!text.trim() || waiting} aria-label="Send" className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-primary)] disabled:opacity-40"><Send size={17} /></button>
       </form>
     </div>

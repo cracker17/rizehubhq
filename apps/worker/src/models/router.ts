@@ -27,6 +27,8 @@ const ModelsFile = z.object({
   active_profile: z.string(),
   profiles: z.record(z.string(), ProfileSchema),
   daily_request_caps: z.record(z.string(), z.number()).default({}),
+  /** Speech-to-text models (models/transcribe.ts), provider:model, first usable wins. */
+  transcription: z.array(z.string()).default([]),
 });
 export type ModelsConfig = z.infer<typeof ModelsFile>;
 

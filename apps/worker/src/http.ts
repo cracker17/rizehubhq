@@ -61,7 +61,7 @@ export function createHttpServer(handlers: HttpHandlers, secret: string, routes:
       const url = new URL(req.url ?? '/', 'http://localhost');
       const route = routes.find((r) => r.method === req.method && r.path === url.pathname);
       if (route?.auth === 'self') {
-        const [status, body] = await route.handle(req, await readRaw(req));
+        const [status, body] = await route.handle(req, await readRaw(req, route.maxBody));
         return send(res, status, body);
       }
       if (!secret) return send(res, 503, { error: 'HQ_INTERNAL_SECRET is not configured' });
