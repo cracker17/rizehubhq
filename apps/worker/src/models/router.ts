@@ -72,6 +72,8 @@ const KEY_ENV: Record<Provider, string> = {
 export interface UsageSnapshot {
   requestsToday: Partial<Record<Provider, number>>;
   spentThisMonthUsd: number;
+  /** provider:model specs that failed on their own today (retired 404, over the size cap 413); the provider stays usable. */
+  blockedModels?: ReadonlySet<string>;
 }
 
 export const isPaidProvider = (p: string) => p === 'anthropic' || p === 'openai';
@@ -102,6 +104,7 @@ export function chooseCandidate(
     const paid = isPaidProvider(c.provider);
     if (paid && opts.paidBlocked) { reasons.push(`${spec}: daily AI budget reached`); continue; }
     if (!opts.env[KEY_ENV[c.provider]]) { reasons.push(`${spec}: no ${KEY_ENV[c.provider]}`); continue; }
+    if (opts.usage.blockedModels?.has(`${c.provider}:${c.modelId}`)) { reasons.push(`${spec}: model unavailable today`); continue; }
     const cap = cfg.daily_request_caps[c.provider];
     if (cap && (opts.usage.requestsToday[c.provider] ?? 0) >= cap * 0.9) { reasons.push(`${spec}: daily free cap nearly used`); continue; }
     if (paid && opts.usage.spentThisMonthUsd >= opts.monthlyBudgetUsd) { reasons.push(`${spec}: monthly budget reached`); continue; }

@@ -58,7 +58,7 @@ export async function answerChat(agentId: string, question: string, deps: Worker
     } catch (e) {
       if (!isQuotaError(e) || attempt >= 3) throw e;
       log(deps, `[chat] ${picked.provider}:${picked.modelId} unavailable (${errMsg(e).slice(0, 120)}); trying the next model`);
-      deps.onProviderQuota?.(picked.provider);
+      deps.onProviderQuota?.(picked.provider, { modelId: picked.modelId, error: e });
       picked = await deps.pickModel('light');
     }
   }

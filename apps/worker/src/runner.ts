@@ -327,7 +327,7 @@ export async function runBuiltinTask(task: TaskRow, deps: WorkerDeps, opts: RunO
       return state.ended === 'submitted' ? { status: 'submitted', costUsd: state.costUsd, fallback: false } : { status: 'asked_ceo', costUsd: state.costUsd };
     }
     if (isQuotaError(e) || opts.abortSignal?.aborted) {
-      if (picked && !opts.abortSignal?.aborted) deps.onProviderQuota?.(picked.provider);
+      if (picked && !opts.abortSignal?.aborted) deps.onProviderQuota?.(picked.provider, { modelId: picked.modelId, error: e });
       const reason = opts.abortSignal?.aborted ? 'worker shutting down' : `model quota: ${errMsg(e)}`;
       await db.requeueTask(task.id, reason.slice(0, 500)).catch(() => undefined);
       return { status: 'requeued', reason, costUsd: state.costUsd };

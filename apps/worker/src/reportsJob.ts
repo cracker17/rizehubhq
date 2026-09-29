@@ -46,7 +46,7 @@ export class Phraser {
   private fail(e: unknown, what: string, picked: PickedModel) {
     if (isQuotaError(e)) {
       this.picked = null; // stop trying for the rest of this run
-      this.deps.onProviderQuota?.(picked.provider);
+      this.deps.onProviderQuota?.(picked.provider, { modelId: picked.modelId, error: e });
     }
     log(this.deps, `[reports] ${what} phrasing failed, using template: ${errMsg(e)}`);
   }

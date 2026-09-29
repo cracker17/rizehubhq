@@ -19,8 +19,8 @@ export interface WorkerDeps {
    * the model's own guess would otherwise show a made-up dollar figure the CEO can never be charged.
    */
   monthlyBudgetUsd?: number;
-  /** Called when a provider returns 429 so the picker can fall back. */
-  onProviderQuota?: (provider: string) => void;
+  /** Called on a quota-type provider error so the picker can fall back (a 404/413 blocks only `modelId`). */
+  onProviderQuota?: (provider: string, detail?: { modelId?: string; error?: unknown }) => void;
   log?: (msg: string, extra?: unknown) => void;
   now?: () => Date;
 }

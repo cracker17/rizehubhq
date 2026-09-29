@@ -91,6 +91,21 @@ export function isQuotaError(e: unknown, depth = 0): boolean {
   return cause ? isQuotaError(cause, depth + 1) : false;
 }
 
+/** HTTP status of the provider error behind e (through RetryError / cause chains), or null. */
+export function providerStatus(e: unknown, depth = 0): number | null {
+  if (!e || depth > 4) return null;
+  if (APICallError.isInstance(e)) return e.statusCode ?? null;
+  if (RetryError.isInstance(e)) return providerStatus(e.lastError, depth + 1);
+  const cause = (e as { cause?: unknown }).cause;
+  return cause ? providerStatus(cause, depth + 1) : null;
+}
+
+/**
+ * Errors that are about one model, not the provider's quota: 404 (model retired) and 413 (this request is over the
+ * model's per-minute size cap, e.g. Groq free tier 8k TPM on a long agent loop). The provider's other models still work.
+ */
+export const isModelScopedError = (e: unknown) => { const s = providerStatus(e); return s === 404 || s === 413; };
+
 
 export interface ModelPickerOptions {
   cfg: ModelsConfig;
@@ -115,6 +130,7 @@ export class ModelPicker {
   private month: string;
   private refreshedAt: number;
   private requestsToday: Partial<Record<Provider, number>> = {};
+  private blockedModels = new Set<string>();
   spentThisMonthUsd: number;
   /** Today's (Asia/Manila) spend across all agents: loop updates + every call this process records. */
   spentTodayUsd = 0;
@@ -148,7 +164,7 @@ export class ModelPicker {
   private rollDay() {
     const now = this.now();
     const d = manilaDay(now);
-    if (d !== this.day) { this.day = d; this.requestsToday = {}; this.spentTodayUsd = 0; }
+    if (d !== this.day) { this.day = d; this.requestsToday = {}; this.blockedModels = new Set(); this.spentTodayUsd = 0; }
     const m = manilaMonth(now);
     if (m !== this.month) { this.month = m; this.spentThisMonthUsd = 0; this.refreshedAt = -Infinity; } // new budget month
   }
@@ -163,8 +179,13 @@ export class ModelPicker {
     if (month === this.month && Number.isFinite(v)) this.spentThisMonthUsd = Math.max(this.spentThisMonthUsd, v);
   }
 
-  /** After a provider 429, treat its daily cap as used so the router falls back. */
-  markExhausted(provider: string) {
+  /**
+   * After a provider error the router falls back until the next Manila day. A 429 uses up the provider's daily cap
+   * (all its models); a 404/413 with the failing modelId blocks only that model (isModelScopedError).
+   */
+  markExhausted(provider: string, detail: { modelId?: string; error?: unknown } = {}) {
+    this.rollDay();
+    if (detail.modelId && isModelScopedError(detail.error)) { this.blockedModels.add(`${provider}:${detail.modelId}`); return; }
     const cap = this.opts.cfg.daily_request_caps[provider] ?? 1_000_000;
     this.requestsToday[provider as Provider] = cap;
   }
@@ -177,7 +198,7 @@ export class ModelPicker {
     const c = chooseCandidate(role, this.opts.cfg, {
       profile: this.opts.profile, env: this.opts.env, monthlyBudgetUsd: this.opts.monthlyBudgetUsd, override: o.override ?? null,
       paidBlocked: this.paidBlocked,
-      usage: { requestsToday: this.requestsToday, spentThisMonthUsd: this.spentThisMonthUsd },
+      usage: { requestsToday: this.requestsToday, spentThisMonthUsd: this.spentThisMonthUsd, blockedModels: this.blockedModels },
     });
     const model = await (this.opts.create ?? createModel)(c);
     return {

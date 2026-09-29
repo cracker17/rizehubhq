@@ -260,7 +260,7 @@ export async function planRequest(req: RequestRow, deps: WorkerDeps): Promise<Pl
     return { status: 'failed', requestId: req.id, reason };
   } catch (e) {
     if (isQuotaError(e)) {
-      deps.onProviderQuota?.(picked.provider);
+      deps.onProviderQuota?.(picked.provider, { modelId: picked.modelId, error: e });
       await deps.db.releaseRequestForPlanning(req.id, errMsg(e));
       return { status: 'deferred', requestId: req.id, reason: errMsg(e) };
     }

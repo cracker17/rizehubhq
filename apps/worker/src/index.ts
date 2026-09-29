@@ -50,7 +50,7 @@ async function main() {
   const deps: WorkerDeps = {
     db, brain: createBrain(), pickModel: picker.pick, loadRole: (id) => loadRole(id),
     agentsDir: config.agentsDir, qaThreshold: config.qaThreshold, monthlyBudgetUsd: config.monthlyBudgetUsd,
-    onProviderQuota: (p) => picker.markExhausted(p),
+    onProviderQuota: (p, detail) => picker.markExhausted(p, detail),
   };
   setMcpDeps(deps); // HQ MCP tool server for Hermes agents (POST /mcp)
   const hermes = hermesStartupReport(roles, workerEnv());

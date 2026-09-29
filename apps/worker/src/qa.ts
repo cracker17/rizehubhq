@@ -130,7 +130,7 @@ export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOut
     log(deps, `[qa-lead] ${task.title}: ${result} (score ${verdict.score})`);
     return { status: 'recorded', taskId: task.id, result, verdict, pass };
   } catch (e) {
-    if (isQuotaError(e) && picked) deps.onProviderQuota?.(picked.provider);
+    if (isQuotaError(e) && picked) deps.onProviderQuota?.(picked.provider, { modelId: picked.modelId, error: e });
     const reason = (isQuotaError(e) ? `model quota: ${errMsg(e)}` : `QA crashed: ${errMsg(e)}`).slice(0, 500);
     if (isQuotaError(e)) {
       // Not QA's fault: hand the review back without counting an attempt.

@@ -39,3 +39,34 @@ test('isQuotaError: 429 and 404 (retired model) fall back to the next provider; 
   assert.equal(isQuotaError(mk(413)), true);
   assert.equal(isQuotaError(mk(400)), false);
 });
+
+test('markExhausted: 413/404 block only the failing model for the day; 429 blocks the provider', async () => {
+  const { APICallError } = await import('ai');
+  const { ModelPicker } = await import('./usage');
+  const mk = (statusCode: number) => new APICallError({ message: `HTTP ${statusCode}`, url: 'x', requestBodyValues: {}, statusCode });
+  const specs = ['groq:big', 'groq:small', 'google:flash'];
+  const cfg = {
+    active_profile: 'free', daily_request_caps: { groq: 1000, google: 1000 },
+    profiles: { free: { lead: specs, specialist: specs, dev: specs, reports: specs, qa: specs, light: ['groq:small', 'google:flash'] } },
+  };
+  let now = new Date('2026-09-29T02:00:00Z');
+  const picker = new ModelPicker({
+    cfg, env: { GROQ_API_KEY: 'g', GOOGLE_GENERATIVE_AI_API_KEY: 'k' }, monthlyBudgetUsd: 0,
+    create: async () => ({}) as never, now: () => now,
+  });
+  const id = async (role: 'writer' | 'light') => { const m = await picker.pick(role); return `${m.provider}:${m.modelId}`; };
+
+  picker.markExhausted('groq', { modelId: 'big', error: mk(413) }); // Groq free tier: request over 8k TPM
+  assert.equal(await id('writer'), 'groq:small');
+  assert.equal(await id('light'), 'groq:small', 'the rest of Groq stays usable');
+
+  picker.markExhausted('groq', { modelId: 'small', error: mk(429) });
+  assert.equal(await id('writer'), 'google:flash');
+  assert.equal(await id('light'), 'google:flash');
+
+  now = new Date('2026-09-30T02:00:00Z'); // next Manila day: everything is back
+  assert.equal(await id('writer'), 'groq:big');
+
+  picker.markExhausted('groq', { error: mk(413) }); // no model id: falls back to blocking the provider
+  assert.equal(await id('writer'), 'google:flash');
+});
