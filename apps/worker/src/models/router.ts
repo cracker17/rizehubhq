@@ -72,7 +72,7 @@ const KEY_ENV: Record<Provider, string> = {
 export interface UsageSnapshot {
   requestsToday: Partial<Record<Provider, number>>;
   spentThisMonthUsd: number;
-  /** provider:model specs that failed on their own today (retired 404, over the size cap 413); the provider stays usable. */
+  /** provider:model specs skipped right now (retired 404 / over the size cap 413 for the day, overloaded 5xx for a few minutes); the provider stays usable. */
   blockedModels?: ReadonlySet<string>;
 }
 

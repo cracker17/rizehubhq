@@ -77,15 +77,21 @@ export interface PickedModel {
 
 export type PickModel = (role: ModelRole, opts?: { override?: string | null }) => Promise<PickedModel>;
 
+/** Provider-side hiccups that clear on their own: overloaded ("high demand", Gemini 503; Anthropic 529) or a 5xx. */
+export const TRANSIENT_STATUSES: readonly number[] = [500, 502, 503, 504, 529];
+/** How long a model is skipped after a transient error before the router tries it again. */
+export const TRANSIENT_BLOCK_MS = 10 * 60_000;
+
 /**
  * True for "try later / another provider" errors: router has no quota, the provider said 429, or the provider no
  * longer serves this model (404, e.g. a retired Gemini ID), or the request is over its per-minute size cap (413, e.g.
- * Groq free tier: 8k tokens/min). The caller then falls back to the next model in the list.
+ * Groq free tier: 8k tokens/min), or the model is overloaded / erroring (TRANSIENT_STATUSES, after the SDK's own
+ * retries). The caller then falls back to the next model in the list.
  */
 export function isQuotaError(e: unknown, depth = 0): boolean {
   if (!e || depth > 4) return false;
   if (e instanceof QuotaExhaustedError) return true;
-  if (APICallError.isInstance(e) && (e.statusCode === 429 || e.statusCode === 404 || e.statusCode === 413)) return true;
+  if (APICallError.isInstance(e) && (e.statusCode === 429 || e.statusCode === 404 || e.statusCode === 413 || TRANSIENT_STATUSES.includes(e.statusCode ?? 0))) return true;
   if (RetryError.isInstance(e)) return isQuotaError(e.lastError, depth + 1);
   const cause = (e as { cause?: unknown }).cause;
   return cause ? isQuotaError(cause, depth + 1) : false;
@@ -101,10 +107,16 @@ export function providerStatus(e: unknown, depth = 0): number | null {
 }
 
 /**
- * Errors that are about one model, not the provider's quota: 404 (model retired) and 413 (this request is over the
- * model's per-minute size cap, e.g. Groq free tier 8k TPM on a long agent loop). The provider's other models still work.
+ * How long to skip just the failing model (the provider's other models still work), or null to block the provider:
+ * 404 (model retired) and 413 (request over the model's per-minute size cap, e.g. Groq free tier 8k TPM on a long
+ * agent loop) → the rest of the day; overloaded / 5xx → TRANSIENT_BLOCK_MS; anything else (429 quota) → null.
  */
-export const isModelScopedError = (e: unknown) => { const s = providerStatus(e); return s === 404 || s === 413; };
+export function modelBlock(e: unknown): 'day' | number | null {
+  const s = providerStatus(e);
+  if (s === 404 || s === 413) return 'day';
+  if (s !== null && TRANSIENT_STATUSES.includes(s)) return TRANSIENT_BLOCK_MS;
+  return null;
+}
 
 
 export interface ModelPickerOptions {
@@ -130,7 +142,8 @@ export class ModelPicker {
   private month: string;
   private refreshedAt: number;
   private requestsToday: Partial<Record<Provider, number>> = {};
-  private blockedModels = new Set<string>();
+  /** provider:model → epoch ms until which the router skips it (Infinity = rest of the Manila day). */
+  private blockedModels = new Map<string, number>();
   spentThisMonthUsd: number;
   /** Today's (Asia/Manila) spend across all agents: loop updates + every call this process records. */
   spentTodayUsd = 0;
@@ -164,7 +177,7 @@ export class ModelPicker {
   private rollDay() {
     const now = this.now();
     const d = manilaDay(now);
-    if (d !== this.day) { this.day = d; this.requestsToday = {}; this.blockedModels = new Set(); this.spentTodayUsd = 0; }
+    if (d !== this.day) { this.day = d; this.requestsToday = {}; this.blockedModels = new Map(); this.spentTodayUsd = 0; }
     const m = manilaMonth(now);
     if (m !== this.month) { this.month = m; this.spentThisMonthUsd = 0; this.refreshedAt = -Infinity; } // new budget month
   }
@@ -180,14 +193,24 @@ export class ModelPicker {
   }
 
   /**
-   * After a provider error the router falls back until the next Manila day. A 429 uses up the provider's daily cap
-   * (all its models); a 404/413 with the failing modelId blocks only that model (isModelScopedError).
+   * After a provider error the router falls back. A 429 uses up the provider's daily cap (all its models) until the next
+   * Manila day; with the failing modelId, a 404/413 skips only that model for the day and an overloaded/5xx model for
+   * TRANSIENT_BLOCK_MS (modelBlock).
    */
   markExhausted(provider: string, detail: { modelId?: string; error?: unknown } = {}) {
     this.rollDay();
-    if (detail.modelId && isModelScopedError(detail.error)) { this.blockedModels.add(`${provider}:${detail.modelId}`); return; }
+    const block = detail.modelId ? modelBlock(detail.error) : null;
+    if (block !== null) {
+      this.blockedModels.set(`${provider}:${detail.modelId}`, block === 'day' ? Infinity : this.now().getTime() + block);
+      return;
+    }
     const cap = this.opts.cfg.daily_request_caps[provider] ?? 1_000_000;
     this.requestsToday[provider as Provider] = cap;
+  }
+
+  private activeBlocks(): Set<string> {
+    const now = this.now().getTime();
+    return new Set([...this.blockedModels].filter(([, until]) => until > now).map(([spec]) => spec));
   }
 
   pick: PickModel = async (role, o = {}) => {
@@ -198,7 +221,7 @@ export class ModelPicker {
     const c = chooseCandidate(role, this.opts.cfg, {
       profile: this.opts.profile, env: this.opts.env, monthlyBudgetUsd: this.opts.monthlyBudgetUsd, override: o.override ?? null,
       paidBlocked: this.paidBlocked,
-      usage: { requestsToday: this.requestsToday, spentThisMonthUsd: this.spentThisMonthUsd, blockedModels: this.blockedModels },
+      usage: { requestsToday: this.requestsToday, spentThisMonthUsd: this.spentThisMonthUsd, blockedModels: this.activeBlocks() },
     });
     const model = await (this.opts.create ?? createModel)(c);
     return {

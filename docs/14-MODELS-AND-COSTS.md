@@ -5,7 +5,7 @@ RizeHub HQ is **provider-agnostic**. Every agent asks for a *role* ("lead", "spe
 ## How it works
 
 - **Vercel AI SDK** (`ai` package, free, open-source) is the agent runtime. The same code talks to Gemini, Groq, OpenRouter, Anthropic (Claude) and OpenAI, and it supports tool calling and multi-step agent loops on all of them.
-- **Model router** (`apps/worker/src/models/router.ts`) picks the model for each call from the active **profile**, checks the provider's remaining free quota and the budget, and falls back to the next provider when a limit is hit. A 429 (quota) skips that whole provider until the next Manila day; a 404 (retired model) or 413 (request over the model's per-minute size cap, e.g. Groq free tier's 8k tokens/min on a long agent loop) skips only that model, so the provider's other models (e.g. Groq's small `light` model for Agent chat) keep working.
+- **Model router** (`apps/worker/src/models/router.ts`) picks the model for each call from the active **profile**, checks the provider's remaining free quota and the budget, and falls back to the next provider when a limit is hit. A 429 (quota) skips that whole provider until the next Manila day; a 404 (retired model) or 413 (request over the model's per-minute size cap, e.g. Groq free tier's 8k tokens/min on a long agent loop) skips only that model for the day, and an overloaded model (Gemini 503 "high demand", Anthropic 529, other 5xx after the SDK's retries) only for 10 minutes, so the provider's other models (e.g. Groq's small `light` model for Agent chat) keep working.
 - **Usage meter**: every call logs provider, model, tokens in/out, cached tokens and cost into `activity_log`. The dashboard shows spend per agent, per workflow and per client.
 
 ```

@@ -70,3 +70,26 @@ test('markExhausted: 413/404 block only the failing model for the day; 429 block
   picker.markExhausted('groq', { error: mk(413) }); // no model id: falls back to blocking the provider
   assert.equal(await id('writer'), 'google:flash');
 });
+
+test('overloaded model (Gemini 503 "high demand", Anthropic 529): fall back, skip only that model for 10 minutes', async () => {
+  const { APICallError } = await import('ai');
+  const { ModelPicker, TRANSIENT_BLOCK_MS } = await import('./usage');
+  const mk = (statusCode: number) => new APICallError({ message: `HTTP ${statusCode}`, url: 'x', requestBodyValues: {}, statusCode });
+  for (const s of [500, 502, 503, 504, 529]) assert.equal(isQuotaError(mk(s)), true, String(s));
+  const specs = ['google:flash', 'groq:big'];
+  const cfg = {
+    active_profile: 'free', daily_request_caps: { groq: 1000, google: 1000 },
+    profiles: { free: { lead: specs, specialist: specs, dev: specs, reports: specs, qa: specs, light: ['google:lite', 'groq:big'] } },
+  };
+  let now = new Date('2026-09-29T02:50:00Z');
+  const picker = new ModelPicker({
+    cfg, env: { GROQ_API_KEY: 'g', GOOGLE_GENERATIVE_AI_API_KEY: 'k' }, monthlyBudgetUsd: 0,
+    create: async () => ({}) as never, now: () => now,
+  });
+  const id = async (role: 'lead' | 'light') => { const m = await picker.pick(role); return `${m.provider}:${m.modelId}`; };
+  picker.markExhausted('google', { modelId: 'flash', error: mk(503) });
+  assert.equal(await id('lead'), 'groq:big', 'the COO plans on the next model');
+  assert.equal(await id('light'), 'google:lite', 'other Google models stay usable');
+  now = new Date(now.getTime() + TRANSIENT_BLOCK_MS + 1000);
+  assert.equal(await id('lead'), 'google:flash', 'tried again after the skip window');
+});
