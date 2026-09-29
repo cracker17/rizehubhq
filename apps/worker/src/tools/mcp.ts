@@ -59,35 +59,79 @@ export async function loadMcpTools(ctx: ToolContext, env: McpToolEnv): Promise<T
     } finally { await session.close(); }
   };
 
-  for (const def of defs) {
-    const c = byId.get(def.connector_id);
-    if (!c) continue;
-    const name = toolName(c.name, def.name, taken);
-    const ask = def.policy === 'ask';
-    out[name] = tool({
-      description: `[${c.name}] ${def.description || def.name}`.slice(0, 900)
-        + (ask ? ' — Needs the CEO’s approval: calling it queues the request; it runs after they approve.' : ''),
-      inputSchema: jsonSchema<Record<string, unknown>>(toolSchema(def.input_schema) as never),
-      execute: async (args) => {
-        if (ask) {
-          const id = await ctx.deps.db.requestExternalAction(ctx.task.id, 'mcp.call', {
-            description: `Run ${c.name} → ${def.name} with:\n${JSON.stringify(args, null, 2)}`.slice(0, 4000), executor: 'worker',
-            mcp: { connector_id: c.id, tool: def.name, arguments: args, agent_id: agent },
-          });
-          return `Queued for the CEO's approval (approval ${id}). Nothing ran yet: HQ runs ${c.name} → ${def.name} with exactly these `
-            + 'arguments once the CEO approves. Do not report it as done; mention in your output that it is waiting for approval.';
-        }
-        try {
-          return await run(c, def.name, args as Record<string, unknown>);
-        } catch (e) {
-          if (isAuthFailure(e)) await env.store.mark(c.id, 'needs_reauth', 'The sign-in expired. Reconnect this app.').catch(() => undefined);
-          log(ctx.deps, `[${agent}] ${c.name} → ${def.name}: ${errMsg(e)}`);
-          return `${c.name} → ${def.name} failed: ${isAuthFailure(e) ? 'the app sign-in expired (the CEO has to reconnect it)' : errMsg(e).slice(0, 300)}`;
-        }
+  /** One call under the tool's policy: Allowed runs it, Ask me queues an mcp.call approval with these exact arguments. */
+  const invoke = async (c: ConnectorRow, def: AgentTool, args: Record<string, unknown>): Promise<string> => {
+    if (def.policy === 'ask') {
+      const id = await ctx.deps.db.requestExternalAction(ctx.task.id, 'mcp.call', {
+        description: `Run ${c.name} → ${def.name} with:\n${JSON.stringify(args, null, 2)}`.slice(0, 4000), executor: 'worker',
+        mcp: { connector_id: c.id, tool: def.name, arguments: args, agent_id: agent },
+      });
+      return `Queued for the CEO's approval (approval ${id}). Nothing ran yet: HQ runs ${c.name} → ${def.name} with exactly these `
+        + 'arguments once the CEO approves. Do not report it as done; mention in your output that it is waiting for approval.';
+    }
+    try {
+      return await run(c, def.name, args);
+    } catch (e) {
+      if (isAuthFailure(e)) await env.store.mark(c.id, 'needs_reauth', 'The sign-in expired. Reconnect this app.').catch(() => undefined);
+      log(ctx.deps, `[${agent}] ${c.name} → ${def.name}: ${errMsg(e)}`);
+      return `${c.name} → ${def.name} failed: ${isAuthFailure(e) ? 'the app sign-in expired (the CEO has to reconnect it)' : errMsg(e).slice(0, 300)}`;
+    }
+  };
+
+  const perApp = new Map<string, AgentTool[]>();
+  for (const def of defs) if (byId.has(def.connector_id)) perApp.set(def.connector_id, [...(perApp.get(def.connector_id) ?? []), def]);
+
+  for (const [connectorId, list] of perApp) {
+    const c = byId.get(connectorId)!;
+    if (list.length <= COMPACT_OVER) {
+      for (const def of list) {
+        out[toolName(c.name, def.name, taken)] = tool({
+          description: `[${c.name}] ${def.description || def.name}`.slice(0, 900)
+            + (def.policy === 'ask' ? ' — Needs the CEO’s approval: calling it queues the request; it runs after they approve.' : ''),
+          inputSchema: jsonSchema<Record<string, unknown>>(toolSchema(def.input_schema) as never),
+          execute: async (args) => invoke(c, def, args as Record<string, unknown>),
+        });
+      }
+      continue;
+    }
+    // Big apps (Magnific lists 155 tools): two small tools instead of every schema in every prompt.
+    const byName = new Map(list.map((d) => [d.name, d]));
+    out[toolName(c.name, 'find', taken)] = tool({
+      description: `[${c.name}] Search this app's ${list.length} tools by keyword; returns names, what they do, whether they need the `
+        + `CEO's approval, and their input schema. Then call ${toolName(c.name, 'run', new Set(taken))} with the tool name and arguments.`,
+      inputSchema: jsonSchema<{ query?: string }>({ type: 'object', properties: { query: { type: 'string', description: 'Words to match, e.g. "upscale image"; empty = list names' } } } as never),
+      execute: async ({ query }) => findTools(c.name, list, String(query ?? '')),
+    });
+    out[toolName(c.name, 'run', taken)] = tool({
+      description: `[${c.name}] Run one of this app's tools by exact name (find it first). Tools marked "needs approval" queue a request `
+        + 'for the CEO instead of running.',
+      inputSchema: jsonSchema<{ tool: string; arguments?: Record<string, unknown> }>({
+        type: 'object', required: ['tool'],
+        properties: { tool: { type: 'string' }, arguments: { type: 'object', additionalProperties: true } },
+      } as never),
+      execute: async ({ tool: name, arguments: args }) => {
+        const def = byName.get(String(name));
+        if (!def) return `${c.name} has no tool "${name}" you may use. Search with ${toolName(c.name, 'find', new Set())} first.`;
+        return invoke(c, def, (args ?? {}) as Record<string, unknown>);
       },
     });
   }
   return out;
+}
+
+/** Apps with more usable tools than this get find + run instead of one tool each (keeps prompts small on free models). */
+export const COMPACT_OVER = 20;
+
+export function findTools(app: string, list: AgentTool[], query: string): string {
+  const words = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const scored = list
+    .map((d) => ({ d, score: words.length ? words.filter((w) => `${d.name} ${d.description}`.toLowerCase().includes(w)).length : 1 }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.d.name.localeCompare(b.d.name))
+    .slice(0, words.length ? 8 : 60);
+  if (!scored.length) return `No ${app} tool matches "${query}". Try other words, or an empty query for the full list.`;
+  if (!words.length) return `${app} tools (${list.length}): ${scored.map((x) => `${x.d.name}${x.d.policy === 'ask' ? '*' : ''}`).join(', ')}\n* = needs the CEO's approval.`;
+  return scored.map(({ d }) => `- ${d.name}${d.policy === 'ask' ? ' (needs the CEO’s approval)' : ''}: ${(d.description || '').slice(0, 240)}\n  input: ${JSON.stringify(toolSchema(d.input_schema)).slice(0, 700)}`).join('\n');
 }
 
 let prodEnv: McpToolEnv | null = null;

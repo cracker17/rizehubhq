@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { APICallError } from 'ai';
-import { buildTaskPrompt, buildTools, externalActionSpec, specText, runTask } from './runner';
+import { buildTaskPrompt, buildTools, externalActionSpec, specText, runTask, MAX_QUESTIONS_PER_TASK } from './runner';
 import { FakeHqDb } from './fakeHqDb';
 import { loadRole } from './roles';
 import { makeDeps, mockModel, promptText, textResponse, toolCalls } from './testing';
@@ -215,4 +215,31 @@ test('max steps: the loop stops at the role\'s max_turns and the task fails with
   assert.equal(model.doGenerateCalls.length, 3);
   assert.equal(db.tasks.get(task.id)!.status, 'failed');
   assert.equal(db.callsOf('failTask')[0]?.args[1], 'stopped: exceeded max steps 3');
+});
+
+test('a question answered with a button and no text: the resumed task is told not to ask again', () => {
+  const { db, task } = setup();
+  const deps = makeDeps({ db, model: mockModel([]) });
+  const approved = buildTaskPrompt({ ...task, qa_feedback: { ceo_decision: 'approve', ceo_note: null } } as never, null, deps);
+  assert.match(approved, /approved \(approve\) without writing an answer[\s\S]*Do NOT ask the same question again/);
+  assert.match(approved, /asked for information or data, you do not have it/);
+  const rejected = buildTaskPrompt({ ...task, qa_feedback: { ceo_decision: 'reject', ceo_note: null } } as never, null, deps);
+  assert.match(rejected, /CEO declined your question[\s\S]*submit_output and state plainly what is missing/);
+  const noted = buildTaskPrompt({ ...task, qa_feedback: { ceo_decision: 'approve', ceo_note: 'Use the Q3 numbers' } } as never, null, deps);
+  assert.match(noted, /CEO approve: Use the Q3 numbers/);
+  assert.doesNotMatch(noted, /no text/);
+});
+
+test(`ask_ceo: after ${MAX_QUESTIONS_PER_TASK} questions a task must finish instead of asking again`, async () => {
+  const { db, task } = setup();
+  for (let i = 0; i < MAX_QUESTIONS_PER_TASK; i++) {
+    db.approvals.push({ id: `q${i}`, kind: 'external_action', request_id: task.request_id, task_id: task.id, agent_id: 'writer', title: 'Question', payload: { type: 'question', question: 'calendar?' } });
+  }
+  const model = mockModel([
+    toolCalls([{ name: 'ask_ceo', input: { question: 'Please provide the list of meetings for today?' } }]),
+    toolCalls([{ name: 'submit_output', input: { summary: 'No calendar access', content: 'The calendar is not connected.', criteria_map: {} } }]),
+  ]);
+  await runTask(task, makeDeps({ db, model }));
+  assert.equal(db.approvals.filter((a) => a.payload.type === 'question').length, MAX_QUESTIONS_PER_TASK, 'no fourth question');
+  assert.match(promptText(model.doGenerateCalls[1]!), /Not sent: this task already asked the CEO 3 questions/);
 });

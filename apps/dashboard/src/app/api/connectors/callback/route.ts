@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { callWorker } from '@/lib/workerCall';
+import { publicUrl } from '@/lib/publicUrl';
 
 // Where an app sends the CEO back after "Sign in" (docs/15 §2). Only the signed-in CEO can finish a sign-in (the
 // middleware sends anyone else to /login first, keeping this URL as `next`); the worker exchanges the code, lists the
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams;
   const back = (params: Record<string, string>) => {
-    const u = new URL('/admin/connectors', request.url);
+    const u = publicUrl(request, '/admin/connectors');
     for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
     return NextResponse.redirect(u);
   };

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import clsx from 'clsx';
 import { Blocks, Coins, ExternalLink, Lock, PhoneOff, Plus, RefreshCw, SlidersHorizontal, Trash2, Users, Wallet } from 'lucide-react';
-import { MCP_CALLBACK_PATH, MCP_CATALOG, catalogEntry, type CatalogEntry } from '@rizehubhq/shared';
+import { MCP_CALLBACK_PATH, MCP_CATALOG, catalogEntry, defaultToolPolicy, type CatalogEntry } from '@rizehubhq/shared';
 import type { ConnectorView, ConnectorsPage, ToolView } from '@/lib/data/connectors';
 import {
   connectAppTokenAction, deleteConnectorAction, setConnectorAgentsAction, setToolPoliciesAction, startAppSignInAction, syncAppAction,
@@ -156,8 +156,22 @@ function ConnectDialog({ entry, custom, page, onClose, onConnected }: {
 
 function ToolsDialog({ c, onClose, run }: { c: ConnectorView; onClose: () => void; run: Run }) {
   const [draft, setDraft] = useState<Record<string, Policy>>(() => Object.fromEntries(c.tools.map((t) => [t.name, t.policy])));
+  const [q, setQ] = useState('');
   const changed = c.tools.filter((t) => draft[t.name] !== t.policy || t.review);
-  const setAll = (p: Policy) => setDraft(Object.fromEntries(c.tools.map((t) => [t.name, t.locked && p === 'allow' ? t.policy : p])));
+  const entry = catalogEntry(c.catalog);
+  // Presets apply to the tools shown (so a search + preset changes just that group). Locked tools never become Allowed.
+  const shown = c.tools.filter((t) => !q.trim() || `${t.name} ${t.description}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const apply = (pick: (t: ToolView) => Policy) => setDraft((d) => ({ ...d, ...Object.fromEntries(shown.map((t) => {
+    const p = pick(t);
+    return [t.name, t.locked && p === 'allow' ? 'ask' : p];
+  })) }));
+  const recommended = () => apply((t) => defaultToolPolicy({ name: t.name, description: t.description, annotations: t.annotations ?? null }, entry).policy);
+  const allowAll = () => {
+    if (!window.confirm(`Allow ${shown.filter((t) => !t.locked).length} tools? Agents will use them without asking you, including tools that create, change, delete or spend credits. Locked tools still ask.`)) return;
+    apply(() => 'allow');
+  };
+  const counts = { allow: 0, ask: 0, off: 0 } as Record<Policy, number>;
+  for (const t of c.tools) counts[draft[t.name] ?? t.policy]++;
   const save = () => {
     const policies = Object.fromEntries(changed.map((t) => [t.name, draft[t.name]!]));
     onClose();
@@ -169,13 +183,22 @@ function ToolsDialog({ c, onClose, run }: { c: ConnectorView; onClose: () => voi
         <b className="text-white">Allowed</b>: the agent uses it on its own. <b className="text-white">Ask me</b>: each use waits in your Approvals with the exact details.
         <b className="text-white"> Off</b>: hidden. Locked tools can&apos;t be Allowed.
       </p>
-      <div className="mb-3 flex flex-wrap gap-2 text-xs">
-        <span className="text-[var(--color-dim)]">Set all:</span>
-        {(['ask', 'off'] as const).map((p) => <button key={p} type="button" className={btn.small} onClick={() => setAll(p)}>{POLICY_LABEL[p]}</button>)}
+      <div className="mb-3 flex flex-col gap-2.5">
+        <input className={inputCls} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${c.tools.length} tools…`} aria-label="Search tools" />
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-[var(--color-dim)]">{q.trim() ? `Set the ${shown.length} shown:` : 'Set all:'}</span>
+          <button type="button" className={clsx(btn.small, 'border-[var(--color-line-active)] text-white')} onClick={recommended}
+            title="Read-only tools Allowed; anything that creates, changes or spends asks you; money and contact tools stay locked">★ Recommended</button>
+          <button type="button" className={btn.small} onClick={allowAll}>Allow all</button>
+          <button type="button" className={btn.small} onClick={() => apply(() => 'ask')}>Ask for all</button>
+          <button type="button" className={btn.small} onClick={() => apply(() => 'off')}>Off for all</button>
+          <span className="ml-auto text-[var(--color-dim)]">{counts.allow} allowed · {counts.ask} ask · {counts.off} off</span>
+        </div>
       </div>
       {c.tools.length === 0 ? <p className="item px-4 py-6 text-center text-sm text-[var(--color-muted)]">The app lists no tools.</p> : (
-        <ul className="flex max-h-[52vh] flex-col gap-2 overflow-y-auto pr-1">
-          {c.tools.map((t) => (
+        <ul className="flex max-h-[48vh] flex-col gap-2 overflow-y-auto pr-1">
+          {shown.length === 0 && <li className="px-2 py-6 text-center text-sm text-[var(--color-muted)]">No tool matches “{q}”.</li>}
+          {shown.map((t) => (
             <li key={t.name} className="item flex flex-col gap-2 p-3 sm:flex-row sm:items-start">
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-1.5 font-mono text-[13px] text-white">

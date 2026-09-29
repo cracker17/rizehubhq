@@ -134,6 +134,8 @@ export interface HqDb {
   touchHeartbeat(taskId: string): Promise<void>;
   submitTaskOutput(taskId: string, output: TaskOutput): Promise<void>;
   askCeo(taskId: string, question: string, options: string[]): Promise<string>;
+  /** How many questions (ask_ceo) this task has already sent the CEO. */
+  countTaskQuestions(taskId: string): Promise<number>;
   requestExternalAction(taskId: string, type: string, spec: Record<string, unknown>): Promise<string>;
   failTask(taskId: string, reason: string): Promise<void>;
   requeueTask(taskId: string, reason: string): Promise<void>;
@@ -227,6 +229,11 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
     touchHeartbeat: async (taskId) => { await rpc('touch_task_heartbeat', { p_task: taskId }); },
     submitTaskOutput: async (taskId, output) => { await rpc('submit_task_output', { p_task: taskId, p_output: output }); },
     askCeo: (taskId, question, options) => rpc<string>('ask_ceo', { p_task: taskId, p_question: question, p_options: options }),
+    countTaskQuestions: async (taskId) => {
+      const { count, error } = await sb.from('approvals').select('id', { count: 'exact', head: true }).eq('task_id', taskId).eq('payload->>type', 'question');
+      if (error) throw new Error(`approvals: ${error.message}`);
+      return count ?? 0;
+    },
     requestExternalAction: (taskId, type, spec) => rpc<string>('request_external_action', { p_task: taskId, p_type: type, p_spec: spec }),
     failTask: async (taskId, reason) => { await rpc('fail_task', { p_task: taskId, p_reason: reason }); },
     requeueTask: async (taskId, reason) => { await rpc('requeue_task', { p_task: taskId, p_reason: reason }); },

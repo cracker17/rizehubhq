@@ -11,6 +11,8 @@ export type GmailMode = 'read' | 'read_draft' | 'read_draft_send';
 
 export interface ToolView {
   name: string; description: string; policy: 'allow' | 'ask' | 'off'; locked: 'money' | 'contact' | null; badges: string[]; review: boolean;
+  /** The server's hints (readOnlyHint, destructiveHint): the "Recommended" preset uses them. */
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean } | null;
 }
 
 export interface ConnectorView {
@@ -52,7 +54,7 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
         id: 'demo-magnific', kind: 'mcp', catalog: 'magnific', url: 'https://mcp.magnific.com', name: 'Magnific', account_email: null, status: 'active', mode: 'read',
         agents: ['designer'], last_checked_at: new Date().toISOString(), last_used_at: null, last_error: null, created_at: new Date().toISOString(),
         tools: [
-          { name: 'search_stock', description: 'Search stock photos, vectors and videos.', policy: 'allow', locked: null, badges: [], review: false },
+          { name: 'search_stock', description: 'Search stock photos, vectors and videos.', policy: 'allow', locked: null, badges: [], review: false, annotations: { readOnlyHint: true } },
           { name: 'generate_image', description: 'Generate an image from a prompt. Spends credits.', policy: 'ask', locked: null, badges: ['credits'], review: false },
           { name: 'upscale_image', description: 'Upscale an image up to 16x.', policy: 'off', locked: null, badges: ['credits'], review: true },
         ],
@@ -65,11 +67,11 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
     db.from('connector_grants').select('connector_id,agent_id'),
     db.from('agents').select('id,name').eq('enabled', true).order('name'),
     totpState(db),
-    db.from('connector_tools').select('connector_id,name,description,policy,locked_reason,badges,review_needed').order('name'),
+    db.from('connector_tools').select('connector_id,name,description,policy,locked_reason,badges,review_needed,annotations').order('name'),
   ]);
   const toolsBy = new Map<string, ToolView[]>();
-  for (const t of (tools.data ?? []) as { connector_id: string; name: string; description: string; policy: ToolView['policy']; locked_reason: ToolView['locked']; badges: string[]; review_needed: boolean }[]) {
-    toolsBy.set(t.connector_id, [...(toolsBy.get(t.connector_id) ?? []), { name: t.name, description: t.description, policy: t.policy, locked: t.locked_reason, badges: t.badges ?? [], review: t.review_needed }]);
+  for (const t of (tools.data ?? []) as { connector_id: string; name: string; description: string; policy: ToolView['policy']; locked_reason: ToolView['locked']; badges: string[]; review_needed: boolean; annotations: ToolView['annotations'] }[]) {
+    toolsBy.set(t.connector_id, [...(toolsBy.get(t.connector_id) ?? []), { name: t.name, description: t.description, policy: t.policy, locked: t.locked_reason, badges: t.badges ?? [], review: t.review_needed, annotations: t.annotations }]);
   }
   const byConnector = new Map<string, string[]>();
   for (const g of (grants.data ?? []) as { connector_id: string; agent_id: string }[]) {

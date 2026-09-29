@@ -165,3 +165,26 @@ test('approved mcp.call: runs once; refuses when the tool was switched off after
   assert.equal(s.marks.at(-1)!.status, 'needs_reauth');
   assert.equal(app.calls.length, 1);
 });
+
+test('big apps (> COMPACT_OVER tools): find + run instead of one tool each; run keeps each tool\'s policy', async () => {
+  const { COMPACT_OVER, findTools } = await import('../tools/mcp');
+  const s = fakeStore();
+  const app = fakeApp();
+  const id = 'big';
+  s.rows.push({ id, kind: 'mcp', status: 'active', name: 'Magnific', account_email: null, url: 'https://mcp.magnific.com', auth_type: 'bearer',
+    settings: {}, sealed: seal(JSON.stringify({ kind: 'header', header: 'Authorization', value: 'Bearer x' }), kr, connectorContext(id)) });
+  s.grants.set(id, ['designer']);
+  const many = Array.from({ length: COMPACT_OVER + 5 }, (_, i) => ({ name: `tool_${i}`, description: i === 3 ? 'Upscale an image' : `Tool ${i}`, input_schema: { type: 'object' }, annotations: {}, policy: i === 3 ? 'ask' : 'allow', locked: null, badges: [] }));
+  s.tools.set(id, many);
+  const queued: string[] = [];
+  const ctx = { task: { id: 't', agent_id: 'designer', request_id: 'r' }, deps: { db: { requestExternalAction: async (_t: string, type: string) => { queued.push(type); return 'ap'; } }, log: () => undefined } } as never;
+  const tools = await loadMcpTools(ctx, { store: s.store, keyring: kr, open: app.opener }) as Record<string, { execute: (a: unknown, o: unknown) => Promise<string> }>;
+  assert.deepEqual(Object.keys(tools).sort(), ['mcp_magnific__find', 'mcp_magnific__run']);
+  const found = await tools.mcp_magnific__find!.execute({ query: 'upscale' }, { toolCallId: 'a', messages: [] });
+  assert.match(found, /^- tool_3 \(needs the CEO’s approval\): Upscale an image/);
+  assert.match(await tools.mcp_magnific__run!.execute({ tool: 'tool_3', arguments: { url: 'x' } }, { toolCallId: 'b', messages: [] }), /Queued for the CEO's approval/);
+  assert.deepEqual(queued, ['mcp.call']);
+  assert.match(await tools.mcp_magnific__run!.execute({ tool: 'tool_1', arguments: {} }, { toolCallId: 'c', messages: [] }), /ran tool_1/);
+  assert.match(await tools.mcp_magnific__run!.execute({ tool: 'not_granted' }, { toolCallId: 'd', messages: [] }), /has no tool "not_granted"/);
+  assert.match(findTools('Magnific', [], ''), /No Magnific tool/);
+});

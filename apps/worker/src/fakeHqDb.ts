@@ -122,6 +122,9 @@ export class FakeHqDb implements HqDb {
     t.status = 'awaiting_ceo';
     return this.approval({ kind: 'external_action', request_id: t.request_id, task_id: taskId, agent_id: t.agent_id, title: `Question: ${question}`, payload: { type: 'question', question, options } });
   }
+  async countTaskQuestions(taskId: string) {
+    return this.approvals.filter((a) => a.task_id === taskId && a.payload.type === 'question').length;
+  }
   async requestExternalAction(taskId: string, type: string, spec: Record<string, unknown>) {
     this.log('requestExternalAction', taskId, type, spec);
     const t = this.task(taskId);

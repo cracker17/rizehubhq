@@ -30,6 +30,21 @@ export class BudgetExceededError extends Error {}
  * Payload spec for an agent-proposed external action. Types without a worker executor are marked
  * executor: 'manual' so the dashboard/bot show "you do this after approving" instead of implying automation.
  */
+/** Questions one task may send the CEO (ask_ceo) before it must finish with what it has. */
+export const MAX_QUESTIONS_PER_TASK = 3;
+
+/**
+ * The CEO tapped a button on your question without writing an answer. Buttons carry no data, so say exactly what the
+ * decision means; otherwise the agent re-asks the same question (the 2026-09-29 calendar loop).
+ */
+export function ceoDecisionWithoutNote(decision: string): string {
+  const base = 'The CEO answered your question with a button and no text, so no new information was given. Do NOT ask the same '
+    + 'question again (not in other words either). ';
+  if (decision === 'reject') return `CEO declined your question. ${base}Finish with what you have: submit_output and state plainly what is missing.`;
+  return `CEO approved (${decision}) without writing an answer. ${base}If your question asked permission, go ahead. If it asked for `
+    + 'information or data, you do not have it: finish with submit_output, state what is missing and how the CEO can connect it.';
+}
+
 /** request_external_action's spec as text: strings as given, objects/arrays as readable JSON (capped at 4000 chars). */
 export function specText(spec: unknown): string {
   const s = typeof spec === 'string' ? spec : JSON.stringify(spec, null, 2) ?? '';
@@ -88,6 +103,7 @@ export function buildTaskPrompt(task: TaskRow, client: ClientRow | null, deps: P
       lines.push(`Failed checks:\n${(fb.failed_checks as { criterion?: string; note?: string }[]).map((c) => `- ${c.criterion ?? '?'}: ${c.note ?? ''}`).join('\n')}`);
     }
     if (fb.ceo_note) lines.push(`CEO ${fb.ceo_decision ?? 'answer'}: ${String(fb.ceo_note)}`);
+    else if (fb.ceo_decision) lines.push(ceoDecisionWithoutNote(String(fb.ceo_decision)));
     if (lines.length) parts.push(`## Feedback on your previous attempt (fix every item)\n${lines.join('\n\n')}`);
     if (task.output) parts.push(`## Your previous output\n${JSON.stringify(task.output).slice(0, 8000)}`);
   }
@@ -171,6 +187,12 @@ export function buildTools(ctx: ToolContext): ToolSet {
       inputSchema: z.object({ question: z.string(), options: z.array(z.string()).optional() }),
       execute: async ({ question, options }) => {
         if (state.ended) return 'Task already ended; stop now.';
+        // A task that keeps asking floods the CEO's Telegram (2026-09-29: 13 near-identical calendar questions).
+        const asked = await db.countTaskQuestions(task.id).catch(() => 0);
+        if (asked >= MAX_QUESTIONS_PER_TASK) {
+          return `Not sent: this task already asked the CEO ${asked} questions. Do not ask again. Finish now with submit_output: `
+            + 'deliver what you can and state plainly what is missing and why (e.g. a tool or account that is not connected).';
+        }
         const id = await db.askCeo(task.id, question, options ?? []);
         state.ended = 'asked';
         return `Question sent to the CEO (approval ${id}). The task is paused; stop now.`;

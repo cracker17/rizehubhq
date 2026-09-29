@@ -144,8 +144,8 @@ export interface GoogleWorkspacePort {
 }
 
 export const GOOGLE_NOT_CONFIGURED = 'Google OAuth is not configured on the worker (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, '
-  + 'GOOGLE_OAUTH_REFRESH_TOKEN). Gmail and Calendar tools are unavailable: ask the CEO for the information (ask_ceo) '
-  + 'or continue without it and note what you could not check.';
+  + 'GOOGLE_OAUTH_REFRESH_TOKEN). The Calendar tool is not connected. Do NOT ask the CEO to type the calendar for you: '
+  + 'continue without it and say in your output that the calendar needs connecting in Admin → Connectors.';
 
 export function googleWorkspace(env: Env): GoogleWorkspacePort {
   const configured = !!(env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET && env.GOOGLE_OAUTH_REFRESH_TOKEN);
