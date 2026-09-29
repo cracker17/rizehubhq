@@ -29,9 +29,13 @@ export interface CredentialMeta {
 export interface CredentialForUse extends CredentialMeta { client_id: string; sealed: Sealed; failed_login_count: number }
 
 export interface AgentCredentialList {
-  client: { id: string; name: string; slug: string; status: string };
+  /** null when listing for a task without a client (only the agency's tool logins). */
+  client: { id: string; name: string; slug: string; status: string; is_internal?: boolean } | null;
   granted: CredentialMeta[];
   not_granted: number;
+  /** The agency's own tool logins (the internal client, Admin → Tool logins) granted to this agent: usable in any task. */
+  tools: CredentialMeta[];
+  tools_not_granted: number;
 }
 
 export interface NewCredential {
@@ -82,7 +86,8 @@ export interface VaultStore {
   getSealed(id: string): Promise<{ id: string; label: string; status: CredentialStatus; sealed: Sealed } | null>;
   /** Throws VaultDenied unless the agent is granted and the credential is usable. */
   getForAgent(id: string, agentId: string): Promise<CredentialForUse>;
-  listForAgent(agentId: string, clientId: string): Promise<AgentCredentialList>;
+  /** clientId null = a task without a client: only the tool logins (20260929060000_internal_vault.sql). */
+  listForAgent(agentId: string, clientId: string | null): Promise<AgentCredentialList>;
   resolveClientId(ref: string): Promise<string | null>;
   logAccess(e: AccessLogEntry): Promise<void>;
   reportProblem(id: string, agentId: string, taskId: string | null, issue: string): Promise<string>;
@@ -143,7 +148,9 @@ export function createSupabaseVaultStore(sb: SupabaseClient): VaultStore {
     },
     listForAgent: async (agentId, clientId) => {
       const l = await rpc<AgentCredentialList>('vault_list_for_agent', { p_agent: agentId, p_client: clientId });
-      return { ...l, granted: l.granted.map((c) => ({ ...c, url_allowlist: c.url_allowlist ?? [], write_allowlist: c.write_allowlist ?? [] })) };
+      const norm = (list: CredentialMeta[] | null | undefined) =>
+        (list ?? []).map((c) => ({ ...c, url_allowlist: c.url_allowlist ?? [], write_allowlist: c.write_allowlist ?? [] }));
+      return { ...l, client: l.client ?? null, granted: norm(l.granted), tools: norm(l.tools), tools_not_granted: l.tools_not_granted ?? 0 };
     },
     resolveClientId: async (ref) => {
       const q = sb.from('clients').select('id');

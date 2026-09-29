@@ -12,13 +12,14 @@ export interface FakeLink { tokenHash: string; clientId: string; platforms: stri
 export interface FakeApproval { id: string; agentId: string; taskId: string | null; title: string; payload: Record<string, unknown>; status: string; ceo_note: string | null }
 
 export class FakeVaultStore implements VaultStore {
-  clients = new Map<string, { id: string; name: string; slug: string; status: string }>();
+  clients = new Map<string, { id: string; name: string; slug: string; status: string; is_internal: boolean }>();
   creds = new Map<string, FakeCred>();
   links: FakeLink[] = [];
   log: AccessLogEntry[] = [];
   approvals: FakeApproval[] = [];
 
-  addClient(id: string, name: string, slug: string) { this.clients.set(id, { id, name, slug, status: 'active' }); }
+  /** internal = the agency's own tool logins (clients.is_internal, 20260929060000_internal_vault.sql). */
+  addClient(id: string, name: string, slug: string, internal = false) { this.clients.set(id, { id, name, slug, status: 'active', is_internal: internal }); }
 
   async insertCredential(c: NewCredential) {
     const cl = this.clients.get(c.clientId);
@@ -73,12 +74,19 @@ export class FakeVaultStore implements VaultStore {
     const { grants: _g, created_by: _c, ...rest } = c;
     return { ...rest, url_allowlist: [...c.url_allowlist], write_allowlist: [...c.write_allowlist] };
   }
-  async listForAgent(agentId: string, clientId: string): Promise<AgentCredentialList> {
-    const client = this.clients.get(clientId);
-    if (!client) throw new Error('client not found');
+  private grantedMeta(agentId: string, clientId: string) {
     const all = [...this.creds.values()].filter((c) => c.client_id === clientId && c.status !== 'revoked');
-    const granted = all.filter((c) => c.grants.has(agentId)).map(({ sealed: _s, grants: _g, failed_login_count: _f, client_id: _c, created_by: _b, ...m }) => m);
-    return { client, granted, not_granted: all.length - granted.length };
+    const granted = this.clients.get(clientId)?.status === 'archived' ? []
+      : all.filter((c) => c.grants.has(agentId)).map(({ sealed: _s, grants: _g, failed_login_count: _f, client_id: _c, created_by: _b, ...m }) => m);
+    return { granted, notGranted: all.filter((c) => !c.grants.has(agentId)).length };
+  }
+  async listForAgent(agentId: string, clientId: string | null): Promise<AgentCredentialList> {
+    const client = clientId ? this.clients.get(clientId) : null;
+    if (clientId && !client) throw new Error('client not found');
+    const internal = [...this.clients.values()].find((c) => c.is_internal && c.id !== client?.id);
+    const own = client ? this.grantedMeta(agentId, client.id) : { granted: [], notGranted: 0 };
+    const tools = internal ? this.grantedMeta(agentId, internal.id) : { granted: [], notGranted: 0 };
+    return { client: client ?? null, granted: own.granted, not_granted: own.notGranted, tools: tools.granted, tools_not_granted: tools.notGranted };
   }
   async resolveClientId(ref: string) {
     for (const c of this.clients.values()) if (c.id === ref || c.slug === ref || c.name.toLowerCase() === ref.toLowerCase()) return c.id;

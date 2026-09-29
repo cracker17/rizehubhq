@@ -6,22 +6,26 @@ import { Eye, EyeOff, Lock } from 'lucide-react';
 import type { CredentialView, SecretType, TwofaMethod } from '@/lib/data/vault';
 import { storeCredentialAction, updateCredentialAction } from '@/app/vault-actions';
 import { AgentPicker } from './AgentPicker';
-import { Field, PLATFORM_LABEL, SECRET_TYPE_LABEL, SUGGESTED_GRANTS, TWOFA_LABEL, btn, inputCls, textareaCls } from './ui';
+import { CLIENT_PRESET, Field, SECRET_TYPE_LABEL, TWOFA_LABEL, btn, inputCls, platformLabel, textareaCls, type CredentialPreset } from './ui';
 
 const SECRET_HINT: Record<string, string> = {
-  password: 'Prefer a collaborator / staff account made for RizeHub, never the client\'s own login.',
   api_token: 'Least-privilege token (e.g. Shopify custom app, GitHub fine-grained PAT, Webflow site token).',
   app_password: 'WordPress Application Password for a dedicated Editor user (sent as Basic auth).',
   ssh_key: 'Private key for deploys (paste the whole key).',
   other: 'Anything else the team needs (FTP password, hosting panel…).',
 };
 
-export function CredentialForm({ clientId, initial, onDone, onCancel }: {
-  clientId: string; initial?: CredentialView; onDone: (message: string) => void; onCancel: () => void;
+/** preset: client logins (default) or the agency's tool logins (Admin → Tool logins); same fields, same actions. */
+export function CredentialForm({ clientId, initial, onDone, onCancel, preset = CLIENT_PRESET }: {
+  clientId: string; initial?: CredentialView; onDone: (message: string) => void; onCancel: () => void; preset?: CredentialPreset;
 }) {
   const editing = Boolean(initial);
   const [pending, start] = useTransition();
-  const [platform, setPlatform] = useState(initial?.platform ?? 'shopify');
+  const firstPlatform = Object.keys(preset.platforms)[0] ?? 'other';
+  // Keep an edited credential's platform selectable even if the preset doesn't list it.
+  const platforms = initial && !preset.platforms[initial.platform]
+    ? { [initial.platform]: platformLabel(initial.platform), ...preset.platforms } : preset.platforms;
+  const [platform, setPlatform] = useState(initial?.platform ?? firstPlatform);
   const [label, setLabel] = useState(initial?.label ?? '');
   const [loginUrl, setLoginUrl] = useState(initial?.login_url ?? '');
   const [username, setUsername] = useState(initial?.username ?? '');
@@ -33,13 +37,14 @@ export function CredentialForm({ clientId, initial, onDone, onCancel }: {
   const [allow, setAllow] = useState((initial?.url_allowlist ?? []).join('\n'));
   const [writes, setWrites] = useState((initial?.write_allowlist ?? []).join('\n'));
   const [expires, setExpires] = useState(initial?.expires_at ? initial.expires_at.slice(0, 10) : '');
-  const [grants, setGrants] = useState<string[]>(initial?.grants ?? SUGGESTED_GRANTS.shopify ?? []);
+  const [grants, setGrants] = useState<string[]>(initial?.grants ?? preset.suggestedGrants[firstPlatform] ?? []);
   const [touchedGrants, setTouchedGrants] = useState(editing);
   const [error, setError] = useState<string | null>(null);
+  const hint = secretType === 'password' ? preset.passwordHint : SECRET_HINT[secretType];
 
   const pickPlatform = (p: string) => {
     setPlatform(p);
-    if (!touchedGrants) setGrants(SUGGESTED_GRANTS[p] ?? []);
+    if (!touchedGrants) setGrants(preset.suggestedGrants[p] ?? []);
   };
 
   const submit = (e: React.FormEvent) => {
@@ -63,17 +68,17 @@ export function CredentialForm({ clientId, initial, onDone, onCancel }: {
       <div className="grid gap-3.5 sm:grid-cols-2">
         <Field label="Platform">
           <select className={inputCls} value={platform} onChange={(e) => pickPlatform(e.target.value)}>
-            {Object.entries(PLATFORM_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {Object.entries(platforms).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </Field>
         <Field label="Label">
-          <input className={inputCls} value={label} onChange={(e) => setLabel(e.target.value)} required maxLength={120} placeholder="e.g. Madam Muse · Shopify collaborator" />
+          <input className={inputCls} value={label} onChange={(e) => setLabel(e.target.value)} required maxLength={120} placeholder={preset.placeholder.label} />
         </Field>
         <Field label="Login URL">
-          <input className={inputCls} value={loginUrl} onChange={(e) => setLoginUrl(e.target.value)} placeholder="https://store.myshopify.com/admin" inputMode="url" />
+          <input className={inputCls} value={loginUrl} onChange={(e) => setLoginUrl(e.target.value)} placeholder={preset.placeholder.loginUrl} inputMode="url" />
         </Field>
         <Field label="Username / email">
-          <input className={inputCls} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="team@rizehub.ph" autoComplete="off" />
+          <input className={inputCls} value={username} onChange={(e) => setUsername(e.target.value)} placeholder={preset.placeholder.username} autoComplete="off" />
         </Field>
         <Field label="Type">
           <select className={inputCls} value={secretType} onChange={(e) => setSecretType(e.target.value as SecretType)} disabled={editing}>
@@ -81,7 +86,7 @@ export function CredentialForm({ clientId, initial, onDone, onCancel }: {
           </select>
         </Field>
         {!editing ? (
-          <Field label={secretType === 'password' || secretType === 'app_password' ? 'Password' : 'Token / secret'} hint={SECRET_HINT[secretType]}>
+          <Field label={secretType === 'password' || secretType === 'app_password' ? 'Password' : 'Token / secret'} hint={hint}>
             <span className="relative">
               {secretType === 'ssh_key' ? (
                 <textarea className={`${textareaCls} font-mono text-xs`} rows={3} value={secret} onChange={(e) => setSecret(e.target.value)} required spellCheck={false} autoComplete="off" />
@@ -113,16 +118,16 @@ export function CredentialForm({ clientId, initial, onDone, onCancel }: {
       </div>
       <Field label="Scope notes (shown to agents; what they may and may not do)">
         <textarea className={textareaCls} rows={2} value={scope} onChange={(e) => setScope(e.target.value)} maxLength={2000}
-          placeholder="Theme edits on unpublished themes only. Never touch orders or payments. For API tokens: header: X-Shopify-Access-Token" />
+          placeholder={preset.placeholder.scope} />
       </Field>
       <Field label="Allowed URLs (one per line; enforced by the worker)" hint="vault_api only calls these; vault_login may also open the login site.">
         <textarea className={`${textareaCls} font-mono text-xs`} rows={2} value={allow} onChange={(e) => setAllow(e.target.value)}
-          placeholder={'https://store.myshopify.com/admin/themes\nhttps://store.myshopify.com/admin/api'} spellCheck={false} />
+          placeholder={preset.placeholder.allow} spellCheck={false} />
       </Field>
       <Field label="Allowed API writes (one per line; everything else is read-only)"
         hint="METHOD /path, e.g. PUT /admin/api/2025-07/themes/123/assets.json. Publishing (theme role, site publish, status=publish) always needs your approval.">
         <textarea className={`${textareaCls} font-mono text-xs`} rows={2} value={writes} onChange={(e) => setWrites(e.target.value)}
-          placeholder={'PUT /admin/api/2025-07/themes/123/assets.json\nPOST /wp-json/wp/v2/posts'} spellCheck={false} />
+          placeholder={preset.placeholder.writes} spellCheck={false} />
       </Field>
       <AgentPicker value={grants} onChange={(v) => { setGrants(v); setTouchedGrants(true); }} />
       {error && <p role="alert" className="text-sm text-[#ff8a8d]">{error}</p>}

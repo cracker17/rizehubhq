@@ -4,6 +4,11 @@ import { useEffect } from 'react';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
 import type { CredentialStatus } from '@/lib/data/vault';
+import { platformLabel } from '@/lib/vaultPlatforms';
+
+export {
+  CLIENT_PRESET, PLATFORM_LABEL, SUGGESTED_GRANTS, TOOL_PLATFORM_LABEL, TOOL_PRESET, platformLabel, type CredentialPreset,
+} from '@/lib/vaultPlatforms';
 
 export const inputCls = 'h-10 w-full min-w-0 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 text-[14px] outline-none placeholder:text-[var(--color-dim)] focus:border-[var(--color-line-active)] [color-scheme:dark]';
 export const textareaCls = 'w-full min-w-0 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] px-3 py-2 text-[14px] outline-none placeholder:text-[var(--color-dim)] focus:border-[var(--color-line-active)]';
@@ -68,18 +73,14 @@ export function StatusPill({ status, failedLogins = 0 }: { status: CredentialSta
 const PLATFORM_COLOR: Record<string, string> = {
   shopify: '#5FBF4A', webflow: '#4353FF', wordpress: '#21759B', github: '#A09CC9', figma: '#A259FF', ga4: '#F5A524',
   gmail: '#E5484D', hosting: '#3BA7FF', ftp: '#3BA7FF', halaxy: '#14B8A6', other: '#6E6A9E',
+  semrush: '#FF642D', ahrefs: '#3B82F6', canva: '#00C4CC', 'shopify-partner': '#5FBF4A', google: '#F5A524', meta: '#3BA7FF', ai: '#A09CC9',
 };
-export const PLATFORM_LABEL: Record<string, string> = {
-  shopify: 'Shopify', webflow: 'Webflow', wordpress: 'WordPress', github: 'GitHub', figma: 'Figma', ga4: 'GA4 / GSC', gmail: 'Gmail',
-  hosting: 'Hosting', ftp: 'FTP / SFTP', halaxy: 'Halaxy', other: 'Other',
-};
-
 export function PlatformChip({ platform }: { platform: string }) {
   const c = PLATFORM_COLOR[platform] ?? PLATFORM_COLOR.other!;
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--color-panel)] px-1.5 py-0.5 text-xs text-[var(--color-ink)]">
       <span className="h-2 w-2 rounded-sm" style={{ background: c }} aria-hidden />
-      {PLATFORM_LABEL[platform] ?? platform}
+      {platformLabel(platform)}
     </span>
   );
 }
@@ -103,11 +104,4 @@ export const SECRET_TYPE_LABEL: Record<string, string> = {
 };
 export const TWOFA_LABEL: Record<string, string> = {
   none: 'No 2FA', sms: 'SMS code', email: 'Email code', app: 'Authenticator app', collaborator: 'Collaborator account (own 2FA)',
-};
-
-/** Suggested agents per platform for new credentials (least privilege; the CEO can change it). */
-export const SUGGESTED_GRANTS: Record<string, string[]> = {
-  shopify: ['web-dev', 'qa-lead'], webflow: ['web-dev', 'qa-lead'], wordpress: ['web-dev', 'qa-lead'],
-  github: ['web-dev'], figma: ['designer'], ga4: ['coo', 'writer'], gmail: ['coo'], hosting: ['web-dev'],
-  ftp: ['web-dev'], halaxy: ['web-dev'], other: [],
 };

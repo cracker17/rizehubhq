@@ -41,7 +41,10 @@ create table clients (
   service_package      text,                      -- e.g. seo-retainer, shopify-growth
   status      text not null default 'active',     -- active | paused | archived
   notes       text,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  is_internal boolean not null default false      -- true on exactly one row, "RizeHub (internal)": the agency's own tool
+                                                  -- logins (Admin → Tool logins, 20260929060000_internal_vault.sql);
+                                                  -- hidden from client lists, never archived or deleted
 );
 
 -- ========== AGENTS ==========

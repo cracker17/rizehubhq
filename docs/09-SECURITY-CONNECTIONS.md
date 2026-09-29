@@ -80,6 +80,16 @@ You add each client's details and access (logins, API tokens, app passwords, hos
 - Better: send the client the **secure access link** (one-time, expires in 72 h) so they enter logins themselves, and ask them to create a separate user or collaborator account for you rather than sharing their own.
 - Some platforms forbid shared logins (e.g. Shopify expects collaborator accounts). Use their proper access method whenever it exists.
 
+### Internal vault (Admin → Tool logins)
+
+The agency's **own** tool accounts (Semrush, Ahrefs, Canva, Figma, Shopify Partner, GitHub, hosting, Google, Meta…) use the Client Vault itself, not a parallel system (migration `20260929060000_internal_vault.sql`, UI docs/06 §11):
+- They are `client_credentials` of one special client row, **RizeHub (internal)** (`clients.is_internal = true`, slug `rizehub-internal`). `internal_client_id()` (CEO session or service role, `hq_guard`) returns it and creates it on first call; a unique partial index allows only one.
+- Everything above applies unchanged: worker-side AES-256-GCM encryption, per-agent grants, URL allowlist, API write allowlist, publishing always needs an approval, reveal needs the CEO password + 2FA code, two failed logins → "check needed" and no more tries, `vault_request_2fa` for sites that ask for a code, every use in `credential_access_log` + `activity_log` (with `client_id` = the internal client).
+- **Scope difference:** a client's logins are listed only for tasks of that client. Tool logins are usable in **any** task, with or without a client: `vault_list_for_agent(agent, client | null)` returns the client's granted credentials plus `tools` (the internal client's credentials granted to that agent) and `tools_not_granted` (a count). `vault_get_for_agent` already checks only the grant and the status, so a granted tool login works from any task; an ungranted one is refused ("not granted") and the attempt logged.
+- The internal client is not a customer: it is hidden from the Clients page, the New Request / Tasks client pickers, auto-approve client scopes, the Telegram `/assign` client lookup and Connections (tool logins have their own page), and `/clients/<its id>` is a 404.
+- It can never be archived (archiving would revoke every grant) or deleted (would delete the logins), and `is_internal` can't be flipped: trigger `clients_protect_internal`.
+- Prefer a team seat or a login made for the agents over a personal account, and a read-only / least-privilege API key where the tool offers one.
+
 ## Where system secrets live
 
 **v1 (local + VPS):** env file readable only by the worker. On the VPS the master `.env` is split per container (`scripts/split-env.mjs` → `.env.worker`, `.env.bot`, `.env.dashboard`); the dashboard file never holds the service-role key or `VAULT_MASTER_KEY` (`check-env --split` fails the deploy otherwise). See docs/10.

@@ -40,7 +40,7 @@ export async function loadSettings(): Promise<SettingsPage> {
   const [state, rules, clients, events] = await Promise.all([
     totpState(db),
     db.from('plan_auto_approve_rules').select('*').order('created_at').order('id'),
-    db.from('clients').select('slug,name').neq('status', 'archived').order('name'),
+    db.from('clients').select('slug,name').neq('status', 'archived').eq('is_internal', false).order('name'),
     db.from('activity_log').select('created_at,action,request_id,detail').in('action', ['plan.auto_approved', 'plan.auto_approve_skipped'])
       .order('created_at', { ascending: false }).limit(10),
   ]);
