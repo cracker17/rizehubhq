@@ -34,7 +34,7 @@ export async function writeOutreachStatus(rt: SalesRuntime, now: Date, sentToday
   await rt.db.setSetting('outreach_status', {
     cap_today: cap, configured_cap: rt.cfg.cap, warmup_day: warmupDay, warmup_ramp: ramp, sent_today: sentToday,
     sending_enabled: problems.length === 0 && !!rt.mailer, problems,
-    inbox_enabled: !!rt.inbox, auto_approve_follow_ups: rt.cfg.autoApproveFollowUps, batch_hour: rt.cfg.batchHour,
+    inbox_enabled: !!rt.inbox, batch_hour: rt.cfg.batchHour,
     quiet_hours: rt.cfg.quietHours, from: rt.cfg.fromEmail, updated_at: now.toISOString(),
   });
 }

@@ -112,8 +112,8 @@ By default every plan waits for the CEO. The CEO can add **auto-approve rules** 
 
 **Never auto-approved:** anything that is not a plan. External actions (publish/send/merge/deploy/spend) created
 while an auto-approved plan runs are ordinary `external_action` approvals and always wait for the CEO;
-`decide_approval(…, 'auto')` refuses every approval except the plan `auto_approve_plan()` is deciding. (The only other
-automatic approval is the pre-existing, off-by-default `OUTREACH_AUTO_APPROVE_FOLLOW_UPS` for unflagged sales follow-ups.)
+`decide_approval(…, 'auto')` refuses every approval except the plan `auto_approve_plan()` is deciding. Sales emails
+(first touches, follow-ups, replies, proposals) are never auto-approved either (migration `20260929010000`).
 
 Editing rules: `save_auto_approve_rule(jsonb)` / `delete_auto_approve_rule(uuid)` (validated, logged as
 `auto_approve.rule_saved` / `auto_approve.rule_deleted`); turning a rule on needs a fresh 2FA step-up once 2FA is set

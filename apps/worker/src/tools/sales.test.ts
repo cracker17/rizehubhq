@@ -120,7 +120,7 @@ test('validateDraft: follow-ups allow 2 links, replies up to 150 words', () => {
 });
 
 test('draft_reply goes straight to one CEO approval (pending, never auto); flagged mentions are warned', async () => {
-  const { run, db, mailer } = setup({ env: { OUTREACH_AUTO_APPROVE_FOLLOW_UPS: 'true' } });
+  const { run, db, mailer } = setup();
   const lead = await seedLead(db);
   const r = JSON.parse(await run('draft_reply', { lead_id: lead, subject: 'Re: your site', body: 'Happy to. The fix usually costs $450 and we can deliver by Friday. Does Tuesday 9am your time work for a call?' }));
   assert.equal(db.emails.get(r.email_id)!.status, 'pending_approval');
@@ -131,19 +131,14 @@ test('draft_reply goes straight to one CEO approval (pending, never auto); flagg
   assert.equal(mailer.sent.length, 0);
 });
 
-test('draft_follow_up: auto-approve (when enabled) covers only unflagged follow-ups', async () => {
-  const { run, db } = setup({ env: { OUTREACH_AUTO_APPROVE_FOLLOW_UPS: 'true' } });
+test('draft_follow_up: never auto-approved; joins the daily batch for the CEO', async () => {
+  const { run, db } = setup();
   const lead = await seedLead(db);
-  const l = db.leads.get(lead)!;
-  Object.assign(l, { stage: 'contacted', first_contacted_at: '2026-09-25T02:00:00.000Z' });
-  const clean = JSON.parse(await run('draft_follow_up', { lead_id: lead, subject: 'One more thing', body: 'Also noticed your collection page loads 40 images at once. Want the list?' }));
-  assert.match(clean.next, /Auto-approved/);
-  assert.equal(db.emails.get(clean.email_id)!.status, 'approved');
-  const lead2 = await seedLead(db);
-  Object.assign(db.leads.get(lead2)!, { stage: 'contacted', first_contacted_at: '2026-09-25T02:00:00.000Z' });
-  const flagged = JSON.parse(await run('draft_follow_up', { lead_id: lead2, subject: 'One more thing', body: 'We could fix it within 5 business days if useful. Want the list?' }));
-  assert.match(flagged.next, /needs Julev's explicit approval/);
-  assert.equal(db.emails.get(flagged.email_id)!.status, 'pending_approval');
+  Object.assign(db.leads.get(lead)!, { stage: 'contacted', first_contacted_at: '2026-09-25T02:00:00.000Z' });
+  const r = JSON.parse(await run('draft_follow_up', { lead_id: lead, subject: 'One more thing', body: 'Also noticed your collection page loads 40 images at once. Want the list?' }));
+  assert.match(r.next, /nothing is sent before Julev approves/);
+  assert.equal(db.emails.get(r.email_id)!.status, 'draft');
+  assert.equal([...db.approvals.values()].filter((x) => x.status === 'approved').length, 0);
 });
 
 test('move_stage: the agent can move to researched / replied / call_booked / lost; SQL-only stages are refused', async () => {

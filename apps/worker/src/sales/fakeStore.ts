@@ -81,10 +81,10 @@ export class FakeSalesDb implements SalesDb {
     return { id: row.id, status: row.status, flags: all, needs_explicit_approval: all.length > 0, replaced: !!prior };
   }
 
-  async requestEmailApproval(emailId: string, auto: boolean) {
+  async requestEmailApproval(emailId: string) {
     const e = this.emails.get(emailId);
     if (!e || e.status !== 'draft') throw new Error('only drafts can be queued');
-    const ok = auto && e.kind === 'follow_up' && !e.needs_explicit_approval;
+    const ok = false; // outbound emails always wait for the CEO
     const ap: FakeApproval = { id: randomUUID(), type: 'sales.email', status: ok ? 'approved' : 'pending', emailIds: [e.id], auto: ok };
     this.approvals.set(ap.id, ap);
     e.approval_id = ap.id; e.status = ok ? 'approved' : 'pending_approval';

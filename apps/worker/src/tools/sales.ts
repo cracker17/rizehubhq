@@ -135,12 +135,8 @@ export function createSalesTools(get: () => SalesRuntime = getSales, brainDir = 
         const c = rt().cfg;
         let next: string;
         if (kind === 'reply') {
-          const ap = await rt().db.requestEmailApproval(r.id, false);
+          const ap = await rt().db.requestEmailApproval(r.id);
           next = `Sent to Julev for approval now (approval ${ap.approval_id}); the worker sends it only after he approves.`;
-        } else if (kind === 'follow_up' && c.autoApproveFollowUps) {
-          const ap = await rt().db.requestEmailApproval(r.id, true);
-          next = ap.auto_approved ? 'Auto-approved (OUTREACH_AUTO_APPROVE_FOLLOW_UPS) and queued for sending under the daily cap.'
-            : `Flagged, so it needs Julev's explicit approval (approval ${ap.approval_id}); auto-approve never covers flagged emails.`;
         } else {
           next = `Joins today's outreach batch (one approval at ${c.batchHour}:00 Manila); nothing is sent before Julev approves.`;
         }
@@ -263,7 +259,7 @@ export function createSalesTools(get: () => SalesRuntime = getSales, brainDir = 
             const bad = validateDraft('proposal', subject, body, l) ?? checkProposal(body, package_codes, readSalesBrain(brainDir));
             if (bad) return `Refused: ${bad}. Nothing was saved.`;
             const r = await rt().db.addEmailDraft(l.id, 'proposal', subject.trim(), body.trim(), task.id, detectFlags(subject, body, 'proposal'));
-            const ap = await rt().db.requestEmailApproval(r.id, false);
+            const ap = await rt().db.requestEmailApproval(r.id);
             return out({ saved: true, email_id: r.id, flags: r.flags, approval_id: ap.approval_id,
               next: 'Waiting for Julev\'s approval (proposals always need it). When sent, the lead moves to proposal_sent.' });
           } catch (e) { return `Could not save the proposal: ${msg(e)}`; }

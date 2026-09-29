@@ -142,7 +142,6 @@ export const VARS = [
   S({ key: 'OUTREACH_WARMUP_STEP_PER_WEEK', group: 'Outreach', svc: ['worker'], check: intIn(0, 50) }),
   S({ key: 'OUTREACH_BATCH_HOUR', group: 'Outreach', svc: ['worker'], check: intIn(0, 23) }),
   S({ key: 'OUTREACH_QUIET_HOURS', group: 'Outreach', svc: ['worker'], check: (v) => (/^\d{1,2}(:00)?-\d{1,2}(:00)?$/.test(v) ? null : 'must be Manila hours like 22-7') }),
-  S({ key: 'OUTREACH_AUTO_APPROVE_FOLLOW_UPS', group: 'Outreach', svc: ['worker'] }),
   S({ key: 'OUTREACH_UNSUBSCRIBE_URL', group: 'Outreach', svc: ['worker'], check: (v) => (isUrl(v) ? null : 'must be a URL') }),
   S({ key: 'OUTREACH_UNSUBSCRIBE_SECRET', group: 'Outreach', svc: ['worker'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32') }),
   S({ key: 'OUTREACH_SEND_EVERY_MS', group: 'Outreach', svc: ['worker'], check: intIn(1000) }),

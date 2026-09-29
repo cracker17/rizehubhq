@@ -22,7 +22,6 @@ export interface OutreachConfig {
   warmupFrom: Date | null;
   unsubscribeUrl: string | null;
   unsubscribeSecret: string | null;
-  autoApproveFollowUps: boolean;
   /** Manila hour (0–23) when the day's drafts become ONE batch approval. */
   batchHour: number;
   mainDomain: string;
@@ -90,7 +89,6 @@ export function outreachConfig(env: Env = workerEnv()): OutreachConfig {
     warmupFrom,
     unsubscribeUrl: unsubscribeUrl && unsubscribeSecret ? unsubscribeUrl : null,
     unsubscribeSecret,
-    autoApproveFollowUps: bool(env.OUTREACH_AUTO_APPROVE_FOLLOW_UPS),
     batchHour: Math.min(23, Math.max(0, int(env.OUTREACH_BATCH_HOUR, 17))),
     mainDomain: (str(env.OUTREACH_MAIN_DOMAIN) || 'rizehub.ph').toLowerCase(),
     sendEveryMs: int(env.OUTREACH_SEND_EVERY_MS, 60_000),

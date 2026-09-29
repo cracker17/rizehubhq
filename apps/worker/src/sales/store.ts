@@ -48,7 +48,7 @@ export interface SalesDb {
   upsertLead(p: LeadInput, taskId: string | null): Promise<{ id: string; created: boolean; stage: LeadStage }>;
   updateResearch(leadId: string, research: Record<string, unknown>, score: number | null): Promise<{ id: string; stage: LeadStage; score: number | null }>;
   addEmailDraft(leadId: string, kind: EmailKind, subject: string, body: string, taskId: string | null, flags: string[]): Promise<DraftResult>;
-  requestEmailApproval(emailId: string, auto: boolean): Promise<{ approval_id: string; auto_approved: boolean; status: EmailStatus }>;
+  requestEmailApproval(emailId: string): Promise<{ approval_id: string; auto_approved: boolean; status: EmailStatus }>;
   moveStage(leadId: string, stage: LeadStage, actor: string, note: string | null): Promise<Record<string, unknown>>;
   listLeads(q: { stages?: LeadStage[]; search?: string; ids?: string[]; limit?: number }): Promise<LeadRow[]>;
   listEmails(q: { leadIds?: string[]; statuses?: EmailStatus[]; limit?: number }): Promise<LeadEmailRow[]>;
@@ -86,7 +86,7 @@ export function salesSupabaseDb(sb: SupabaseClient): SalesDb {
     addEmailDraft: (leadId, kind, subject, body, taskId, flags) => rpc('sales_add_email_draft', {
       p_lead: leadId, p_kind: kind, p_subject: subject, p_body: body, p_task: taskId, p_flags: flags,
     }),
-    requestEmailApproval: (emailId, auto) => rpc('sales_request_email_approval', { p_email: emailId, p_auto: auto }),
+    requestEmailApproval: (emailId) => rpc('sales_request_email_approval', { p_email: emailId }),
     moveStage: (leadId, stage, actor, note) => rpc('sales_move_stage', { p_lead: leadId, p_stage: stage, p_actor: actor, p_note: note }),
     listLeads: (q) => {
       let query = sb.from('leads').select(LEAD_COLS);

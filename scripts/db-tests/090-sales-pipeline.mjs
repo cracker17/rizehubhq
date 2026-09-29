@@ -158,8 +158,9 @@ export default async function ({ db, step, val, one, status, as, assert }) {
       const fu = await draft(fl, 'follow_up', `Biz 6 follow-up ${n}`, 'One more thing I noticed on your collection page. Worth a look?');
       assert.equal(await E(fu.id, 'follow_up_number'), n);
       assert.equal(await E(fu.id, 'in_reply_to'), n === 1 ? '<ft6@out>' : `<fu${n - 1}@out>`);
-      const r = await val(`select sales_request_email_approval($1, true)`, [fu.id]); // auto-approve (unflagged follow-up)
-      assert.equal(r.auto_approved, true);
+      const r = await val(`select sales_request_email_approval($1, true)`, [fu.id]); // p_auto is ignored: the CEO approves
+      assert.equal(r.auto_approved, false);
+      await val(`select decide_approval($1, 'approve')`, [r.approval_id]);
       await val(`select sales_mark_sent($1, $2, null)`, [fu.id, `<fu${n}@out>`]);
       assert.equal(await L(fl, 'follow_up_count'), n);
       assert.ok(await val(`select abs(extract(epoch from (next_follow_up_at - first_contacted_at)) - $2*86400) < 1 from leads where id = $1`, [fl, day]));
@@ -171,7 +172,7 @@ export default async function ({ db, step, val, one, status, as, assert }) {
     assert.equal(await L(fl, 'lost_reason'), 'no_response');
   });
 
-  await step('sales: auto-approve never covers flagged follow-ups or first touches', async () => {
+  await step('sales: no outbound email is ever auto-approved', async () => {
     const l7 = await lead(pub(7));
     const ft = (await draft(l7, 'first_touch', 'Biz 7', 'Hi, quick one about your menu. Want the fix list?')).id;
     assert.equal((await val(`select sales_request_email_approval($1, true)`, [ft])).auto_approved, false);

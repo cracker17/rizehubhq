@@ -56,7 +56,7 @@ test('flagged emails (prices / dates) are held by "approve all" and only go out 
   assert.deepEqual(mailer.sent.map((m) => m.messageId.split('.')[0]), [`<${clean}`]);
   assert.equal(db.emails.get(flagged)!.status, 'draft');
   assert.match(db.emails.get(flagged)!.ceo_note ?? '', /explicit per-email approval/);
-  const ap = await db.requestEmailApproval(flagged, true);
+  const ap = await db.requestEmailApproval(flagged);
   assert.equal(ap.auto_approved, false, 'auto-approve never covers a flagged email or a first touch');
   db.decide(ap.approval_id, 'approve');
   await runSendTick({ db, mailer, cfg: testConfig(), now: T0 });
