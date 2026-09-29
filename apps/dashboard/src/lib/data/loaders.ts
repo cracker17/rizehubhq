@@ -77,7 +77,8 @@ export async function loadQaReviews(db: SupabaseClient) {
 }
 
 export async function loadClients(db: SupabaseClient) {
-  return must<ClientRow[]>(await db.from('clients').select('id,name,slug').order('name'), 'clients');
+  // Customers only: the internal client (Admin → Tool logins) never shows in pickers or filters.
+  return must<ClientRow[]>(await db.from('clients').select('id,name,slug').eq('is_internal', false).order('name'), 'clients');
 }
 
 export async function loadLiveSnapshot(db: SupabaseClient): Promise<HqSnapshot> {

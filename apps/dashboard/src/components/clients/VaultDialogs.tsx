@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { Copy, Check, ShieldAlert, Link2 } from 'lucide-react';
 import type { CredentialView, VaultClient } from '@/lib/data/vault';
 import { createAccessLinkAction, revealSecretAction, revokeCredentialAction, rotateSecretAction } from '@/app/vault-actions';
-import { Dialog, Field, PLATFORM_LABEL, btn, inputCls } from './ui';
+import { Dialog, Field, PLATFORM_LABEL, btn, inputCls, platformLabel } from './ui';
 
 function useCopy() {
   const [copied, setCopied] = useState(false);
@@ -132,7 +132,7 @@ export function RevokeDialog({ cred, onClose, onDone }: { cred: CredentialView |
       const r = await revokeCredentialAction({ id: cred.id, reason });
       if (!r.ok) { setError(r.error); return; }
       close();
-      onDone(`Revoked. Now revoke it at ${PLATFORM_LABEL[cred.platform] ?? cred.platform} too.`);
+      onDone(`Revoked. Now revoke it at ${platformLabel(cred.platform)} too.`);
     });
   };
   return (
@@ -142,7 +142,7 @@ export function RevokeDialog({ cred, onClose, onDone }: { cred: CredentialView |
           <p className="text-sm text-[var(--color-muted)]">All agents lose <b className="text-white">{cred.label}</b> immediately. The encrypted value stays for the audit trail.</p>
           <ol className="item list-decimal space-y-1 py-3 pl-8 pr-3 text-[13px] text-[var(--color-muted)]">
             <li>Revoke here (agents stop right away).</li>
-            <li>Remove the collaborator / delete the token at {PLATFORM_LABEL[cred.platform] ?? cred.platform}.</li>
+            <li>Remove the collaborator / delete the token at {platformLabel(cred.platform)}.</li>
           </ol>
           <Field label="Reason (optional)"><input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} placeholder="Project ended" /></Field>
           {error && <p role="alert" className="text-sm text-[#ff8a8d]">{error}</p>}

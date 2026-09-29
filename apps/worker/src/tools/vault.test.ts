@@ -22,7 +22,11 @@ interface Setup {
   fetchCalls: { url: string; init: RequestInit }[]; api: string; login: string; launcher: ReturnType<typeof fakeLauncher>;
 }
 
-function setup(o: { site?: FakeSite; agent?: string; fetchImpl?: (url: string, init: RequestInit) => Response; launch?: VaultToolEnv['launchBrowser'] } = {}): Setup {
+function setup(o: {
+  site?: FakeSite; agent?: string; fetchImpl?: (url: string, init: RequestInit) => Response; launch?: VaultToolEnv['launchBrowser'];
+  /** The task's client (default Madam Muse); null = a task without a client. */
+  taskClient?: string | null;
+} = {}): Setup {
   const kr = loadKeyring({ VAULT_MASTER_KEY: randomBytes(32).toString('base64') })!;
   const store = new FakeVaultStore();
   store.addClient(CLIENT, 'Madam Muse', 'madam-muse');
@@ -61,7 +65,7 @@ function setup(o: { site?: FakeSite; agent?: string; fetchImpl?: (url: string, i
     launchBrowser: o.launch ?? launcher, twofaTimeoutMs: 50, twofaPollMs: 1, sleep: async () => undefined,
   };
   const deps = makeDeps({ model: mockModel([]) });
-  const task = deps.db.addTask({ agent_id: o.agent ?? 'web-dev', client_id: CLIENT, status: 'working' });
+  const task = deps.db.addTask({ agent_id: o.agent ?? 'web-dev', client_id: o.taskClient === undefined ? CLIENT : o.taskClient, status: 'working' });
   const ctx: ToolContext = { task, role: loadRole(o.agent ?? 'web-dev'), deps, state: { ended: null, costUsd: 0, overBudget: false, toolErrors: 0 } };
   return { store, kr, tools: createVaultTools(ctx, env), env, ctx, fetchCalls, api, login, launcher };
 }
@@ -81,6 +85,59 @@ test('vault_list shows only granted credentials, masked usernames, never secrets
   assert.ok(!out.includes(TOKEN) && !out.includes(PASSWORD) && !out.includes('dev@rizehub.ph'));
   assert.equal(s.store.log.at(-1)?.action, 'list');
   assert.match(await run(s.tools, 'vault_list', { client: 'nobody' }), /No client/);
+});
+
+// Admin → Tool logins: the agency's own accounts live on the internal client (20260929060000_internal_vault.sql).
+const INTERNAL = '0c000000-0000-4000-8000-0000000000aa';
+const SEMRUSH_KEY = 'semrush_DEMO_key_not_real_7a6b';
+function addToolLogins(s: Setup) {
+  s.store.addClient(INTERNAL, 'RizeHub (internal)', 'rizehub-internal', true);
+  const add = (label: string, platform: string, grants: string[], secret: string) => {
+    const id = randomUUID();
+    void s.store.insertCredential({
+      id, clientId: INTERNAL, platform, label, loginUrl: null, username: 'team@rizehub.ph', secretType: 'api_token', twofaMethod: 'none',
+      scopeNotes: 'Keyword research only', urlAllowlist: ['https://api.semrush.com/'], expiresAt: null, grants, sealed: seal(secret, s.kr, id),
+    });
+    return id;
+  };
+  return { semrush: add('Semrush · agency seat', 'semrush', ['web-dev', 'writer'], SEMRUSH_KEY), canva: add('Canva · team', 'canva', ['designer'], 'canva-demo') };
+}
+
+test('tool logins: a task without a client lists and uses only the RizeHub tool logins the agent is granted', async () => {
+  const s = setup({ taskClient: null });
+  const { semrush, canva } = addToolLogins(s);
+  const out = await run(s.tools, 'vault_list', {});
+  assert.match(out, /This task has no client/);
+  assert.match(out, /RizeHub tool logins \(the agency's own accounts, usable in any task\): 1 granted to you/);
+  assert.match(out, new RegExp(semrush));
+  assert.match(out, /1 other tool login\(s\) exist that you are not granted/);
+  assert.doesNotMatch(out, /Canva|Madam Muse/);
+  assert.ok(!out.includes(SEMRUSH_KEY) && !out.includes('team@rizehub.ph'));
+  assert.deepEqual(s.store.log.at(-1)?.detail, { client_id: null, granted: 0, tools: 1 });
+
+  const res = await run(s.tools, 'vault_api', { credential_id: semrush, request: { method: 'GET', url: 'https://api.semrush.com/?type=domain_ranks&domain=rizehub.ph' } });
+  assert.match(res, /HTTP 200/);
+  assert.ok(!res.includes(SEMRUSH_KEY), 'the echoed key is redacted');
+  assert.equal(new Headers(s.fetchCalls.at(-1)!.init.headers).get('authorization'), `Bearer ${SEMRUSH_KEY}`);
+  // every Client Vault guard still applies: allowlist, grants, audit
+  assert.match(await run(s.tools, 'vault_api', { credential_id: semrush, request: { method: 'GET', url: 'https://www.semrush.com/billing' } }), /not on this credential's allowlist/);
+  assert.match(await run(s.tools, 'vault_api', { credential_id: canva, request: { method: 'GET', url: 'https://api.semrush.com/' } }), /not granted/);
+  assert.equal(s.fetchCalls.length, 1);
+  assert.deepEqual(s.store.log.filter((l) => l.credentialId).map((l) => l.action).slice(-3), ['api_call', 'denied', 'denied']);
+});
+
+test('tool logins: shown next to the client\'s own logins in a client task; a task without a client and no tool logins says so', async () => {
+  const s = setup();
+  addToolLogins(s);
+  const out = await run(s.tools, 'vault_list', {});
+  assert.match(out, /Madam Muse: 2 credential\(s\) granted/);
+  assert.match(out, /RizeHub tool logins .*: 1 granted to you/);
+  assert.match(out, /Semrush · agency seat/);
+  const bare = setup({ taskClient: null });
+  const none = await run(bare.tools, 'vault_list', {});
+  assert.match(none, /This task has no client/);
+  assert.doesNotMatch(none, /RizeHub tool logins/);
+  assert.match(await run(bare.tools, 'vault_list', { client: 'madam-muse' }), /Madam Muse: 2 credential\(s\) granted/);
 });
 
 test('grants are enforced: an agent without a grant gets nothing and the attempt is logged', async () => {

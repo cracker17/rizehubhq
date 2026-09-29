@@ -73,7 +73,7 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
     createRequest: async (r) => {
       let clientId: string | null = null;
       if (r.clientSlug) {
-        const { data } = await sb.from('clients').select('id').eq('slug', r.clientSlug).maybeSingle();
+        const { data } = await sb.from('clients').select('id').eq('slug', r.clientSlug).eq('is_internal', false).maybeSingle();
         clientId = (data as { id: string } | null)?.id ?? null;
       }
       const row = must<{ id: string }>(await sb.from('requests')

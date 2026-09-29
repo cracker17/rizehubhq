@@ -13,7 +13,7 @@ import {
   authHeaderFromScope, hasMethodOverride, loginEntry, maskUsername, METHOD_OVERRIDE_HEADERS, publishBlocked, redact, safeUrl,
   secretVariants, urlAllowed, writeAllowed,
 } from '../vault/guards';
-import { createSupabaseVaultStore, isUuid, VaultDenied, type CredentialForUse, type VaultStore } from '../vault/store';
+import { createSupabaseVaultStore, isUuid, VaultDenied, type CredentialForUse, type CredentialMeta, type VaultStore } from '../vault/store';
 import {
   BrowserUnavailable, closeCredentialSession, closeSession, getVaultBrowserSession, launchPlaywright, openSession, performLogin,
   registerSession, submitOtp, type LaunchBrowser,
@@ -53,6 +53,19 @@ export function defaultVaultToolEnv(): VaultToolEnv {
     twofaPollMs: 4000,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   };
+}
+
+/** A vault_list block: heading, one entry per credential (metadata only; usernames masked), optional footer. */
+function credentialSection(head: string, list: CredentialMeta[], tail: string): string {
+  const lines = list.map((c) => [
+    `- credential_id ${c.id} · ${c.platform} · "${c.label}"`,
+    `  type ${c.secret_type} · user ${maskUsername(c.username)} · 2FA ${c.twofa_method} · status ${c.status}`
+      + (c.login_url ? ` · login ${c.login_url}` : ''),
+    `  allowed URLs: ${c.url_allowlist.length ? c.url_allowlist.join(', ') : '(none: vault_api disabled; vault_login only on the login site)'}`,
+    `  API writes: ${c.write_allowlist?.length ? c.write_allowlist.join(', ') : 'none (read-only: GET/HEAD)'}`,
+    c.scope_notes ? `  scope (follow strictly): ${c.scope_notes}` : '',
+  ].filter(Boolean).join('\n'));
+  return [head, ...lines, tail].filter(Boolean).join('\n');
 }
 
 export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
@@ -96,28 +109,26 @@ export function createVaultTools(ctx: ToolContext, env: VaultToolEnv): ToolSet {
 
   return {
     vault_list: tool({
-      description: 'List the client logins/API tokens you are granted (metadata only, never secrets). '
-        + 'Defaults to this task\'s client. Use the returned credential_id with vault_api or vault_login.',
+      description: 'List the logins/API tokens you are granted (metadata only, never secrets): the client\'s (defaults to this '
+        + 'task\'s client) plus RizeHub\'s own tool logins (Semrush, Canva, hosting…) that you may use in any task, even one '
+        + 'without a client. Use the returned credential_id with vault_api or vault_login.',
       inputSchema: z.object({ client: z.string().max(120).optional().describe('Client slug or name; omit for the task\'s client') }),
       execute: async ({ client }) => {
-        const ref = client?.trim() || task.client_id;
-        if (!ref) return 'This task has no client. Pass `client` (slug or name).';
-        const clientId = await env.store().resolveClientId(ref);
-        if (!clientId) return `No client "${ref}".`;
+        const ref = client?.trim() || task.client_id || null;
+        const clientId = ref ? await env.store().resolveClientId(ref) : null;
+        if (ref && !clientId) return `No client "${ref}".`;
         const list = await env.store().listForAgent(agent, clientId);
-        await audit(null, 'list', true, { client_id: clientId, granted: list.granted.length });
-        if (list.client.status === 'archived') return `${list.client.name} is archived; no access.`;
-        const lines = list.granted.map((c) => [
-          `- credential_id ${c.id} · ${c.platform} · "${c.label}"`,
-          `  type ${c.secret_type} · user ${maskUsername(c.username)} · 2FA ${c.twofa_method} · status ${c.status}`
-            + (c.login_url ? ` · login ${c.login_url}` : ''),
-          `  allowed URLs: ${c.url_allowlist.length ? c.url_allowlist.join(', ') : '(none: vault_api disabled; vault_login only on the login site)'}`,
-          `  API writes: ${c.write_allowlist?.length ? c.write_allowlist.join(', ') : 'none (read-only: GET/HEAD)'}`,
-          c.scope_notes ? `  scope (follow strictly): ${c.scope_notes}` : '',
-        ].filter(Boolean).join('\n'));
-        const head = `${list.client.name}: ${list.granted.length} credential(s) granted to you.`;
-        const tail = list.not_granted ? `\n${list.not_granted} other credential(s) exist for this client that you are not granted; ask_ceo if you need one.` : '';
-        return `${head}\n${lines.join('\n')}${tail}`;
+        await audit(null, 'list', true, { client_id: clientId, granted: list.granted.length, tools: list.tools.length });
+        const parts: string[] = [];
+        if (!list.client) parts.push('This task has no client. Pass `client` (slug or name) to see a client\'s logins.');
+        else if (list.client.status === 'archived') parts.push(`${list.client.name} is archived; no access.`);
+        else parts.push(credentialSection(`${list.client.name}: ${list.granted.length} credential(s) granted to you.`, list.granted,
+          list.not_granted ? `${list.not_granted} other credential(s) exist for this client that you are not granted; ask_ceo if you need one.` : ''));
+        if (list.tools.length || list.tools_not_granted) {
+          parts.push(credentialSection(`RizeHub tool logins (the agency's own accounts, usable in any task): ${list.tools.length} granted to you.`,
+            list.tools, list.tools_not_granted ? `${list.tools_not_granted} other tool login(s) exist that you are not granted; ask_ceo if you need one.` : ''));
+        }
+        return parts.join('\n\n');
       },
     }),
 

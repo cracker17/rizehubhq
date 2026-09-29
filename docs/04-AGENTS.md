@@ -112,7 +112,7 @@ platform_to_dev:
 
 | Tool | What it does | The agent sees |
 |---|---|---|
-| `vault_list(client)` | Which logins exist for this client and whether *this agent* may use them | Labels, platform, username (masked), status, never secrets |
+| `vault_list(client)` | Which logins exist for this client and whether *this agent* may use them, plus RizeHub's own tool logins (Admin → Tool logins) granted to this agent, which work in any task, even one without a client | Labels, platform, username (masked), status, never secrets |
 | `vault_login(credential_id, url)` | Worker opens a sandboxed browser and fills the login itself; the agent then works in that logged-in session | "Logged in as j***@client.com"; screenshots with password fields blurred |
 | `vault_api(credential_id, request)` | Worker makes the API call with the stored token | The API response only |
 | `vault_request_2fa(credential_id)` | Pauses the task and asks you on Telegram for the one-time code | "Waiting for CEO 2FA code" |

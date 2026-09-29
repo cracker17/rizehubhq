@@ -6,7 +6,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { demoSnapshot } from '@/lib/mock';
 import type {
   AccessLinkState, AccessLinkView, AccessLogView, AgentTaskView, ClientDetail, ClientSummary, ConnectionsData, CredentialView,
-  RosterAgent, VaultClient,
+  RosterAgent, ToolLoginsData, VaultClient,
 } from './vault';
 
 const HOUR = 3600_000;
@@ -14,8 +14,12 @@ const DAY = 24 * HOUR;
 export const DEMO_TOKEN = 'demo-token';
 const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
 
+/** The internal client that holds the agency's own tool logins (never in `clients`, like is_internal in SQL). */
+export const DEMO_INTERNAL_ID = 'c-rizehub-internal';
+
 interface DemoState {
   clients: VaultClient[];
+  internal: VaultClient;
   creds: CredentialView[];
   log: AccessLogView[];
   links: (AccessLinkView & { token_hash: string })[];
@@ -122,12 +126,42 @@ function seed(now = Date.now()): DemoState {
     { id: 'ar-vi', client_id: 'c-vi', platforms: ['wordpress'], expires_at: iso(-6 * DAY), used_at: null, created_at: iso(-9 * DAY),
       note: null, credential_id: null, cancelled_at: null, token_hash: hashToken('demo-expired-token') },
   ];
-  return { clients, creds, log, links, logSeq };
+  // Admin → Tool logins: the agency's own accounts.
+  const internal: VaultClient = {
+    id: DEMO_INTERNAL_ID, name: 'RizeHub (internal)', slug: 'rizehub-internal', platforms: [], website: null, service_package: null,
+    status: 'active', notes: 'The agency\'s own tool logins.', rizehub_workspace_id: null, created_at: iso(-30 * DAY),
+  };
+  creds.push(
+    cred('cr-tool-semrush', DEMO_INTERNAL_ID, {
+      platform: 'semrush', label: 'Semrush · agency seat', login_url: 'https://www.semrush.com/login/', username: 'seo@rizehub.ph',
+      twofa_method: 'email', scope_notes: 'Keyword and competitor research only. Never change billing, users or projects.',
+      url_allowlist: ['https://www.semrush.com/analytics', 'https://api.semrush.com/'], last_used_at: iso(-4 * HOUR), last_used_by: 'writer',
+      grants: ['qa-lead', 'writer'], created_at: iso(-25 * DAY),
+    }),
+    cred('cr-tool-canva', DEMO_INTERNAL_ID, {
+      platform: 'canva', label: 'Canva · RizeHub team', login_url: 'https://www.canva.com/login', username: 'design@rizehub.ph',
+      twofa_method: 'email', scope_notes: 'Create designs in the RizeHub team folder. Never share outside the team or change the plan.',
+      url_allowlist: ['https://www.canva.com/design', 'https://www.canva.com/folder'], last_used_at: iso(-26 * HOUR), last_used_by: 'designer',
+      grants: ['designer'], created_at: iso(-25 * DAY),
+    }),
+    cred('cr-tool-partner', DEMO_INTERNAL_ID, {
+      platform: 'shopify-partner', label: 'Shopify Partner · dev stores', login_url: 'https://partners.shopify.com/', username: 'partners@rizehub.ph',
+      twofa_method: 'app', scope_notes: 'Create and open development stores only. Never transfer stores or touch payouts.',
+      url_allowlist: ['https://partners.shopify.com/'], expires_at: iso(10 * DAY), grants: ['web-dev'], created_at: iso(-12 * DAY),
+    }),
+  );
+  L('cr-tool-semrush', 'ceo', 'store', true, 25 * DAY);
+  L('cr-tool-semrush', 'writer', 'login', true, 4 * HOUR, { host: 'www.semrush.com' });
+  L('cr-tool-canva', 'designer', 'login', true, 26 * HOUR, { host: 'www.canva.com' });
+  L('cr-tool-canva', 'designer', 'twofa', true, 26 * HOUR - 60_000, { host: 'www.canva.com' });
+  L('cr-tool-partner', 'ceo', 'store', true, 12 * DAY);
+  return { clients, internal, creds, log, links, logSeq };
 }
 
 const g = globalThis as unknown as { __rizehubVaultDemo?: DemoState };
 function state(): DemoState {
-  return (g.__rizehubVaultDemo ??= seed());
+  if (!g.__rizehubVaultDemo?.internal) g.__rizehubVaultDemo = seed(); // also re-seeds state kept from an older build (dev HMR)
+  return g.__rizehubVaultDemo;
 }
 
 function hashNum(s: string) {
@@ -175,10 +209,18 @@ export function demoVault() {
         })),
       };
     },
+    toolLogins(): ToolLoginsData {
+      const credentials = s.creds.filter((c) => c.client_id === s.internal.id);
+      const ids = new Set(credentials.map((c) => c.id));
+      return {
+        client: s.internal, credentials,
+        log: s.log.filter((l) => l.credential_id && ids.has(l.credential_id)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      };
+    },
     connections(): ConnectionsData {
       return {
         clients: s.clients.map((c) => ({ id: c.id, name: c.name, platforms: c.platforms, status: c.status })),
-        credentials: s.creds.map((c) => {
+        credentials: s.creds.filter((c) => c.client_id !== s.internal.id).map((c) => {
           const cl = s.clients.find((x) => x.id === c.client_id);
           return { ...c, client_name: cl?.name ?? 'Unknown client', client_status: cl?.status ?? 'active' };
         }),

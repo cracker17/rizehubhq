@@ -101,6 +101,16 @@ export interface ClientDetail {
   requests: ClientRequestView[];
 }
 
+/**
+ * Admin → Tool logins: the agency's own accounts (Semrush, Canva, hosting…). They are Client Vault credentials of the
+ * one internal client row (clients.is_internal, created by internal_client_id() on first load), so every vault rule applies.
+ */
+export interface ToolLoginsData {
+  client: VaultClient;
+  credentials: CredentialView[];
+  log: AccessLogView[];
+}
+
 export interface ConnectionsData {
   clients: { id: string; name: string; platforms: string[]; status: string }[];
   credentials: (CredentialView & { client_name: string; client_status: string })[];
@@ -167,13 +177,23 @@ async function withGrants(db: SupabaseClient, creds: Omit<CredentialView, 'grant
   return creds.map((c) => ({ ...c, url_allowlist: c.url_allowlist ?? [], write_allowlist: c.write_allowlist ?? [], grants: g.filter((x) => x.credential_id === c.id).map((x) => x.agent_id).sort() }));
 }
 
+/** One client's credentials (safe columns + grants) and their latest access-log rows. */
+async function loadVaultOf(db: SupabaseClient, clientId: string): Promise<{ credentials: CredentialView[]; log: AccessLogView[] }> {
+  const credentials = await withGrants(db, must<Omit<CredentialView, 'grants'>[]>(
+    await db.from('client_credentials').select(CRED_COLS).eq('client_id', clientId).order('created_at'), 'client_credentials'));
+  const log = credentials.length ? must<AccessLogView[]>(await db.from('credential_access_log')
+    .select('id,credential_id,agent_id,action,success,detail,created_at').in('credential_id', credentials.map((c) => c.id))
+    .order('created_at', { ascending: false }).limit(150), 'credential_access_log') : [];
+  return { credentials, log };
+}
+
 // ---------- clients ----------
 export async function loadClientSummaries(): Promise<Loaded<ClientSummary[]>> {
   const db = await liveDb();
   if (!db) return { data: demoVault().summaries() };
   try {
     const [clients, reqs, creds, links] = await Promise.all([
-      db.from('clients').select(CLIENT_COLS).order('name'),
+      db.from('clients').select(CLIENT_COLS).eq('is_internal', false).order('name'),
       db.from('requests').select('client_id,status,cost_usd,created_at').not('client_id', 'is', null).gte('created_at', new Date(Date.now() - 120 * 86400_000).toISOString()),
       db.from('client_credentials').select('id,client_id,status,expires_at'),
       db.from('access_requests').select('client_id,expires_at,used_at,cancelled_at').is('used_at', null).is('cancelled_at', null),
@@ -203,23 +223,20 @@ export async function loadClientDetail(id: string): Promise<Loaded<ClientDetail 
   const db = await liveDb();
   if (!db) return { data: demoVault().detail(id) };
   try {
-    const one = await db.from('clients').select(CLIENT_COLS).eq('id', id).maybeSingle();
+    // The internal client (tool logins) is not a customer: it lives at /admin/logins, never /clients/<id>.
+    const one = await db.from('clients').select(CLIENT_COLS).eq('id', id).eq('is_internal', false).maybeSingle();
     if (one.error) throw new Error(`client: ${one.error.message}`);
     const client = one.data as VaultClient | null;
     if (!client) return { data: null };
-    const [creds, links, reqs] = await Promise.all([
-      db.from('client_credentials').select(CRED_COLS).eq('client_id', id).order('created_at'),
+    const [vault, links, reqs] = await Promise.all([
+      loadVaultOf(db, id),
       db.from('access_requests').select(LINK_COLS).eq('client_id', id).order('created_at', { ascending: false }).limit(20),
       db.from('requests').select('id,title,raw_text,status,priority,cost_usd,created_at,due_date').eq('client_id', id)
         .order('created_at', { ascending: false }).limit(50),
     ]);
-    const credentials = await withGrants(db, must<Omit<CredentialView, 'grants'>[]>(creds, 'client_credentials'));
-    const log = credentials.length ? must<AccessLogView[]>(await db.from('credential_access_log')
-      .select('id,credential_id,agent_id,action,success,detail,created_at').in('credential_id', credentials.map((c) => c.id))
-      .order('created_at', { ascending: false }).limit(150), 'credential_access_log') : [];
     return {
       data: {
-        client: { ...client, platforms: client.platforms ?? [] }, credentials, log,
+        client: { ...client, platforms: client.platforms ?? [] }, ...vault,
         links: must<AccessLinkView[]>(links, 'access_requests'),
         requests: must<ClientRequestView[]>(reqs, 'requests').map((r) => ({ ...r, cost_usd: Number(r.cost_usd || 0) })),
       },
@@ -236,12 +253,15 @@ export async function loadConnections(): Promise<Loaded<ConnectionsData>> {
   try {
     const [creds, clients, conns] = await Promise.all([
       db.from('client_credentials').select(CRED_COLS).order('created_at'),
-      db.from('clients').select('id,name,status,platforms').order('name'),
+      db.from('clients').select('id,name,status,platforms,is_internal').order('name'),
       db.from('connections').select('label,secret_ref,platform,status,last_used_at').is('client_id', null),
     ]);
-    const cl = must<{ id: string; name: string; status: string; platforms: string[] | null }[]>(clients, 'clients');
+    const all = must<{ id: string; name: string; status: string; platforms: string[] | null; is_internal: boolean }[]>(clients, 'clients');
+    // Tool logins (the internal client) have their own page, Admin → Tool logins.
+    const internal = new Set(all.filter((c) => c.is_internal).map((c) => c.id));
+    const cl = all.filter((c) => !c.is_internal).map(({ is_internal: _i, ...c }) => c);
     const byId = new Map(cl.map((c) => [c.id, c]));
-    const list = await withGrants(db, must<Omit<CredentialView, 'grants'>[]>(creds, 'client_credentials'));
+    const list = await withGrants(db, must<Omit<CredentialView, 'grants'>[]>(creds, 'client_credentials').filter((c) => !internal.has(c.client_id)));
     return {
       data: {
         clients: cl.map((c) => ({ ...c, platforms: c.platforms ?? [] })),
@@ -251,6 +271,25 @@ export async function loadConnections(): Promise<Loaded<ConnectionsData>> {
     };
   } catch (e) {
     return { data: { clients: [], credentials: [], systemKeys: [] }, error: e instanceof Error ? e.message : 'Could not load connections' };
+  }
+}
+
+// ---------- tool logins (Admin) ----------
+export async function loadToolLogins(): Promise<Loaded<ToolLoginsData | null>> {
+  const db = await liveDb();
+  if (!db) return { data: demoVault().toolLogins() };
+  try {
+    // Creates "RizeHub (internal)" on the very first visit (CEO session; hq_guard in SQL).
+    const id = await db.rpc('internal_client_id');
+    if (id.error) throw new Error(`internal client: ${id.error.message}`);
+    const clientId = String(id.data ?? '');
+    const one = await db.from('clients').select(CLIENT_COLS).eq('id', clientId).maybeSingle();
+    if (one.error) throw new Error(`internal client: ${one.error.message}`);
+    const client = one.data as VaultClient | null;
+    if (!client) return { data: null, error: 'The internal client could not be loaded.' };
+    return { data: { client: { ...client, platforms: client.platforms ?? [] }, ...(await loadVaultOf(db, clientId)) } };
+  } catch (e) {
+    return { data: null, error: e instanceof Error ? e.message : 'Could not load tool logins' };
   }
 }
 
