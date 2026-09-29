@@ -23,7 +23,7 @@ Each milestone ends with something you can **see working locally**. Don't start 
 | M9c Onboarding automation | ✅ Done: built and tested offline (mock) | Staging RizeHub test client |
 | **Go-live** (M11 deploy kit) | 🟡 Kit ready: `deploy/`, Dockerfiles, compose, CI image builds, `pnpm check:env`, `pnpm check:deploy`, Go-live runbook in docs/10 | **Pending:** hosted Supabase, DNS, `.env` with live keys, `setup-vps.sh`, CEO user, Telegram bot, `/assign` end-to-end (README "Go-live checklist") |
 | M10 Remaining roles | 🟡 Ready offline: role files, SOPs, tools and `pnpm eval:roles` (18 fixture tasks, all ≥ 85 offline) | AI keys, then `pnpm eval:roles -- --live`, then 3 real tasks with QA ≥ 85 per role |
-| M12 Hardening & scale | 🟡 In progress: TOTP 2FA + step-up, auto-approve rules for low-risk plans, /costs dashboard, Admin section (password change/reset, 2FA turn-off) done; DB security-advisor hardening written + tested (`20260929030000_security_hardening.sql`: fixed search_path, no anon EXECUTE, worker-only RPCs service-role only; docs/03 "Security hardening"), **apply to production pending**, then turn on leaked-password protection in Auth | Secrets manager, QA-Dev / QA-Content split, voice notes, client status pages |
+| M12 Hardening & scale | 🟡 In progress: TOTP 2FA + step-up, auto-approve rules for low-risk plans, /costs dashboard, Admin section (password change/reset, 2FA turn-off), voice input (dashboard mic + Telegram voice notes) done; DB security-advisor hardening (`20260929030000_security_hardening.sql`: fixed search_path, no anon EXECUTE, worker-only RPCs service-role only; docs/03 "Security hardening"), then turn on leaked-password protection in Auth | Secrets manager, QA-Dev / QA-Content split, client status pages; a real Telegram voice note end-to-end |
 | M13 Connectors | ⚪ Planned 2026-09-29 (docs/15) | Kimi backup model, MCP connector wizard (Sign in / token, per-tool Allowed/Ask me/Off), Gmail accounts via App Password, Drive/Dropbox storage |
 
 ## M0 · Foundation (Day 1)
@@ -94,7 +94,7 @@ Each milestone ends with something you can **see working locally**. Don't start 
 - ✅ Checklist in 10 all green; one week of real use.
 
 ## M12 · Hardening & scale (ongoing)
-- Secrets manager, TOTP, auto-approve rules for low-risk plans, split QA into QA-Dev / QA-Content, cost dashboards per client, voice-note commands, client-facing status pages.
+- Secrets manager, TOTP, auto-approve rules for low-risk plans, split QA into QA-Dev / QA-Content, cost dashboards per client, voice-note commands (✅ Telegram voice notes → transcribed → handled like typed text, docs/08 "Voice notes"), client-facing status pages.
 
 ---
 

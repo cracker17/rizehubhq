@@ -9,7 +9,7 @@ Your pocket command line. Long polling (no domain or webhook needed), so it runs
 | `/start` | Links your Telegram (checks whitelist), shows menu |
 | `/assign <text>` | Creates a request (`source=telegram`). Supports `!urgent`, `@client-slug`, `due:fri` |
 | *(plain message)* | Treated as `/assign` — just type what you need |
-| *(voice note — later)* | Transcribed → `/assign` |
+| *(voice note / audio file)* | Transcribed, echoed as "🎙 Heard: …", then handled exactly like a typed message (see *Voice notes*) |
 | `/status` | Office snapshot: working / idle / waiting / blocked counts + who's on what |
 | `/approvals` | Pending approvals, one message each with buttons |
 | `/request <id>` | Progress of one request (tasks + statuses) |
@@ -43,6 +43,28 @@ Your pocket command line. Long polling (no domain or webhook needed), so it runs
 - **Open** → deep link to the item in the dashboard.
 - **2FA on (docs/09):** ✅ on a high-risk external action (publish, send, merge, deploy, spend…) answers "Needs your 2FA code: approve this one in the dashboard" and changes nothing; ✏️ and ❌ still work. Plans, deliverables and questions are unaffected. Plans approved by an auto-approve rule read "⚡ Auto-approved" with the rule.
 - After a decision the message is edited to show the result ("✅ Approved by you 14:02") so it's never actioned twice. Callback data = `ap:<approval_id>:<action>`; the bot re-checks `status='pending'` before applying.
+
+## Voice notes
+
+Hold the mic in the chat and say what you would have typed (up to **2 minutes / 8 MB**; audio files such as mp3 / m4a
+work too). The bot has no worker secret (CLAUDE.md rule 2), so the clip goes through Supabase:
+
+1. Bot (`apps/bot/src/voice.ts`): whitelisted users only; checks length / size / type first (a friendly reply
+   otherwise), downloads the file (`getFile` → `https://api.telegram.org/file/bot<token>/<file_path>`), inserts it
+   into `voice_notes` (service role) and replies "🎙 Transcribing…".
+2. Worker (`apps/worker/src/voiceNotes.ts`, every 3 s): `voice_note_claim()` (oldest pending, `for update skip locked`
+   → `working`), transcribes with the same Whisper chain as the dashboard mic (`config/models.yaml` `transcription:`),
+   then `voice_note_finish()` → `done` with the text or `failed` with the reason. Logs `usage.transcribe` with
+   `source: telegram` (model, seconds; never the text).
+3. Bot polls the row every 1.5 s for up to 60 s. Done → "🎙 Heard: <text>", then the text goes through the same
+   function as a typed message (`intake.ts` `processText`: a pending change note / answer first, otherwise a new
+   request). Failed or timed out → the reason and "Please type it instead."
+
+Privacy: the audio is stored only until it is transcribed. Finishing (done or failed) clears it, a check constraint
+keeps finished rows audio-free, the bot drops it when it stops waiting, and clips older than 5 minutes are expired on
+the next claim. Only the service role writes or claims (`20260929050000_voice_notes.sql`); the CEO can read status and
+transcript, never the audio. Neither app logs audio or transcripts. A spoken 2FA code (Vault question pending) is
+never echoed: the bot says "Heard your code (not shown)" and deletes the voice message, like a typed code.
 
 ## Notifications (bot → you)
 

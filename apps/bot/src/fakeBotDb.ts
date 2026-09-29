@@ -1,7 +1,7 @@
 // In-memory BotDb for tests (mirrors decide_approval's pending re-check).
 import { randomUUID } from 'node:crypto';
-import type { BotDb, NewRequest } from './db';
-import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow } from './types';
+import type { BotDb, NewRequest, NewVoiceNote } from './db';
+import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
 export function approval(p: Partial<BotApproval> = {}): BotApproval {
   return {
@@ -18,6 +18,11 @@ export class FakeBotDb implements BotDb {
   budgetAlerts: BudgetAlert[] = [];
   settings: Record<string, unknown> = { timezone: 'Asia/Manila' };
   requests: NewRequest[] = [];
+  /** voice_notes rows; tests play the worker by editing them (or via onVoicePoll). */
+  voiceNotes = new Map<string, NewVoiceNote & VoiceNoteState & { audioCleared: boolean }>();
+  /** Called on every getVoiceNote poll (poll number from 1): lets a test finish the clip after n polls. */
+  onVoicePoll: ((id: string, poll: number) => void) | null = null;
+  private voicePolls = 0;
   decisions: { id: string; decision: Decision; note: string | null }[] = [];
   now = () => new Date('2026-09-28T06:02:00Z');
   /** Mirrors ceo_step_up_guard(): the CEO has 2FA on, so the bot (service role) can't approve high-risk actions. */
@@ -59,4 +64,18 @@ export class FakeBotDb implements BotDb {
   async spendRows(): Promise<SpendRow[]> { return []; }
   async agents(): Promise<AgentLite[]> { return [{ id: 'writer', name: 'Content Writer', status: 'working' }]; }
   async createRequest(r: NewRequest) { this.requests.push(r); return { id: randomUUID(), clientFound: true }; }
+  async createVoiceNote(v: NewVoiceNote) {
+    const id = randomUUID();
+    this.voiceNotes.set(id, { ...v, status: 'pending', text: null, error: null, audioCleared: false });
+    return id;
+  }
+  async getVoiceNote(id: string): Promise<VoiceNoteState | null> {
+    this.onVoicePoll?.(id, ++this.voicePolls);
+    const v = this.voiceNotes.get(id);
+    return v ? { status: v.status, text: v.text, error: v.error } : null;
+  }
+  async abandonVoiceNote(id: string, error: string) {
+    const v = this.voiceNotes.get(id);
+    if (v && (v.status === 'pending' || v.status === 'working')) Object.assign(v, { status: 'failed', error, audioCleared: true });
+  }
 }

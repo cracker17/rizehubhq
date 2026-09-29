@@ -167,7 +167,9 @@ Status → color mapping (use everywhere: dots, bubbles, progress bars):
   (model, seconds, source; no text). Browsers record WebM/Opus (Chrome, Edge, Firefox) or MP4 (Safari).
 - **Voice mode** (agent chat, remembered per browser): what you say is sent straight away and the reply is read aloud
   with the browser's built-in voice (free, on-device).
-- Telegram voice notes are the next step (the bot has no worker secret, so they go through Supabase).
+- **Telegram voice notes** (built): same Whisper chain, handed over through the `voice_notes` table because the bot
+  has no worker secret; the transcript is handled like a typed message and the audio is cleared once transcribed
+  (docs/08 "Voice notes").
 
 ## Agent panel (click any character/tile)
 Tabs: **Screen** (live POV monitor, 07 §6) · **Chat** (07 §7) · **Task** · **Today**.

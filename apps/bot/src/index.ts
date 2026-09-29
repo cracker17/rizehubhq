@@ -5,13 +5,14 @@ import { createClient } from '@supabase/supabase-js';
 import { summarizeSpend, localDate } from './budget';
 import { parseCallback } from './callbacks';
 import { createSupabaseBotDb } from './db';
-import { onButton, onNoteText, type DecisionDeps } from './decisions';
+import { onButton, type DecisionDeps } from './decisions';
 import { loadBotConfig } from './env';
 import { formatBudget, formatQuickSummary, formatReport, formatStatus, hhmmIn } from './format';
 import type { InlineMarkup } from './keyboard';
 import { notifierTick, renderApproval, tzOf, type NotifierState, type Sender } from './notifier';
-import { parseAssign } from './parse';
+import { createRequest, processText, type ChatIO, type IntakeDeps } from './intake';
 import { PendingNotes } from './pending';
+import { handleVoice, telegramDownloader, type VoiceClip, type VoiceDeps } from './voice';
 
 const cfg = loadBotConfig(process.env);
 if (!cfg.supabaseUrl || !cfg.serviceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
@@ -48,6 +49,7 @@ const HELP = [
   '<b>RizeHub HQ commands</b>',
   '/assign &lt;request&gt; : give the team work (or just type it)',
   '   quick tags: !urgent @client-slug due:fri',
+  '🎙 voice note (up to 2 min): said instead of typed',
   '/approvals : pending approvals with buttons',
   '/status : who is working, on break or needs you',
   '/report : today\'s CEO digest (or a live summary)',
@@ -61,18 +63,10 @@ const HELP = [
 bot.command('start', (ctx) => ctx.reply(`Welcome, CEO.\n\n${HELP}`, html()));
 bot.command('help', (ctx) => ctx.reply(HELP, html()));
 
-async function createRequest(text: string, reply: (m: string) => Promise<unknown>) {
-  const p = parseAssign(text, new Date(new Date().toLocaleString('en-US', { timeZone: tz })));
-  if (!p.text) return reply('Tell me what you need, e.g. /assign @madam-muse due:fri bundle landing page with 3 ads');
-  try {
-    const r = await db.createRequest({ text: p.text, priority: p.priority, dueDate: p.dueDate, clientSlug: p.clientSlug });
-    return reply(`Staged. The COO is planning it; the plan will come here for approval.${p.clientSlug && !r.clientFound ? `\n(Note: no client "${p.clientSlug}" found yet.)` : ''}`);
-  } catch (e) {
-    return reply(`Couldn't stage that: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
+const intake: IntakeDeps = { decisions: decisionDeps, db, tz: () => tz, edit: sender.edit };
+const voiceDeps: VoiceDeps = { ...intake, download: telegramDownloader(cfg.token, (id) => bot.api.getFile(id)) };
 
-bot.command('assign', (ctx) => createRequest(ctx.match, (m) => ctx.reply(m)));
+bot.command('assign', (ctx) => createRequest(intake, ctx.match, (m) => ctx.reply(m)));
 
 bot.command('status', async (ctx) => {
   try {
@@ -138,21 +132,28 @@ bot.on('callback_query:data', async (ctx) => {
 });
 
 // ---------- plain text: a pending change note, otherwise a new request ----------
+const chatIO = (ctx: { reply: (t: string) => Promise<unknown>; deleteMessage: () => Promise<unknown> }): ChatIO =>
+  ({ reply: (t) => ctx.reply(t), deleteMine: () => ctx.deleteMessage() });
+
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text;
   if (text.startsWith('/')) return ctx.reply(HELP, html());
-  try {
-    const note = await onNoteText(decisionDeps, ctx.chat.id, text);
-    if (note) {
-      // A 2FA code never stays in the chat history.
-      if (note.secret) await ctx.deleteMessage().catch((e) => console.error('[bot] could not delete the code message', e instanceof Error ? e.message : e));
-      await sender.edit(ctx.chat.id, note.messageId, note.edit.text, note.edit.markup).catch((e) => console.error('[bot] edit failed', e));
-      return ctx.reply(note.reply);
-    }
-  } catch (e) {
-    return ctx.reply(`Couldn't apply your note: ${e instanceof Error ? e.message : String(e)}`);
-  }
-  return createRequest(text, (m) => ctx.reply(m));
+  return processText(intake, ctx.chat.id, text, chatIO(ctx));
+});
+
+// ---------- voice notes / audio files: transcribed by the worker via Supabase, then handled like text ----------
+// Not awaited: waiting for the transcript (up to 60 s) must not hold up button taps and other messages.
+function onVoice(chatId: number, messageId: number, clip: VoiceClip, io: ChatIO) {
+  void handleVoice(voiceDeps, chatId, messageId, clip, io)
+    .catch((e) => console.error('[bot] voice note failed', e instanceof Error ? e.message : 'error'));
+}
+bot.on('message:voice', (ctx) => {
+  const v = ctx.message.voice;
+  onVoice(ctx.chat.id, ctx.message.message_id, { kind: 'voice', fileId: v.file_id, fileSize: v.file_size, duration: v.duration, mimeType: v.mime_type }, chatIO(ctx));
+});
+bot.on('message:audio', (ctx) => {
+  const a = ctx.message.audio;
+  onVoice(ctx.chat.id, ctx.message.message_id, { kind: 'audio', fileId: a.file_id, fileSize: a.file_size, duration: a.duration, mimeType: a.mime_type }, chatIO(ctx));
 });
 
 bot.catch((err) => console.error('[bot]', err.error));
