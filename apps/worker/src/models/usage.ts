@@ -2,7 +2,7 @@
 // per-provider request counts and month-to-date spend, and prices token usage.
 import { APICallError, RetryError, type LanguageModel, type LanguageModelUsage } from 'ai';
 import type { ModelRole } from '@rizehubhq/shared';
-import { chooseCandidate, createModel, QuotaExhaustedError, type Candidate, type ModelsConfig, type Provider } from './router';
+import { chooseCandidate, createModel, isPaidSpec, QuotaExhaustedError, type Candidate, type ModelsConfig, type Provider } from './router';
 import { manilaDay, manilaMonth } from '../budget';
 
 /**
@@ -15,19 +15,30 @@ export const PRICES: { match: RegExp; price: Price }[] = [
   { match: /^claude-opus/, price: { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 } },
   { match: /^claude-sonnet/, price: { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 } },
   { match: /^claude-haiku/, price: { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 } },
+  // Moonshot (Kimi), verified 2026-09-29 on platform.kimi.ai (pricing/chat). Automatic context caching, no write fee.
+  { match: /^kimi-k3/, price: { input: 3, output: 15, cacheRead: 0.3 } },
+  { match: /^kimi-k2\.7-code/, price: { input: 0.95, output: 4, cacheRead: 0.19 } },
+  { match: /^kimi-k2\.6/, price: { input: 0.95, output: 4, cacheRead: 0.16 } },
   // OpenAI: PLACEHOLDER tiers, not official prices. Copy the real per-model prices from OpenAI's pricing page
   // before relying on cost numbers for QA (paid profile). OpenAI caches prompts automatically (reads ~0.1× input).
-  { match: /nano/, price: { input: 0.1, output: 0.4, cacheRead: 0.01 } },
-  { match: /mini/, price: { input: 0.4, output: 1.6, cacheRead: 0.04 } },
+  // "-nano" / "-mini" as a word part only, so "gemini" (e.g. openrouter google/gemini-…) is not priced as a mini model.
+  { match: /(^|-)nano\b/, price: { input: 0.1, output: 0.4, cacheRead: 0.01 } },
+  { match: /(^|-)mini\b/, price: { input: 0.4, output: 1.6, cacheRead: 0.04 } },
   { match: /^gpt-/, price: { input: 2, output: 10, cacheRead: 0.2 } },
 ];
-/** Unknown model on a paid provider: price it like a mid-tier model rather than as free. */
+/** Unknown model on a paid provider (or a paid OpenRouter model): price it like a mid-tier model rather than as free. */
 export const FALLBACK_PAID_PRICE: Price = { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 };
-export const PAID_PROVIDERS: readonly string[] = ['anthropic', 'openai'];
+export { PAID_PROVIDERS } from './router';
 
+/**
+ * Price of a model, or null when it is free: Google/Groq free tiers and OpenRouter `:free` models cost 0. Paid models
+ * (isPaidSpec) use PRICES, else FALLBACK_PAID_PRICE. OpenRouter IDs are matched without their vendor prefix
+ * (anthropic/claude-sonnet-5 → claude-sonnet-5), so a known model gets its own price.
+ */
 export function priceFor(provider: string, modelId: string): Price | null {
-  if (!PAID_PROVIDERS.includes(provider)) return null; // free tiers (google, groq, openrouter :free) cost 0
-  return PRICES.find((p) => p.match.test(modelId))?.price ?? FALLBACK_PAID_PRICE;
+  if (!isPaidSpec(provider, modelId)) return null;
+  const id = provider === 'openrouter' ? modelId.slice(modelId.indexOf('/') + 1) : modelId;
+  return PRICES.find((p) => p.match.test(id))?.price ?? FALLBACK_PAID_PRICE;
 }
 
 /**

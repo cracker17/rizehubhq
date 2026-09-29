@@ -78,7 +78,8 @@ function providersNeeded(profile) {
     return { active, roles };
   } catch { return { active: profile, roles: null }; }
 }
-const KEY_ENV = { google: 'GOOGLE_GENERATIVE_AI_API_KEY', groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY' };
+const KEY_ENV = { google: 'GOOGLE_GENERATIVE_AI_API_KEY', groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', moonshot: 'MOONSHOT_API_KEY' };
+const PAID_PROVIDERS = ['anthropic', 'openai', 'moonshot'];
 
 // ---------- report ----------
 const color = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -128,7 +129,8 @@ function serviceRows(svc, env) {
       const missing = Object.entries(roles).filter(([, ps]) => !ps.some((p) => has(KEY_ENV[p]))).map(([r, ps]) => `${r} (${ps.map((p) => KEY_ENV[p]).join(' or ')})`);
       if (missing.length) rows.push([PROD ? ERR : WARN, 'AI keys', `profile "${active}" has no usable key for: ${missing.join('; ')}`]);
       else rows.push([OK, 'AI keys', `every role in profile "${active}" has at least one provider key`]);
-      const paid = Object.values(roles).flat().some((p) => p === 'anthropic' || p === 'openai');
+      // A role whose list is paid-only stops at budget 0 (a paid last resort after free models, e.g. Kimi in "free", is fine).
+      const paid = Object.values(roles).some((ps) => ps.length > 0 && ps.every((p) => PAID_PROVIDERS.includes(p)));
       if (paid && Number(val('MONTHLY_BUDGET_USD') || 0) === 0) rows.push([WARN, 'MONTHLY_BUDGET_USD', `profile "${active}" uses paid models but the budget is 0, so they will be skipped`]);
     } else rows.push([WARN, 'MODEL_PROFILE', `profile "${active}" not found in config/models.yaml`]);
     if (!has('VAULT_MASTER_KEY') && !PROD) rows.push([WARN, 'VAULT_MASTER_KEY', 'not set: Client Vault tools are disabled']);

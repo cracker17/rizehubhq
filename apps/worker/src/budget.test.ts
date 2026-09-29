@@ -211,7 +211,7 @@ test('loop: with free keys (freeFallback) the daily cap only stops paid provider
   assert.ok(db.callsOf('claimNextTask').length > 0, 'tasks are still claimed');
   assert.ok(db.callsOf('claimRequestForPlanning').length > 0, 'planning still runs');
   assert.deepEqual(seen.slice(0, 1), [10], 'the picker is told today’s total');
-  assert.equal(deps.logs.filter((l) => l.includes('Paid providers (Anthropic, OpenAI) are stopped until midnight Manila time')).length, 1);
+  assert.equal(deps.logs.filter((l) => l.includes('Paid providers (Anthropic, OpenAI, Kimi, paid OpenRouter) are stopped until midnight Manila time')).length, 1);
   assert.deepEqual(db.budgetAlerts.map((a) => a.level), [80, 100]);
   await Promise.allSettled([...loop.running.values()]);
 });

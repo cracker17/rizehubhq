@@ -68,7 +68,8 @@ export async function main(args: CliArgs): Promise<number> {
       console.error(`✗ eval:roles --live cannot run: no usable model under profile "${profile}".`);
       for (const p of problems) console.error(`  - ${p}`);
       console.error('  Add the provider key(s) to .env (docs/14: GOOGLE_GENERATIVE_AI_API_KEY / GROQ_API_KEY / OPENROUTER_API_KEY for "free";'
-        + ' ANTHROPIC_API_KEY + OPENAI_API_KEY and MONTHLY_BUDGET_USD > 0 for "paid"), pick another MODEL_PROFILE, or run without --live.');
+        + ' ANTHROPIC_API_KEY + OPENAI_API_KEY and MONTHLY_BUDGET_USD > 0 for "paid"; MOONSHOT_API_KEY and MONTHLY_BUDGET_USD > 0 for "kimi"),'
+        + ' pick another MODEL_PROFILE, or run without --live.');
       return 2;
     }
     const picker = new ModelPicker({ cfg, profile, env: workerEnv(), monthlyBudgetUsd: config.monthlyBudgetUsd, dailyBudgetUsd: config.dailyAiBudgetUsd });

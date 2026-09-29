@@ -50,7 +50,7 @@ function Meter({ s }: { s: CostSummary }) {
       ) : null}
       <p className="text-[13px] leading-snug text-[var(--color-muted)]">
         {s.level === 'over'
-          ? 'Anthropic and OpenAI are paused until midnight Manila time. New work runs on the free models if their keys are set, otherwise it waits.'
+          ? 'Paid models (Anthropic, OpenAI, Kimi, paid OpenRouter) are paused until midnight Manila time. New work runs on the free models if their keys are set, otherwise it waits.'
           : 'Telegram alert at 80%; at 100% paid models stop for the day and the free profile takes over.'}
       </p>
     </section>

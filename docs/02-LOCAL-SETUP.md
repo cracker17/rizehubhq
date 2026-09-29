@@ -124,6 +124,7 @@ OPENROUTER_API_KEY=...
 # Later, when you switch profiles:
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
+MOONSHOT_API_KEY=          # Kimi, paid backup (docs/15 §7)
 MODEL_PROFILE=free
 MONTHLY_BUDGET_USD=0
 VAULT_MASTER_KEY=<32 random bytes, base64>   # openssl rand -base64 32 ; different key for local and production

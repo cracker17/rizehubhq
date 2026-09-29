@@ -1,6 +1,48 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addUsage, costUsd, isQuotaError, normalizeUsage, priceFor } from './usage';
+import { addUsage, costUsd, FALLBACK_PAID_PRICE, isQuotaError, normalizeUsage, priceFor } from './usage';
+
+test('Kimi (moonshot) prices, verified 2026-09-29: k3 $3/$15, k2.7-code $0.95/$4, k2.6 $0.95/$4', () => {
+  assert.deepEqual(priceFor('moonshot', 'kimi-k3'), { input: 3, output: 15, cacheRead: 0.3 });
+  assert.deepEqual(priceFor('moonshot', 'kimi-k2.7-code'), { input: 0.95, output: 4, cacheRead: 0.19 });
+  assert.deepEqual(priceFor('moonshot', 'kimi-k2.6'), { input: 0.95, output: 4, cacheRead: 0.16 });
+  assert.deepEqual(priceFor('moonshot', 'kimi-next'), FALLBACK_PAID_PRICE, 'unknown Kimi model: priced, never free');
+});
+
+test('kimi-k2.6 cost: fresh input, cache reads and output priced separately', () => {
+  // 1M input of which 400k cache reads, 100k output: 600k × $0.95 + 400k × $0.16 + 100k × $4
+  const n = normalizeUsage('moonshot', { inputTokens: 1_000_000, cachedInputTokens: 400_000, outputTokens: 100_000 });
+  assert.equal(costUsd('moonshot', 'kimi-k2.6', n), 1.034);
+  // kimi-k3: 1M fresh + 1M output = $3 + $15
+  assert.equal(costUsd('moonshot', 'kimi-k3', { inputTokens: 1_000_000, outputTokens: 1_000_000 }), 18);
+});
+
+test('OpenRouter: models without :free are priced (never $0); :free models cost 0', () => {
+  assert.equal(priceFor('openrouter', 'qwen/qwen3.8-27b:free'), null);
+  assert.equal(costUsd('openrouter', 'qwen/qwen3.8-27b:free', { inputTokens: 1_000_000, outputTokens: 1_000_000 }), 0);
+  assert.deepEqual(priceFor('openrouter', 'anthropic/claude-sonnet-5'), priceFor('anthropic', 'claude-sonnet-5'), 'known model: its own price');
+  assert.deepEqual(priceFor('openrouter', 'moonshotai/kimi-k2.6'), priceFor('moonshot', 'kimi-k2.6'));
+  assert.deepEqual(priceFor('openrouter', 'some-lab/unknown-model'), FALLBACK_PAID_PRICE, 'unknown: conservative fallback');
+  assert.deepEqual(priceFor('openrouter', 'google/gemini-3-pro'), FALLBACK_PAID_PRICE, '"gemini" is not a "-mini" model');
+  assert.equal(costUsd('openrouter', 'some-lab/unknown-model', { inputTokens: 1_000_000, outputTokens: 100_000 }), 3);
+  assert.deepEqual(priceFor('openai', 'gpt-5.4-mini'), { input: 0.4, output: 1.6, cacheRead: 0.04 }, 'OpenAI mini tier still matches');
+  assert.deepEqual(priceFor('openai', 'gpt-5.4-nano'), { input: 0.1, output: 0.4, cacheRead: 0.01 });
+});
+
+test('ModelPicker: Kimi calls count toward the month and today spend', async () => {
+  const { ModelPicker } = await import('./usage');
+  const specs = ['google:flash', 'moonshot:kimi-k2.6'];
+  const cfg = {
+    active_profile: 'free', transcription: [], daily_request_caps: {},
+    profiles: { free: { lead: specs, specialist: specs, dev: specs, reports: specs, qa: specs, light: specs } },
+  };
+  const picker = new ModelPicker({ cfg, env: { MOONSHOT_API_KEY: 'm' }, monthlyBudgetUsd: 5, create: async () => ({}) as never });
+  const m = await picker.pick('lead');
+  assert.equal(`${m.provider}:${m.modelId}`, 'moonshot:kimi-k2.6', 'no Gemini key: the paid backup runs');
+  assert.equal(m.recordCall({ inputTokens: 1_000_000, outputTokens: 0 }), 0.95);
+  assert.equal(picker.spentThisMonthUsd, 0.95);
+  assert.equal(picker.spentTodayUsd, 0.95);
+});
 
 test('prices: Sonnet 5 $2/$10, Haiku 4.5 $1/$5, Opus 5.5 $4/$20; cache write 1.25×, read 0.1× (Opus 0.05×)', () => {
   assert.deepEqual(priceFor('anthropic', 'claude-sonnet-5'), { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 });

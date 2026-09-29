@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addDays, DEMO_CLIENTS, DEMO_TASK_INFO, demoUsageRows, meterLevel, parseDailyCap, summarizeCosts, type UsageRow } from './costsModel';
+import { addDays, DEMO_CLIENTS, DEMO_TASK_INFO, demoUsageRows, isPaidModel, meterLevel, parseDailyCap, summarizeCosts, type UsageRow } from './costsModel';
+
+test('isPaidModel: Kimi (moonshot) and OpenRouter without :free are paid; Gemini, Groq and OpenRouter :free are not', () => {
+  assert.equal(isPaidModel('moonshot', 'kimi-k2.6'), true);
+  assert.equal(isPaidModel('openrouter', 'anthropic/claude-sonnet-5'), true);
+  assert.equal(isPaidModel('openrouter', 'qwen/qwen3.8-27b:free'), false);
+  assert.equal(isPaidModel('google', 'gemini-3.8-flash'), false);
+  assert.equal(isPaidModel('anthropic', 'claude-sonnet-5'), true);
+});
 
 const TODAY = '2026-09-28';
 let seq = 0;

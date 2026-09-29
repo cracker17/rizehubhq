@@ -5,7 +5,7 @@ import type { LanguageModel } from 'ai';
 import type { ModelRole } from '@rizehubhq/shared';
 import { config, workerEnv } from '../config';
 
-export const PROVIDERS = ['google', 'groq', 'openrouter', 'anthropic', 'openai'] as const;
+export const PROVIDERS = ['google', 'groq', 'openrouter', 'anthropic', 'openai', 'moonshot'] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
 const Specs = z.array(z.string()).min(1);
@@ -18,7 +18,7 @@ const ProfileSchema = z.object({
 /** A role a profile doesn't define uses this role's models instead. */
 export const ROLE_FALLBACK: Partial<Record<ModelRole, ModelRole>> = { design: 'specialist', writer: 'specialist', sales: 'specialist' };
 /** Profiles the worker accepts in MODEL_PROFILE / active_profile (config/models.yaml). */
-export const MODEL_PROFILES = ['free', 'paid', 'hybrid', 'claude', 'openai'] as const;
+export const MODEL_PROFILES = ['free', 'paid', 'hybrid', 'claude', 'openai', 'kimi'] as const;
 
 /** Env var that overrides a role's model: MODEL_ID_LEAD, MODEL_ID_DEV, MODEL_ID_DESIGN, … (format provider:model). */
 export const roleEnvVar = (role: ModelRole) => `MODEL_ID_${role.toUpperCase()}`;
@@ -69,7 +69,11 @@ const KEY_ENV: Record<Provider, string> = {
   openrouter: 'OPENROUTER_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
+  moonshot: 'MOONSHOT_API_KEY',
 };
+
+/** Moonshot (Kimi) serves an OpenAI-compatible chat/completions API (docs/15 §7). */
+export const MOONSHOT_BASE_URL = 'https://api.moonshot.ai/v1';
 
 export interface UsageSnapshot {
   requestsToday: Partial<Record<Provider, number>>;
@@ -78,14 +82,23 @@ export interface UsageSnapshot {
   blockedModels?: ReadonlySet<string>;
 }
 
-export const isPaidProvider = (p: string) => p === 'anthropic' || p === 'openai';
+/** Providers that only sell paid access (every model costs money). */
+export const PAID_PROVIDERS: readonly string[] = ['anthropic', 'openai', 'moonshot'];
+export const isPaidProvider = (p: string) => PAID_PROVIDERS.includes(p);
+/**
+ * True when a call to this model costs money: a paid provider, or an OpenRouter model without the `:free` suffix
+ * (OpenRouter bills those per token). Paid models need MONTHLY_BUDGET_USD > 0 and stop at the daily AI budget.
+ */
+export const isPaidSpec = (provider: string, modelId: string) =>
+  isPaidProvider(provider) || (provider === 'openrouter' && !modelId.endsWith(':free'));
 /** Profile whose models are tried after the daily AI budget (DAILY_AI_BUDGET_USD) stops paid providers. */
 export const FREE_FALLBACK_PROFILE = 'free';
 
 /**
  * Picks the first usable model for a role (order: roleSpecs): provider key present, under 90% of its
- * free daily cap, and (for paid providers) within the monthly budget.
- * `paidBlocked` (the daily AI budget is used up): paid providers are skipped and the role's models from the
+ * free daily cap, and (for paid models, isPaidSpec: Anthropic, OpenAI, Moonshot, OpenRouter without `:free`) within the
+ * monthly budget.
+ * `paidBlocked` (the daily AI budget is used up): paid models are skipped and the role's models from the
  * `free` profile are tried after the active profile's list, so work continues on free models when their keys exist.
  * Pure function so it's easy to test; the caller supplies env + usage.
  */
@@ -103,7 +116,7 @@ export function chooseCandidate(
   const reasons: string[] = [];
   for (const spec of specs) {
     const c = parseCandidate(spec);
-    const paid = isPaidProvider(c.provider);
+    const paid = isPaidSpec(c.provider, c.modelId);
     if (paid && opts.paidBlocked) { reasons.push(`${spec}: daily AI budget reached`); continue; }
     if (!opts.env[KEY_ENV[c.provider]]) { reasons.push(`${spec}: no ${KEY_ENV[c.provider]}`); continue; }
     if (opts.usage.blockedModels?.has(`${c.provider}:${c.modelId}`)) { reasons.push(`${spec}: model unavailable today`); continue; }
@@ -138,5 +151,7 @@ export async function createModel(c: Candidate, env: Readonly<Record<string, str
     case 'openrouter': { const { createOpenRouter } = await import('@openrouter/ai-sdk-provider'); return createOpenRouter({ apiKey })(c.modelId); }
     case 'anthropic': { const { createAnthropic } = await import('@ai-sdk/anthropic'); return createAnthropic({ apiKey })(c.modelId); }
     case 'openai': { const { createOpenAI } = await import('@ai-sdk/openai'); return createOpenAI({ apiKey })(c.modelId); }
+    // .chat(): Moonshot serves chat/completions only (the default OpenAI model uses the Responses API).
+    case 'moonshot': { const { createOpenAI } = await import('@ai-sdk/openai'); return createOpenAI({ apiKey, baseURL: MOONSHOT_BASE_URL, name: 'moonshot' }).chat(c.modelId); }
   }
 }
