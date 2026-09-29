@@ -77,7 +77,7 @@ test('Hermes runner: the web-dev prompt carries the spec, assets and where to op
   const cfg: HermesAgentConfig = { agentId: 'web-dev', url: srv.url, key: 'k', timeoutMs: 5_000, model: 'claude-sonnet-5' };
   const model = mockModel([]);
   try {
-    const r = await runTask(dev, makeDeps({ db, model }), { heartbeatMs: 5, handoff: { workspacesDir: ws }, hermes: { resolve: () => cfg } });
+    const r = await runTask(dev, Object.assign(makeDeps({ db, model }), { monthlyBudgetUsd: 50 }), { heartbeatMs: 5, handoff: { workspacesDir: ws }, hermes: { resolve: () => cfg } });
     assert.equal(r.status, 'submitted');
     assert.equal(model.doGenerateCalls.length, 0, 'ran on Hermes');
     const chat = srv.seen.find((s) => s.path === '/v1/chat/completions')!;
@@ -101,7 +101,7 @@ test('Hermes usage: over_task_budget uses the stricter of the role budget and MA
     : [200, completion('```json\n{"summary":"ok"}\n```', { prompt_tokens: 10_000, completion_tokens: 2_000 })]));
   const cfg: HermesAgentConfig = { agentId: 'web-dev', url: srv.url, key: 'k', timeoutMs: 5_000, model: 'claude-sonnet-5' };
   try {
-    await runTask(dev, makeDeps({ db, model: mockModel([]) }), {
+    await runTask(dev, Object.assign(makeDeps({ db, model: mockModel([]) }), { monthlyBudgetUsd: 50 }), {
       heartbeatMs: 5, handoff: { workspacesDir: null }, hermes: { resolve: () => cfg }, limits: { maxSteps: 25, maxCostUsd: 0.01 },
     });
     assert.equal(db.usage.length, 1);

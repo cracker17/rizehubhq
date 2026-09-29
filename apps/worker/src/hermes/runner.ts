@@ -133,11 +133,15 @@ export function hermesPricing(responseModel: string | null, configured: string |
 
 type Attempt = { result: RunResult } | { fallback: string; requeue: boolean };
 
-/** Budget check for a paid Hermes model (null = free or unpriced model: nothing to check). Same rules as the Claude runtime. */
+/**
+ * Budget check for a paid Hermes model (null = free or unpriced model: nothing to check): month and day must have
+ * budget left, as for the Claude runtime. The per-task cap is not a gate here: Hermes can't be capped mid-run, so an
+ * overrun is flagged afterwards (over_task_budget) like the built-in runner's.
+ */
 function hermesPaidBudget(deps: WorkerDeps, role: Role, opts: RunOptions, cfg: HermesAgentConfig): Promise<{ capUsd: number } | { reason: string }> | null {
   const p = hermesPricing(null, cfg.model);
   if (p.provider === 'hermes' || !priceFor(p.provider, p.modelId)) return null;
-  return claudeBudget(deps, taskLimits(role, opts.limits));
+  return claudeBudget(deps, { ...taskLimits(role, opts.limits), maxCostUsd: Number.POSITIVE_INFINITY });
 }
 
 export async function runHermesTask(task: TaskRow, deps: WorkerDeps, role: Role, opts: RunOptions, builtin: BuiltinRunner): Promise<RunResult> {
