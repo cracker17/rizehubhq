@@ -15,6 +15,32 @@ provider_routing:
   sort: "price"
   data_collection: "deny"
 
+# Side tasks Hermes runs on its own (titles, summaries, compression, memory upkeep, curator, vision, web extracts) use
+# HERMES_AUX_MODEL, a cheap model (empty = the main model). They are outside HQ's per-task cost records; the hard stop is
+# the credit limit on the OpenRouter key Hermes uses (HERMES_OPENROUTER_API_KEY, else OPENROUTER_API_KEY).
+auxiliary:
+  vision:
+    provider: ${HERMES_PROVIDER}
+    model: "${HERMES_AUX_MODEL}"
+  compression:
+    provider: ${HERMES_PROVIDER}
+    model: "${HERMES_AUX_MODEL}"
+  summarization:
+    provider: ${HERMES_PROVIDER}
+    model: "${HERMES_AUX_MODEL}"
+  title:
+    provider: ${HERMES_PROVIDER}
+    model: "${HERMES_AUX_MODEL}"
+  memory:
+    provider: ${HERMES_PROVIDER}
+    model: "${HERMES_AUX_MODEL}"
+  curator:
+    provider: ${HERMES_PROVIDER}
+    model: "${HERMES_AUX_MODEL}"
+  web_extract:
+    provider: ${HERMES_PROVIDER}
+    model: "${HERMES_AUX_MODEL}"
+
 # Commands run inside this container only (local backend). No Docker backend: the container has no Docker socket.
 terminal:
   backend: local

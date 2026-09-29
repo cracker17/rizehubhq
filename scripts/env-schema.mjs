@@ -157,6 +157,9 @@ export const VARS = [
   ]),
   S({ key: 'HERMES_MODEL', group: 'Hermes', svc: ['worker'], check: (v) => (/^[\w./:-]+$/.test(v) ? null : 'must be a model id like claude-sonnet-5') }),
   S({ key: 'HERMES_PROVIDER', group: 'Hermes', svc: ['worker'], check: (v) => (['openrouter', 'anthropic', 'openai'].includes(v) ? null : 'must be openrouter | anthropic | openai') }),
+  // Only the .env.hermes-<agent> files get these (split-env.mjs), never a service file.
+  S({ key: 'HERMES_AUX_MODEL', group: 'Hermes', svc: ['ops'], check: (v) => (/^[\w./:-]+$/.test(v) ? null : 'must be a model id like google/gemini-2.5-flash-lite'), note: "Hermes' side tasks (titles, summaries, memory…)" }),
+  S({ key: 'HERMES_OPENROUTER_API_KEY', group: 'Hermes', svc: ['ops'], secret: true, check: (v) => (/^sk-or-/.test(v) ? null : 'must be an OpenRouter key (sk-or-…)'), note: 'own key with its own credit limit; else OPENROUTER_API_KEY' }),
   S({ key: 'HERMES_FALLBACK', group: 'Hermes', svc: ['worker'], check: (v) => (['on', 'off'].includes(v.toLowerCase()) ? null : 'must be on | off') }),
   S({ key: 'HERMES_TIMEOUT_MS', group: 'Hermes', svc: ['worker'], check: intIn(10_000) }),
   // Claude Agent SDK runtime (docs/05 "Claude runtime"): off by default; also needs ANTHROPIC_API_KEY + MONTHLY_BUDGET_USD > 0

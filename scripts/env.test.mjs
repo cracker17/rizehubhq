@@ -57,6 +57,12 @@ test('split: .env.hermes-<agent> only for configured agents, with only its own k
   assert.equal(h.get('API_SERVER_KEY'), 'k'.repeat(64));
   assert.equal(h.get('HERMES_MODEL'), 'anthropic/claude-sonnet-5');
   assert.equal(h.get('HERMES_PROVIDER'), 'openrouter');
+  assert.equal(h.get('OPENROUTER_API_KEY'), `sk-or-v1-${'x'.repeat(30)}`, 'shared key when no Hermes-only key');
+  const own = splitHermesEnv(parseEnv(`${master}HERMES_OPENROUTER_API_KEY=sk-or-v1-${'h'.repeat(30)}\nHERMES_AUX_MODEL=google/gemini-2.5-flash-lite\n`));
+  const ho = parseEnv(own['.env.hermes-web-dev']);
+  assert.equal(ho.get('OPENROUTER_API_KEY'), `sk-or-v1-${'h'.repeat(30)}`, 'the Hermes-only key wins');
+  assert.equal(ho.get('HERMES_AUX_MODEL'), 'google/gemini-2.5-flash-lite');
+  assert.ok(!parseEnv(splitEnv(parseEnv(`${master}HERMES_OPENROUTER_API_KEY=sk-or-v1-${'h'.repeat(30)}\n`)).worker).has('HERMES_OPENROUTER_API_KEY'), 'never in the worker file');
   const w = parseEnv(splitEnv(env).worker);
   for (const k of ['HERMES_URL_WEB_DEV', 'HERMES_KEY_WEB_DEV', 'HQ_MCP_TOKEN_WEB_DEV', 'HERMES_MODEL']) assert.ok(w.has(k), k);
 });
