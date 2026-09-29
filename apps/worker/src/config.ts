@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { isProviderKeyName } from '@rizehubhq/shared';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 
@@ -50,15 +51,45 @@ export const SECRET_ENV = /(^|_)(KEY|KEYS|TOKEN|SECRET|PASS|PASSWORD|PASSWD|CRED
 export const SCRUB_KEEP = new Set<string>(); // every secret reader uses workerEnv()
 
 let snapshot: Readonly<Record<string, string | undefined>> | null = null;
+/** Provider keys the CEO stored in the dashboard (settings/runtime.ts): they win over the .env value of the same name. */
+let overlay: Readonly<Record<string, string>> = Object.freeze({});
+let merged: Readonly<Record<string, string | undefined>> | null = null;
 
-/** The worker's configuration env: the frozen startup snapshot after scrubProcessEnv(), process.env before. */
+/**
+ * The worker's configuration env: the frozen startup snapshot after scrubProcessEnv() (process.env before), with the
+ * dashboard's provider keys laid over it. Call it when a value is needed (not once at startup) so a key the CEO
+ * replaces in Admin → API & AI is used within a minute without a restart.
+ */
 export function workerEnv(): Readonly<Record<string, string | undefined>> {
-  return snapshot ?? process.env;
+  const base = snapshot ?? process.env;
+  if (Object.keys(overlay).length === 0) return base;
+  if (!snapshot) return { ...base, ...overlay }; // tests / before scrubbing: process.env may still change
+  return (merged ??= Object.freeze({ ...base, ...overlay }));
 }
+
+/**
+ * Replaces the dashboard key overlay. Only names on the provider allowlist (packages/shared PROVIDER_KEY_NAMES) are
+ * accepted; anything else is dropped, so a row can never override a bootstrap secret. Returns the names applied.
+ * The values live only in this module's memory: never in process.env, never logged.
+ */
+export function setProviderKeyOverlay(keys: Readonly<Record<string, string>>): string[] {
+  const next: Record<string, string> = {};
+  for (const [k, v] of Object.entries(keys)) if (isProviderKeyName(k) && typeof v === 'string' && v) next[k] = v;
+  overlay = Object.freeze(next);
+  merged = null;
+  return Object.keys(next).sort();
+}
+
+/** Which provider key names currently come from the dashboard (never the values). */
+export function providerKeyOverlayNames(): string[] { return Object.keys(overlay).sort(); }
+
+/** The .env value of a name, ignoring the dashboard overlay (Admin → API & AI shows "set in .env"). */
+export function baseEnvValue(name: string): string | undefined { return (snapshot ?? process.env)[name]; }
 
 /** Freezes a copy of env as workerEnv() and deletes secret-looking names from env. Returns the removed names. */
 export function scrubProcessEnv(env: NodeJS.ProcessEnv = process.env, keep: ReadonlySet<string> = SCRUB_KEEP): string[] {
   snapshot = Object.freeze({ ...env });
+  merged = null;
   const removed: string[] = [];
   for (const k of Object.keys(env)) {
     if (SECRET_ENV.test(k) && !keep.has(k)) { delete env[k]; removed.push(k); }
@@ -66,8 +97,8 @@ export function scrubProcessEnv(env: NodeJS.ProcessEnv = process.env, keep: Read
   return removed;
 }
 
-/** Test hook: forget the snapshot (workerEnv() reads process.env again). */
-export function resetWorkerEnvForTests(): void { snapshot = null; }
+/** Test hook: forget the snapshot and the dashboard overlay (workerEnv() reads process.env again). */
+export function resetWorkerEnvForTests(): void { snapshot = null; overlay = Object.freeze({}); merged = null; }
 
 /** env without secret names (for helpers like Chromium, lighthouse, ffmpeg). */
 export function publicEnv(env: Readonly<Record<string, string | undefined>> = process.env): Record<string, string> {

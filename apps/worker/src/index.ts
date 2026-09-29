@@ -24,6 +24,10 @@ import { loadKeyring } from './vault/crypto';
 import { transcribeAudio } from './models/transcribe';
 import { startVoiceNotes, supabaseVoiceNoteDeps } from './voiceNotes';
 import { defaultStorageEnv } from './tools/storage';
+import { EXTRA_ROUTES } from './routes';
+import { createSettingsRoutes } from './routes/settings';
+import { createSupabaseProviderKeyStore } from './settings/store';
+import { effectiveAi, loopDailyBudget, routerEnv, RuntimeSettings } from './settings/runtime';
 
 async function main() {
   if (!config.supabaseUrl || !config.supabaseServiceKey) {
@@ -40,49 +44,76 @@ async function main() {
 
   const roles = listRoleIds().map((id) => loadRole(id));
   const models = loadModelsConfig();
-  const profile = config.modelProfile ?? models.active_profile;
-  if (!(MODEL_PROFILES as readonly string[]).includes(profile) || !models.profiles[profile]) {
-    throw new Error(`MODEL_PROFILE "${profile}" is not one of ${MODEL_PROFILES.join(' | ')} (or missing from config/models.yaml)`);
+  const envProfile = config.modelProfile ?? models.active_profile;
+  if (!(MODEL_PROFILES as readonly string[]).includes(envProfile) || !models.profiles[envProfile]) {
+    throw new Error(`MODEL_PROFILE "${envProfile}" is not one of ${MODEL_PROFILES.join(' | ')} (or missing from config/models.yaml)`);
   }
   for (const role of MODEL_ROLES) { // MODEL_ID_<ROLE> overrides must be provider:model, fail fast on typos
     const spec = workerEnv()[roleEnvVar(role)];
     if (spec) parseCandidate(spec.trim());
   }
-  const db = createSupabaseHqDb(createServiceClient());
-  const picker = new ModelPicker({
-    cfg: models, profile, env: workerEnv(), monthlyBudgetUsd: config.monthlyBudgetUsd,
+  const sb = createServiceClient();
+  const db = createSupabaseHqDb(sb);
+
+  // Admin → API & AI (docs/14 "Dashboard settings"): provider keys + profile / budgets / per-role models the CEO sets in
+  // the dashboard win over .env. Re-read every 60 s and on POST /settings/reload; no restart needed.
+  const keyring = (() => {
+    try { return loadKeyring(workerEnv()); } catch (e) { console.warn(`[settings] vault keyring unusable (${e instanceof Error ? e.message : 'error'}): dashboard keys are ignored`); return null; }
+  })();
+  let picker: ModelPicker | undefined;
+  let loop: WorkerLoop | undefined;
+  const runtime = new RuntimeSettings({
+    store: createSupabaseProviderKeyStore(sb), keyring: () => keyring,
+    onChange: (snap, changes) => {
+      if (!picker) return;
+      const next = effectiveAi(workerEnv(), snap, models);
+      if (changes.length) for (const w of next.warnings) console.warn(`[settings] ${w}`);
+      picker.configure({ profile: next.profile, monthlyBudgetUsd: next.monthlyBudgetUsd, env: routerEnv(workerEnv(), snap.dashboard) });
+      loop?.globalBudget.invalidate();
+    },
+  });
+  await runtime.refresh().catch((e) => console.warn(`[settings] dashboard settings not loaded at startup, .env values in use: ${e instanceof Error ? e.message.slice(0, 200) : 'error'}`));
+  const ai = effectiveAi(workerEnv(), runtime.snapshot, models);
+  for (const w of ai.warnings) console.warn(`[settings] ${w}`);
+  const activePicker = new ModelPicker({
+    cfg: models, profile: ai.profile, env: routerEnv(workerEnv(), runtime.snapshot?.dashboard), monthlyBudgetUsd: ai.monthlyBudgetUsd,
     spentThisMonthUsd: await db.monthSpendUsd().catch(() => 0),
     monthSpend: () => db.monthSpendUsd(),
-    dailyBudgetUsd: config.dailyAiBudgetUsd,
+    dailyBudgetUsd: loopDailyBudget(runtime.snapshot?.dashboard, config.dailyAiBudgetUsd),
   });
+  picker = activePicker;
+  const stopSettings = runtime.start(60_000);
   const deps: WorkerDeps = {
-    db, brain: createBrain(), pickModel: picker.pick, loadRole: (id) => loadRole(id),
-    agentsDir: config.agentsDir, qaThreshold: config.qaThreshold, monthlyBudgetUsd: config.monthlyBudgetUsd,
-    onProviderQuota: (p, detail) => picker.markExhausted(p, detail),
+    db, brain: createBrain(), pickModel: activePicker.pick, loadRole: (id) => loadRole(id),
+    agentsDir: config.agentsDir, qaThreshold: config.qaThreshold,
+    get monthlyBudgetUsd() { return activePicker.settings.monthlyBudgetUsd; },
+    onProviderQuota: (p, detail) => activePicker.markExhausted(p, detail),
     storage: defaultStorageEnv(), // save_file + automatic save of QA-passed deliverables (docs/15 §6)
   };
   setMcpDeps(deps); // HQ MCP tool server for Hermes agents (POST /mcp)
   const hermes = hermesStartupReport(roles, workerEnv());
   console.log(hermes.line);
   for (const w of hermes.warnings) console.warn(w);
-  console.log(`[worker] ${roles.length} agents · profile "${profile}" · budget $${config.monthlyBudgetUsd}/month`
-    + `${config.dailyAiBudgetUsd !== null ? ` · $${config.dailyAiBudgetUsd}/day` : ''}`
-    + ` · spent $${picker.spentThisMonthUsd.toFixed(2)} · parallel ${config.maxParallelTasks} · QA ≥ ${config.qaThreshold}`);
+  console.log(`[worker] ${roles.length} agents · profile "${ai.profile}" (${ai.profileSource}) · budget $${ai.monthlyBudgetUsd}/month (${ai.monthlySource})`
+    + `${ai.dailyBudgetUsd !== null ? ` · $${ai.dailyBudgetUsd}/day (${ai.dailySource})` : ''}`
+    + `${runtime.snapshot?.keys.length ? ` · ${runtime.snapshot.keys.length} dashboard key(s)` : ''}`
+    + ` · spent $${activePicker.spentThisMonthUsd.toFixed(2)} · parallel ${config.maxParallelTasks} · QA ≥ ${config.qaThreshold}`);
 
-  const loop = new WorkerLoop(deps, {
+  const activeLoop = new WorkerLoop(deps, {
     pollIntervalMs: config.pollIntervalMs, maxParallelTasks: config.maxParallelTasks, reportsEveryMs: config.reportsEveryMs,
-    dailyBudgetUsd: config.dailyAiBudgetUsd,
-    // At 100% of the daily budget paid providers stop; the free profile takes over when its keys exist.
-    freeFallback: hasFreeProviderKey(workerEnv()) && !!models.profiles.free,
-    onDailySpend: (g) => picker.setDailySpend(g),
+    dailyBudgetUsd: () => loopDailyBudget(runtime.snapshot?.dashboard, config.dailyAiBudgetUsd),
+    // At 100% of the daily budget paid providers stop; the free profile takes over when its keys exist (read live:
+    // the CEO may add a free key in the dashboard).
+    freeFallback: () => hasFreeProviderKey(workerEnv()) && !!models.profiles.free,
+    onDailySpend: (g) => activePicker.setDailySpend(g),
   });
-  loop.start();
+  loop = activeLoop;
+  activeLoop.start();
   // Sales outreach (send approved emails, IMAP replies, daily batch, follow-ups): nothing starts unless OUTREACH_ENABLED=true,
   // and nothing is sent without SMTP + CAN-SPAM settings (sales/background.ts).
   const salesTimers = startSalesBackground(deps);
 
   // Emails the CEO approved from connected Gmail accounts (gmail_send → gmail.send approval → sent once, docs/15 §5).
-  const sb = createServiceClient();
   const gmailSender = startGmailSender({
     deps: {
       list: listApprovedGmailSends(sb),
@@ -123,10 +154,24 @@ async function main() {
     warn: (m) => console.warn(m),
   });
 
+  const settingsRoutes = createSettingsRoutes({
+    store: () => createSupabaseProviderKeyStore(sb), keyring: () => keyring, runtime: () => runtime,
+    aiStatus: () => {
+      const now = effectiveAi(workerEnv(), runtime.snapshot, models);
+      const empty = { profile: null, monthlyBudgetUsd: null, dailyBudgetUsd: null, modelIds: {} };
+      const defaults = effectiveAi(workerEnv(), { dashboard: empty, legacyDaily: runtime.snapshot?.legacyDaily }, models);
+      return {
+        ai: { ...now, profile: activePicker.settings.profile },
+        defaults: { profile: defaults.profile, monthlyBudgetUsd: defaults.monthlyBudgetUsd, dailyBudgetUsd: defaults.dailyBudgetUsd, modelIds: defaults.modelIds },
+        models: Object.fromEntries(MODEL_ROLES.map((r) => [r, activePicker.preview(r)])),
+        paidBlocked: activePicker.paidBlocked,
+      };
+    },
+  });
   const server = createHttpServer({
     chat: (agentId, question) => answerChat(agentId, question, deps),
-    health: () => ({ running: loop.running.size, profile }),
-  }, config.internalSecret);
+    health: () => ({ running: activeLoop.running.size, profile: activePicker.settings.profile }),
+  }, config.internalSecret, [...EXTRA_ROUTES, ...settingsRoutes]);
   if (!config.internalSecret) console.warn('[worker] HQ_INTERNAL_SECRET not set: /chat and /health answer 503');
   server.listen(config.httpPort, '0.0.0.0', () => console.log(`[worker] internal API on :${config.httpPort}`));
 
@@ -140,7 +185,8 @@ async function main() {
     clearInterval(gmailSender);
     clearInterval(mcpRunner);
     clearInterval(voiceNotes);
-    await loop.stop();
+    stopSettings();
+    await activeLoop.stop();
     process.exit(0);
   };
   for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void shutdown(sig); });

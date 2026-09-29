@@ -53,9 +53,30 @@ Exact model IDs change often. Put the current IDs from each provider's docs into
 ## Paid profile, per-role model IDs and the daily cap (six-agent roster)
 
 - `MODEL_PROFILE=paid`: Anthropic for COO (lead), Web Developer (dev), Sales (sales) on Sonnet and Graphic Designer (design), Content Writer (writer), chat/reports on Haiku; QA on OpenAI (a different provider on purpose), Sonnet only if OpenAI is unavailable. Needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `MONTHLY_BUDGET_USD > 0`.
-- Model IDs are not hard-coded: `MODEL_ID_LEAD`, `MODEL_ID_DEV`, `MODEL_ID_DESIGN`, `MODEL_ID_WRITER`, `MODEL_ID_SALES`, `MODEL_ID_QA`, `MODEL_ID_LIGHT` (format `provider:model`) win over `config/models.yaml`; the yaml lists are the documented defaults and fallbacks. Order: agent override (Agents page) → env → profile list.
+- Model IDs are not hard-coded: `MODEL_ID_LEAD`, `MODEL_ID_DEV`, `MODEL_ID_DESIGN`, `MODEL_ID_WRITER`, `MODEL_ID_SALES`, `MODEL_ID_QA`, `MODEL_ID_LIGHT` (format `provider:model`) win over `config/models.yaml`; the yaml lists are the documented defaults and fallbacks. Order: agent override (Agents page) → per-role model in Admin → API & AI → env → profile list (see "Dashboard settings" below).
 - Prompt caching: every Anthropic call sends the system prompt as a cached system message (`models/cache.ts` `cachedPrompt`, used by the planner, runner and QA) and the runner adds a rolling breakpoint on the newest message.
 - `DAILY_AI_BUDGET_USD` (0 = no cap; else `settings.daily_budget_usd`): every model run is logged with its cost per task (`tasks.cost_usd`), agent (`activity_log.actor`) and client (`activity_log.client_id`); query them through the `ai_usage` view. At 80% of today's (Asia/Manila) spend the worker records one alert (`budget_alerts`, once per day and level) and the bot sends it to Telegram; at 100% another alert, and **paid providers stop**: new planning, tasks and QA run on the `free` profile when a free provider key is set, otherwise nothing new starts until midnight Manila time. Running work finishes. The dashboard `/costs` page shows the meter and the breakdowns.
+
+## Dashboard settings (Admin → API & AI)
+
+The CEO manages the AI setup at `/admin/api` instead of editing `.env` on the VPS. The worker re-reads it every 60 s and right away when the dashboard calls `POST /settings/reload` after a change; **no restart**.
+
+**Precedence (every value): the dashboard value when one is set → the `.env` value → the built-in default.** An empty dashboard field means "use `.env`".
+
+| Setting | Dashboard (settings row) | Then `.env` | Then default |
+|---|---|---|---|
+| Model profile | `ai_model_profile` | `MODEL_PROFILE` | `config/models.yaml` `active_profile` |
+| Monthly paid budget | `ai_monthly_budget_usd` | `MONTHLY_BUDGET_USD` | 0 (free models only) |
+| Daily AI cap | `ai_daily_budget_usd` (0 = no cap) | `DAILY_AI_BUDGET_USD` (0 = no cap) | older `settings.daily_budget_usd`, else none |
+| Model per role | `ai_model_ids` `{ "qa": "openai:gpt-5.5", … }` | `MODEL_ID_<ROLE>` | the profile's list |
+| Provider API keys | `provider_keys` (sealed) | the same name in `.env` | missing |
+
+- **What is picked up live:** profile, both budgets and per-role models (`ModelPicker.configure()`), every provider key (overlay on `workerEnv()`: the router, transcription, web search, PageSpeed, Semrush and Figma read it per call), and whether free keys exist for the budget fallback. A dashboard profile that `config/models.yaml` doesn't define is ignored with a warning. Running model calls keep the model they started with.
+- **Writes:** only `ai_settings_set(profile, monthly, daily, model_ids)` (CEO, `hq_guard`, one `ai_settings.updated` activity row with before/after). Raising a budget, setting one where none was set (the `.env` value is unknown to the database), clearing one, or a daily 0 (= no cap) needs a fresh 2FA code (`ceo_step_up_guard`); the dashboard asks for the code on every change when 2FA is on. The CEO can't write the `ai_*` rows directly (restrictive RLS policies); the service role can.
+- **Keys:** a fixed allowlist (`PROVIDER_KEYS` in `packages/shared/src/aiSettings.ts`, mirrored by the table's check constraint): `GOOGLE_GENERATIVE_AI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MOONSHOT_API_KEY`, `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, `SERPER_API_KEY`, `PAGESPEED_API_KEY`, `SEMRUSH_API_KEY`, `FIGMA_TOKEN`. Bootstrap secrets (`SUPABASE_*`, `VAULT_*`, `HQ_INTERNAL_SECRET`, `TELEGRAM_BOT_TOKEN`, `SUPABASE_DB_URL`, `RIZEHUB_*`, `HQ_MCP_TOKEN_*`, `HERMES_KEY_*`, `OUTREACH_*`) are refused: the worker needs them to reach the database and decrypt. Storage and encryption: docs/09 "Where system secrets live".
+- **Test:** before a key is stored the worker makes one cheap call with it (list models for Gemini, Groq, Anthropic, OpenAI, Moonshot; OpenRouter `/api/v1/key`; Figma `/v1/me`; Semrush API-unit balance; a 1-result search for Tavily, Brave, Serper, which uses 1 credit). A rejected key (401/403) is not stored; 402 (no credit) and 429 count as a working key. PageSpeed keys are stored untested (a test would run a full Lighthouse audit).
+- **Worker routes** (x-hq-secret, `apps/worker/src/routes/settings.ts`): `/settings/keys/set` {name, value, test?}, `/settings/keys/test` {name}, `/settings/reload`, `/settings/status` (key sources by name, effective settings with their source, `.env` defaults, the model each role gets now; never a value).
+- The bot's `/budget` and the dashboard `/costs` meter use the same precedence (`effectiveMonthlyBudget` / `effectiveDailyBudget`). The older `settings.monthly_budget_usd` seed row is no longer read (the worker never used it).
 
 ## Which models count as paid
 
@@ -103,6 +124,7 @@ MONTHLY_BUDGET_USD=0               # 0 = free models only (no Anthropic/OpenAI/K
 DAILY_AI_BUDGET_USD=0              # 0 = no daily cap; at 100% paid providers stop for the day
 MODEL_ID_QA=                       # optional per-role override, e.g. openai:gpt-5.5 (also LEAD, DEV, DESIGN, WRITER, SALES, LIGHT)
 ```
+Every value above can also be set in Admin → API & AI; a dashboard value wins over `.env` ("Dashboard settings" above).
 
 ## Free-tier rules the router enforces
 

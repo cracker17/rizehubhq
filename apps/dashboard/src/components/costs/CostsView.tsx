@@ -31,7 +31,7 @@ function Meter({ s }: { s: CostSummary }) {
       <p className="flex flex-wrap items-baseline gap-x-2">
         <span className="text-4xl font-semibold tabular-nums">{usd(s.todayUsd)}</span>
         <span className="text-[15px] text-[var(--color-muted)]">
-          {s.budgetUsd ? <>of {usd(s.budgetUsd)} daily cap · {pct}%</> : 'DAILY_AI_BUDGET_USD is 0 or unset'}
+          {s.budgetUsd ? <>of {usd(s.budgetUsd)} daily cap · {pct}%</> : 'no daily cap (set one in Admin → API & AI)'}
         </span>
       </p>
       {s.budgetUsd ? (

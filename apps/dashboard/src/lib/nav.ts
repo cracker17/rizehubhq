@@ -1,6 +1,6 @@
 import {
   Building2, CheckCircle2, ListTodo, Inbox, FileBarChart, ShieldCheck, Target, Briefcase,
-  Users, Bot, Plug, Settings, CircleDollarSign, LockKeyhole, Cable, KeyRound, type LucideIcon,
+  Users, Bot, Plug, Settings, CircleDollarSign, LockKeyhole, Cable, KeyRound, Sparkles, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: LucideIcon; milestone?: string; description?: string }
@@ -19,9 +19,10 @@ export const NAV: NavItem[] = [
   { href: '/costs', label: 'Costs', icon: CircleDollarSign },
 ];
 
-/** Admin section (docs/06 §11): account security, keys, logins and connectors. Hub page: /admin. */
+/** Admin section (docs/06 §11): account security, API & AI settings, logins and connectors. Hub page: /admin. */
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/security', label: 'Security', icon: LockKeyhole, description: 'CEO password and two-factor sign-in.' },
+  { href: '/admin/api', label: 'API & AI', icon: Sparkles, description: 'AI model profile, budgets and provider API keys.' },
   { href: '/admin/connectors', label: 'Connectors', icon: Cable, description: 'Gmail accounts and apps your agents may use.' },
   { href: '/admin/logins', label: 'Tool logins', icon: KeyRound, description: 'RizeHub\'s own tool accounts (Semrush, Canva…) agents may use.' },
   { href: '/connections', label: 'Connections', icon: Plug, milestone: 'M9', description: 'Every client login and token, by platform.' },

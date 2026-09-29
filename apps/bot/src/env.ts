@@ -8,7 +8,7 @@ export interface BotConfig {
   supabaseUrl: string;
   serviceKey: string;
   monthlyBudgetUsd: number | null;
-  /** DAILY_AI_BUDGET_USD (same value the worker enforces); null → settings.daily_budget_usd. */
+  /** DAILY_AI_BUDGET_USD; the dashboard value (settings.ai_daily_budget_usd) wins over it, like in the worker (budgetCaps). */
   dailyBudgetUsd: number | null;
   pollMs: number;
 }

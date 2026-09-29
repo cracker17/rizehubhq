@@ -1,7 +1,9 @@
 import 'server-only';
 // /costs page data (docs/14 "Usage meter"). LIVE: the ai_usage view (last 31 Manila days + the month so far), client
-// names, task titles and the daily cap (DAILY_AI_BUDGET_USD, else settings.daily_budget_usd). DEMO (no Supabase env):
+// names, task titles and the daily cap (Admin → API & AI value, else DAILY_AI_BUDGET_USD, else settings.daily_budget_usd:
+// the worker's precedence, packages/shared effectiveDailyBudget). DEMO (no Supabase env):
 // generated paid-profile usage. Aggregation lives in ./costsModel.ts (unit-tested).
+import { AI_SETTING_KEYS, effectiveDailyBudget, parseDashboardAi } from '@rizehubhq/shared';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
 import { manilaToday } from './reports';
@@ -37,7 +39,7 @@ export async function loadCosts(rangeDays: 7 | 30): Promise<CostsPage> {
 
   const [clients, settings] = await Promise.all([
     db.from('clients').select('id,name'),
-    db.from('settings').select('value').eq('key', 'daily_budget_usd').maybeSingle(),
+    db.from('settings').select('key,value').in('key', ['daily_budget_usd', AI_SETTING_KEYS.daily]),
   ]);
   const clientNames = Object.fromEntries(((clients.data ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
 
@@ -50,8 +52,10 @@ export async function loadCosts(rangeDays: 7 | 30): Promise<CostsPage> {
     for (const t of (data ?? []) as ({ id: string } & TaskInfo)[]) tasks[t.id] = { title: t.title, agent_id: t.agent_id, client_id: t.client_id };
   }
   error ??= clients.error?.message;
+  const rowsBy = Object.fromEntries(((settings.data ?? []) as { key: string; value: unknown }[]).map((r) => [r.key, r.value]));
+  const budgetUsd = effectiveDailyBudget(parseDashboardAi(rowsBy).dailyBudgetUsd, process.env.DAILY_AI_BUDGET_USD, rowsBy.daily_budget_usd).usd;
   return {
     mode: 'live', error,
-    summary: summarizeCosts(rows, { today, rangeDays, budgetUsd: cap((settings.data as { value?: unknown } | null)?.value), clientNames, tasks }),
+    summary: summarizeCosts(rows, { today, rangeDays, budgetUsd, clientNames, tasks }),
   };
 }

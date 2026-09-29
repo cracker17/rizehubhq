@@ -10,6 +10,7 @@
     "test": "tsx --test"
   },
   "dependencies": {
+    "@rizehubhq/shared": "workspace:*",
     "@supabase/supabase-js": "^2.57.0",
     "grammy": "^1.38.0"
   },

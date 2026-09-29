@@ -459,6 +459,13 @@ Group A keeps the `authenticated_security_definer` WARN on purpose: those are th
 
 Every new function needs its own `revoke … from public, anon` + `grant` block: `scripts/db-tests/130-security-hardening.mjs` enumerates `pg_proc` and fails on any public function that lacks a search_path or is executable by `anon`/`PUBLIC`. The remaining advisor WARN, leaked-password protection, is an Auth setting (Supabase → Authentication → Passwords), not SQL.
 
+## API & AI settings (`20260929070000_provider_keys.sql`)
+
+- `provider_keys (name pk, cipher, iv, key_version, last4, updated_at, last_test_at, last_test_ok, last_error)`: provider API keys the CEO stores in Admin → API & AI, sealed by the worker (context `provider_key:<NAME>`). `name` is checked against the fixed allowlist (AI, search/SEO, Figma keys; never a bootstrap secret). The CEO reads only `name, last4, updated_at, last_test_*, last_error` (column grant + RLS `is_ceo()`).
+- Worker only (`service_role`): `provider_key_upsert`, `provider_key_mark_test`, `provider_keys_sealed` (all `vault_service_guard()`), plus the helpers `ai_budget_looser`, `ai_setting_num`. CEO: `provider_key_delete(name)` (`hq_guard`, logs `provider_key.removed`) and `ai_settings_set(profile, monthly, daily, model_ids)` (`hq_guard`; full replace of the `ai_model_profile` / `ai_monthly_budget_usd` / `ai_daily_budget_usd` / `ai_model_ids` settings rows, null = use `.env`; raising a budget → `ceo_step_up_guard()`; logs `ai_settings.updated` with before/after).
+- Restrictive RLS policies on `settings` stop `authenticated` from inserting, updating or deleting `ai_*` rows directly (other rows unchanged).
+- Tests: `scripts/db-tests/180-provider-keys.mjs`. Precedence and the worker side: docs/14 "Dashboard settings".
+
 ## Realtime
 
 ```sql

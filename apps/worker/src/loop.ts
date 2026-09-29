@@ -28,13 +28,16 @@ export interface LoopOptions {
   pausedCheckMs?: number;
   /** Pause before claiming again when every claimable task belongs to an agent over its daily budget. */
   budgetBackoffMs?: number;
-  /** DAILY_AI_BUDGET_USD: when today's total AI spend reaches it, no new planning, tasks or QA start (null → settings / none). */
-  dailyBudgetUsd?: number | null;
+  /**
+   * Daily AI cap: when today's total AI spend reaches it, no new planning, tasks or QA start (null → settings / none).
+   * A function is read on every check (dashboard value → DAILY_AI_BUDGET_USD, settings/runtime.ts loopDailyBudget).
+   */
+  dailyBudgetUsd?: number | null | (() => number | null);
   /**
    * True when free-provider keys exist (router hasFreeProviderKey): at 100% of the daily budget only paid providers
    * stop and new work runs on the free profile. False/unset: nothing new starts until the next Manila day.
    */
-  freeFallback?: boolean;
+  freeFallback?: boolean | (() => boolean);
   /** Every budget check result (the model picker blocks paid providers from it). */
   onDailySpend?: (g: GlobalBudgetCheck) => void;
 }
@@ -67,7 +70,8 @@ export class WorkerLoop {
     });
     if (g) this.opts.onDailySpend?.(g);
     if (!g?.over) return false;
-    const fallback = !!this.opts.freeFallback;
+    const ff = this.opts.freeFallback;
+    const fallback = typeof ff === 'function' ? ff() : !!ff;
     if (this.budgetStopDay !== g.day) { this.budgetStopDay = g.day; log(this.deps, `[worker] ${fallback ? freeFallbackNote(g) : globalBudgetNote(g)}`); }
     return !fallback; // with free keys the picker skips paid providers and work goes on
   }

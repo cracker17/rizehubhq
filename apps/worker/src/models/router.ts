@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import YAML from 'yaml';
 import { z } from 'zod';
 import type { LanguageModel } from 'ai';
-import type { ModelRole } from '@rizehubhq/shared';
+import { AI_PROFILES, type ModelRole } from '@rizehubhq/shared';
 import { config, workerEnv } from '../config';
 
 export const PROVIDERS = ['google', 'groq', 'openrouter', 'anthropic', 'openai', 'moonshot'] as const;
@@ -18,7 +18,7 @@ const ProfileSchema = z.object({
 /** A role a profile doesn't define uses this role's models instead. */
 export const ROLE_FALLBACK: Partial<Record<ModelRole, ModelRole>> = { design: 'specialist', writer: 'specialist', sales: 'specialist' };
 /** Profiles the worker accepts in MODEL_PROFILE / active_profile (config/models.yaml). */
-export const MODEL_PROFILES = ['free', 'paid', 'hybrid', 'claude', 'openai', 'kimi'] as const;
+export const MODEL_PROFILES = AI_PROFILES; // packages/shared aiSettings.ts (the dashboard offers the same list)
 
 /** Env var that overrides a role's model: MODEL_ID_LEAD, MODEL_ID_DEV, MODEL_ID_DESIGN, … (format provider:model). */
 export const roleEnvVar = (role: ModelRole) => `MODEL_ID_${role.toUpperCase()}`;
