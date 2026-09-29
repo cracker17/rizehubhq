@@ -26,6 +26,13 @@ for a in "$@"; do
   esac
 done
 
+# Run as root by mistake? Re-run as the checkout's owner (git refuses a repo owned by another user, and the
+# images/env files must stay owned by the app user). --health-only is fine as root (setup-vps.sh uses it).
+if [[ $EUID -eq 0 && "$HEALTH_ONLY" == false ]]; then
+  OWNER="$(stat -c %U "$APP_DIR")"
+  if [[ "$OWNER" != root ]]; then exec sudo -u "$OWNER" -H bash "${BASH_SOURCE[0]}" "$@"; fi
+fi
+
 log()  { printf '[%s] %s\n' "$(date '+%F %T')" "$*"; }
 die()  { log "ERROR: $*" >&2; exit 1; }
 cd "$APP_DIR"
