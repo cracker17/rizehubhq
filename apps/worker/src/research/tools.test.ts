@@ -10,7 +10,8 @@ import { reviewNext } from '../qa';
 import { defaultResearchEnv, type ResearchEnv } from './env';
 import { memoryEvidenceStore } from './evidence';
 import { FakeResearchBrowser, fakeApiFetch, fakeNet, jsonRes } from './fakes';
-import { parseFigmaRef, parseSemrushCsv, SEMRUSH_NOT_CONNECTED, FIGMA_NOT_CONNECTED, GOOGLE_NOT_CONFIGURED } from './connectors';
+import { parseFigmaRef, parseSemrushCsv, SEMRUSH_NOT_CONNECTED, FIGMA_NOT_CONNECTED } from './connectors';
+import { NO_GMAIL } from '../tools/gmail';
 import { attachEvidence, evidenceTargets } from './qaEvidence';
 
 const PREVIEW = 'https://madam-muse-preview.myshopify.com/pages/bundle';
@@ -33,7 +34,9 @@ async function run(tools: ToolSet, name: string, input: unknown): Promise<string
 }
 
 function toolsFor(agent: string, research: Partial<ResearchEnv>, extraTools: string[] = []) {
-  const deps = Object.assign(makeDeps({ model: mockModel([]) }), { research });
+  // No Gmail account connected (tools/gmail.ts would otherwise reach Supabase).
+  const gmail = { store: { forAgent: async () => [], get: async () => null, insert: async () => '', rotate: async () => undefined, mark: async () => undefined }, keyring: null, open: async () => { throw new Error('no mailbox'); } };
+  const deps = Object.assign(makeDeps({ model: mockModel([]) }), { research, gmail });
   const task = deps.db.addTask({ agent_id: agent, status: 'working' });
   const base = loadRole(agent);
   const role = { ...base, tools: [...base.tools, ...extraTools] };
@@ -87,7 +90,7 @@ test('connectors: search/gmail/image messages when not configured; semrush + fig
   assert.equal((r.apiFetch.calls.at(-1)!.init!.headers as Record<string, string>)['x-figma-token'], 'figd_x');
 
   const ea = toolsFor('coo', r.env);
-  assert.equal(await run(ea, 'gmail_read', { query: 'from:client' }), GOOGLE_NOT_CONFIGURED);
+  assert.equal(await run(ea, 'gmail_read', { query: 'from:client' }), NO_GMAIL, 'connected Gmail accounts (tools/gmail.ts) replace the old OAuth placeholder');
   const g = toolsFor('designer', r.env);
   assert.match(await run(g, 'image_gen', { prompt: 'a red dress flat lay' }), /not connected: set MEDIA_PROVIDER/);
 

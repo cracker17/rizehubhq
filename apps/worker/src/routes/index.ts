@@ -5,5 +5,6 @@ import { rizehubRoutes } from './rizehub';
 import { mcpRoutes } from './mcp';
 import { salesRoutes } from './sales';
 import { transcribeRoutes } from './transcribe';
+import { connectorRoutes } from './connectors';
 
-export const EXTRA_ROUTES: Route[] = [...vaultRoutes, ...rizehubRoutes, ...mcpRoutes, ...salesRoutes, ...transcribeRoutes];
+export const EXTRA_ROUTES: Route[] = [...vaultRoutes, ...rizehubRoutes, ...mcpRoutes, ...salesRoutes, ...transcribeRoutes, ...connectorRoutes];

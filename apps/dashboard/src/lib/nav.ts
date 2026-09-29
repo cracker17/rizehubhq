@@ -1,6 +1,6 @@
 import {
   Building2, CheckCircle2, ListTodo, Inbox, FileBarChart, ShieldCheck, Target, Briefcase,
-  Users, Bot, Plug, Settings, CircleDollarSign, LockKeyhole, type LucideIcon,
+  Users, Bot, Plug, Settings, CircleDollarSign, LockKeyhole, Cable, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: LucideIcon; milestone?: string; description?: string }
@@ -22,6 +22,7 @@ export const NAV: NavItem[] = [
 /** Admin section (docs/06 §11): account security, keys, logins and connectors. Hub page: /admin. */
 export const ADMIN_NAV: NavItem[] = [
   { href: '/admin/security', label: 'Security', icon: LockKeyhole, description: 'CEO password and two-factor sign-in.' },
+  { href: '/admin/connectors', label: 'Connectors', icon: Cable, description: 'Gmail accounts and apps your agents may use.' },
   { href: '/connections', label: 'Connections', icon: Plug, milestone: 'M9', description: 'Every client login and token, by platform.' },
   { href: '/settings', label: 'Settings', icon: Settings, milestone: 'M3', description: 'Plan auto-approve rules.' },
 ];

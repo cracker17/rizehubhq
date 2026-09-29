@@ -156,6 +156,7 @@ Status → color mapping (use everywhere: dots, bubbles, progress bars):
 ### 11. Admin `/admin`
 - Sidebar: an **Admin** group under the main pages (Security, Connections, Settings; API keys, tool logins and connectors join it as they ship). On phones the bottom bar's **More** opens `/admin`, which lists the admin tools and every page the bar has no room for.
 - **Security** `/admin/security`: *CEO password* card (current password, new twice, 2FA code when on; live rule hints; "Show passwords") and the *Two-factor sign-in* card (set up; turn off with password + code, e.g. for a new phone). Spec: docs/09 "CEO password" + "Two-factor (TOTP)".
+- **Connectors** `/admin/connectors` (docs/15): *Gmail accounts* card (address, status, Read only / Read + save drafts, which agents, last used, last error; Test, Access, Replace password, Turn off/on, Remove) and the *Add a Gmail account* dialog (Google links, address + App Password, label, agent checkboxes preset COO + Sales, mode, 2FA code). Adding an account, adding agents, allowing drafts and turning it back on ask for the 2FA code. *Apps (MCP)* card: coming next.
 - Sign-in page: *Forgot password?* → email a reset link → `/auth/confirm` → 2FA step (when on) → `/reset-password`.
 
 ### Voice input

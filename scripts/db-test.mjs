@@ -3,6 +3,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 
 const db = new PGlite();
@@ -301,7 +302,7 @@ console.log(`\nAll ${passed} database checks passed.`);
 const extraDir = './scripts/db-tests';
 if (fs.existsSync(extraDir)) {
   for (const f of fs.readdirSync(extraDir).filter((f) => f.endsWith('.mjs')).sort()) {
-    const mod = await import(path.resolve(extraDir, f));
+    const mod = await import(pathToFileURL(path.resolve(extraDir, f)).href); // file URL: plain paths fail on Windows
     await mod.default({ db, step, one, val, status, agent, as, assert, stub });
   }
   console.log(`All ${passed} database checks passed (incl. extra suites).`);

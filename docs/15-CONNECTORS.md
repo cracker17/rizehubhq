@@ -1,6 +1,6 @@
 # 15 · Connectors, Gmail accounts, storage and the Kimi backup model (M13 plan)
 
-Status: **planned 2026-09-29, not built.** Research sources are listed at the end; every vendor detail was checked on
+Status: **M13.4 Gmail accounts built 2026-09-29** (migration `20260929020000_connectors.sql`, Admin → Connectors); the rest planned. Research sources are listed at the end; every vendor detail was checked on
 2026-09-29 against the vendor's own docs or live OAuth discovery files.
 
 ## Goal
@@ -138,7 +138,7 @@ Storage is an HQ function (every deliverable and image gets saved), so it uses t
 | M13.1 | Kimi backup + paid-OpenRouter pricing | Router tests; a forced Gemini/Groq outage plans on Kimi and the cost shows on /costs |
 | M13.2 | Connector core: migration, MCP client, Sign in (CIMD / dynamic registration), token paste, test, tool policies, approval + executor, wizard + list | Notion or Linear connected; an Allowed read tool works in a task; an Ask-me tool creates an approval that runs once after approval |
 | M13.3 | Catalog: Magnific, Higgsfield, ElevenLabs, Supabase, GitHub; own-app form for HubSpot, Meta Ads, Dropbox MCP | Each connects and lists tools; locked rules hold |
-| M13.4 | Gmail accounts | Two accounts connected; job-alert search and a draft land in the right account; a send needs approval |
+| M13.4 ✅ | Gmail accounts (built first: the COO's inbox tasks were blocked) | Two accounts connected; job-alert search and a draft land in the right account; a send needs approval |
 | M13.5 | Storage: Drive + Dropbox, default picker, `save_file`, deliverable auto-save | A QA-passed deliverable appears in the default storage folder |
 | then | API & AI panel, Tool logins (agreed earlier) | |
 
