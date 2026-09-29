@@ -86,6 +86,6 @@ The exact steps, in order. Full detail: `docs/10-DEPLOY-VPS.md` ("Go-live runboo
 11. **End-to-end:** `/assign Write a 600-word blog post about Shopify speed for Madam Muse` → plan appears in Approvals → approve → the agent works → QA → deliverable in your inbox → approve.
 12. **Backups:** add `SUPABASE_DB_URL` (session pooler) to `.env`, run `./deploy/backup.sh` once, add the cron line.
 13. **RizeHub link** (when RizeHub exposes `/agent-api/v1`): join `rizehub-internal`, block `/agent-api` publicly (`deploy/nginx/rizehub-block-agent-api.conf`), then set `RIZEHUB_API_URL` + keys (`docs/10` §6).
-14. **Optional auto-deploy:** GitHub secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` + variable `DEPLOY_ENABLED=true`.
+14. **Auto-deploy:** install the pull timer (`deploy/systemd/README.md`): the VPS deploys each `main` commit once its CI passes.
 
 Build rules for AI coding assistants are in `CLAUDE.md`.

@@ -7,7 +7,8 @@
 #   deploy/update.sh --health-only   just wait for / report container health (used by setup-vps.sh)
 #   deploy/update.sh --force         rebuild even if main has not moved
 #
-# Env: BRANCH (main), HEALTH_TIMEOUT seconds (180), KEEP_TAGS (3 commit-tagged images kept per service).
+# Env: BRANCH (main), HEALTH_TIMEOUT seconds (180), KEEP_TAGS (3 commit-tagged images kept per service),
+#      TARGET_SHA (deploy this commit of origin/BRANCH instead of its tip; deploy/autodeploy.sh passes the one CI passed).
 set -Eeuo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -92,7 +93,11 @@ if ! git diff --quiet || ! git diff --cached --quiet; then die "local changes in
 PREV_SHA="$(git rev-parse HEAD)"
 git fetch --quiet origin "$BRANCH"
 git checkout --quiet "$BRANCH"
-git merge --ff-only --quiet "origin/${BRANCH}" || die "cannot fast-forward ${BRANCH} (history rewritten?). Resolve by hand."
+TARGET="${TARGET_SHA:-origin/${BRANCH}}"
+if [[ -n "${TARGET_SHA:-}" ]] && ! git merge-base --is-ancestor "$TARGET_SHA" "origin/${BRANCH}"; then
+  die "TARGET_SHA ${TARGET_SHA:0:7} is not on origin/${BRANCH}"
+fi
+git merge --ff-only --quiet "$TARGET" || die "cannot fast-forward ${BRANCH} to ${TARGET} (history rewritten?). Resolve by hand."
 NEW_SHA="$(git rev-parse HEAD)"
 NEW_TAG="$(git rev-parse --short HEAD)"
 if [[ "$PREV_SHA" == "$NEW_SHA" ]] && ! $FORCE; then

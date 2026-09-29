@@ -1,0 +1,14 @@
+# RizeHub HQ auto-deploy: one check (deploy/autodeploy.sh). Started by rizehq-autodeploy.timer.
+[Unit]
+Description=RizeHub HQ auto-deploy (deploy main after green CI)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rizehq
+Group=rizehq
+WorkingDirectory=/home/rizehq/rizehub-hq
+ExecStart=/usr/bin/bash /home/rizehq/rizehub-hq/deploy/autodeploy.sh
+TimeoutStartSec=45min
+Nice=5

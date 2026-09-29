@@ -14,7 +14,8 @@ Everything in this document is scripted in `deploy/`:
 | `deploy/nginx/hq.rizehub.ph.conf` | nginx site → `127.0.0.1:3100` (certbot adds TLS) |
 | `deploy/nginx/rizehub-block-agent-api.conf` | Snippet for **RizeHub's** public vhost: `/agent-api/*` → 404 |
 | `deploy/Caddyfile` | Alternative proxy if nothing owns 80/443 |
-| `.github/workflows/deploy.yml` | Optional auto-deploy after CI on `main` (off until `DEPLOY_ENABLED=true`) |
+| `deploy/autodeploy.sh` + `deploy/systemd/` | Auto-deploy (pull): the VPS deploys `main` once CI passed for that commit |
+| `.github/workflows/deploy.yml` | Alternative push-style auto-deploy over SSH (off until `DEPLOY_ENABLED=true`; not used) |
 | `scripts/check-env.mjs` | `pnpm check:env [-- --production]`: per-service `.env` validation; `-- --split` checks the three per-service files and **fails** if a server secret (service-role key, vault key) is in `.env.dashboard` |
 | `scripts/split-env.mjs` | Master `.env` → `.env.dashboard`, `.env.bot`, `.env.worker` (mode 600), each with only that container's variables |
 | `scripts/check-deploy.mjs` | `pnpm check:deploy [-- --skip-db --skip-docker]`: everything checkable without a VPS (env schema ↔ `.env.example` ↔ compose/Dockerfile env, `docker compose config`, proxy domains, `bash -n` + shellcheck, migrations in PGlite, Dockerfile COPY paths / `.dockerignore`, Playwright version, health routes). Docker and shellcheck checks are skipped when not installed |
@@ -173,7 +174,12 @@ sudo -iu rizehq && cd rizehub-hq && ./deploy/update.sh
 ```
 `update.sh` holds a lock, refuses local changes, fast-forwards `main`, warns about new migrations (run `supabase db push` first) and changed `.env.example`, validates `.env`, re-splits it into the per-service files and checks them, runs `fix-perms.sh`, builds, tags the running images `:previous`, and runs `up -d`. It then waits until dashboard + worker are **healthy** and the bot is stable. If they are not, it re-tags `:previous` → `:latest`, resets the checkout to the previous commit (so mounted `agents/`, `brain/`, `config/` match), and restarts. On success it tags images with the commit and keeps the last 3, then prunes.
 
-Automatic (optional): `.github/workflows/deploy.yml` runs `update.sh` over SSH after CI passes on `main`.
+Automatic (in use since 2026-09-29): **pull model**. A systemd timer on the VPS runs `deploy/autodeploy.sh` every
+2 minutes; it deploys a new `main` commit only after the GitHub **CI** workflow passed for that exact commit
+(`update.sh` with `TARGET_SHA`), and skips a commit whose CI or deploy failed. No SSH key or secret lives in GitHub.
+Install, pause, logs: `deploy/systemd/README.md`. Apply new migrations *before* pushing the commit that needs them.
+
+Alternative (off, don't enable both): `.github/workflows/deploy.yml` runs `update.sh` over SSH after CI passes on `main`.
 1. On the VPS: `sudo -iu rizehq ssh-keygen -t ed25519 -f ~/.ssh/gha -N '' && cat ~/.ssh/gha.pub >> ~/.ssh/authorized_keys`
 2. GitHub → Settings → Secrets and variables → Actions → **Secrets**: `VPS_HOST`, `VPS_USER=rizehq`, `VPS_SSH_KEY` (contents of `~/.ssh/gha`), optional `VPS_PORT`, `VPS_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <host>`).
 3. **Variables**: `DEPLOY_ENABLED=true` (and `VPS_APP_DIR` if not `/home/rizehq/rizehub-hq`).

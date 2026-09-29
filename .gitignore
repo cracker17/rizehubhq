@@ -17,3 +17,8 @@ scripts/office/__pycache__/
 
 # role-eval scorecards (pnpm eval:roles) and other generated reports
 /reports/
+
+# deploy/autodeploy.sh state (VPS checkout)
+/.autodeploy-off
+/.autodeploy-failed
+/.autodeploy.lock

@@ -1,0 +1,11 @@
+# Every 2 minutes after the previous check finished (a deploy in progress simply delays the next check).
+[Unit]
+Description=RizeHub HQ auto-deploy check every 2 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=2min
+RandomizedDelaySec=15s
+
+[Install]
+WantedBy=timers.target
