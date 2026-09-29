@@ -7,7 +7,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { auth, UnauthorizedError, type OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { MCP_CALLBACK_PATH, MCP_CLIENT_METADATA_PATH, type McpToolLike } from '@rizehubhq/shared';
+import { MCP_CALLBACK_PATH, MCP_CLIENT_METADATA_PATH, isStorageState, type McpToolLike } from '@rizehubhq/shared';
 
 export type OAuthSecret = { kind: 'oauth'; tokens?: OAuthTokens; client?: OAuthClientInformationMixed; own?: boolean };
 export type HeaderSecret = { kind: 'header'; header: string; value: string };
@@ -133,7 +133,9 @@ const PENDING_TTL_MS = 15 * 60_000;
 export async function startSignIn(o: { url: string; publicUrl: string; own?: { clientId: string; clientSecret?: string }; meta: Record<string, unknown> }):
   Promise<{ state: string; authorizeUrl: string } | { state: string; authorizeUrl: null }> {
   for (const [k, v] of pending) if (Date.now() - v.at > PENDING_TTL_MS) pending.delete(k);
-  const state = randomBytes(24).toString('base64url');
+  let state = randomBytes(24).toString('base64url');
+  // The shared callback sends "st_…" states to storage sign-ins (packages/shared/src/storage.ts): never start with it.
+  while (isStorageState(state)) state = randomBytes(24).toString('base64url');
   const secret: OAuthSecret = { kind: 'oauth', own: Boolean(o.own),
     ...(o.own ? { client: { client_id: o.own.clientId, ...(o.own.clientSecret ? { client_secret: o.own.clientSecret } : {}) } } : {}) };
   let authorizeUrl: string | null = null;

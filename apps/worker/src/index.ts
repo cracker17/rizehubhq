@@ -23,6 +23,7 @@ import { createSupabaseConnectorStore } from './connectors/store';
 import { loadKeyring } from './vault/crypto';
 import { transcribeAudio } from './models/transcribe';
 import { startVoiceNotes, supabaseVoiceNoteDeps } from './voiceNotes';
+import { defaultStorageEnv } from './tools/storage';
 
 async function main() {
   if (!config.supabaseUrl || !config.supabaseServiceKey) {
@@ -58,6 +59,7 @@ async function main() {
     db, brain: createBrain(), pickModel: picker.pick, loadRole: (id) => loadRole(id),
     agentsDir: config.agentsDir, qaThreshold: config.qaThreshold, monthlyBudgetUsd: config.monthlyBudgetUsd,
     onProviderQuota: (p, detail) => picker.markExhausted(p, detail),
+    storage: defaultStorageEnv(), // save_file + automatic save of QA-passed deliverables (docs/15 §6)
   };
   setMcpDeps(deps); // HQ MCP tool server for Hermes agents (POST /mcp)
   const hermes = hermesStartupReport(roles, workerEnv());

@@ -6,7 +6,7 @@ model_role: dev
 runtime: hermes
 max_turns: 60
 budget_usd_per_task: 1.50
-tools: [brain_read, brain_search, workspace_fs, bash_sandboxed, github, shopify_theme, webflow_api, wp_rest, figma_read, web_search, web_fetch, pagespeed, lighthouse, playwright, link_checker, vault_list, vault_login, vault_api, vault_request_2fa, vault_report_problem, report_progress, submit_output, ask_ceo, request_external_action]
+tools: [brain_read, brain_search, workspace_fs, save_file, bash_sandboxed, github, shopify_theme, webflow_api, wp_rest, figma_read, web_search, web_fetch, pagespeed, lighthouse, playwright, link_checker, vault_list, vault_login, vault_api, vault_request_2fa, vault_report_problem, report_progress, submit_output, ask_ceo, request_external_action]
 work_types: [shopify-section, shopify-page, shopify-theme-fix, shopify-speed, webflow-page, webflow-cms, webflow-interaction, wordpress-page, wordpress-plugin, wordpress-fix, web-app, api-integration, automation]
 ---
 

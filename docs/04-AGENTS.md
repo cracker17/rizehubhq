@@ -101,12 +101,16 @@ platform_to_dev:
 
 | Agent | Produces | Tools | Needs your approval for |
 |---|---|---|---|
-| **COO** | Plans, task breakdowns, escalations, weekly summary; inbox triage, meeting prep, daily digest / morning brief; client onboarding (RizeHub accounts + workspaces, access checklists) and client reports | brain_read/write, create_plan, gmail_read, gmail_draft, calendar_read, rizehub_onboarding, rizehub_reports, rizehub_readonly, ask_ceo | Every plan (until you enable auto-approve for low-risk), sending any email, creating accounts/workspaces, publishing reports |
-| **Web Developer** | Shopify sections/pages/fixes on an unpublished theme, Webflow CMS + pages + interactions, WordPress pages/plugins (staging), full-stack features, APIs, integrations, automations | workspace, git/github, bash_sandboxed, shopify_theme, webflow_api, wp_rest, playwright, lighthouse, vault tools | Publishing a theme/site, pushing to live, merging, deploying |
-| **Graphic Designer** | Wireframes, UI mockups, UX audits, ad creatives, social graphics, brand assets (always a design spec + assets) | figma_read, image_gen (Magnific), workspace, playwright, lighthouse | Sending to client / running ads |
-| **Content Writer** | SEO articles, landing copy, meta tags, keyword research, content calendars, social captions, short-video scripts, report commentary | semrush, web_search, web_fetch, link_checker, rizehub_reports (notes only) | Publishing / scheduling / posting |
+| **COO** | Plans, task breakdowns, escalations, weekly summary; inbox triage, meeting prep, daily digest / morning brief; client onboarding (RizeHub accounts + workspaces, access checklists) and client reports | brain_read/write, save_file, create_plan, gmail_read, gmail_draft, calendar_read, rizehub_onboarding, rizehub_reports, rizehub_readonly, ask_ceo | Every plan (until you enable auto-approve for low-risk), sending any email, creating accounts/workspaces, publishing reports |
+| **Web Developer** | Shopify sections/pages/fixes on an unpublished theme, Webflow CMS + pages + interactions, WordPress pages/plugins (staging), full-stack features, APIs, integrations, automations | workspace, save_file, git/github, bash_sandboxed, shopify_theme, webflow_api, wp_rest, playwright, lighthouse, vault tools | Publishing a theme/site, pushing to live, merging, deploying |
+| **Graphic Designer** | Wireframes, UI mockups, UX audits, ad creatives, social graphics, brand assets (always a design spec + assets) | figma_read, image_gen (Magnific), workspace, save_file, playwright, lighthouse | Sending to client / running ads |
+| **Content Writer** | SEO articles, landing copy, meta tags, keyword research, content calendars, social captions, short-video scripts, report commentary | semrush, web_search, web_fetch, link_checker, rizehub_reports (notes only), save_file | Publishing / scheduling / posting |
 | **Sales Agent** | Lead Finder searches, lead reports, outreach and DM reply drafts, lead qualification, proposals, follow-ups; job shortlists + application drafts | rizehub_leads, gmail_read, gmail_draft, web_fetch, web_search, pagespeed, semrush, job_tracker, HQ pipeline (lead_create, lead_update_research, draft_first_email, draft_follow_up, draft_reply, draft_proposal, move_stage, list_pipeline) | You send every message and submit every application yourself; sending proposals / pricing |
 | **QA** | Verdicts, scores, evidence | playwright, lighthouse, pagespeed, link_checker, web_fetch, figma_read, rizehub_readonly, qa_submit_verdict | — (QA only passes/fails) |
+
+`save_file` (docs/15 §6) saves text or a workspace file to the CEO's default storage (Google Drive or Dropbox) in
+`RizeHub HQ/<client or Internal>/<request title>/` and returns the link. It is internal (the CEO's own, private storage), so
+it needs no approval; it never makes a public or shared link. Deliverables that pass QA are saved there automatically.
 
 ## Client Vault tools (see 09)
 

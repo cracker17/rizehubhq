@@ -204,3 +204,51 @@ export async function setToolPoliciesAction(input: { id: string; policies: Recor
   if (ceo.demo) return { ok: false, error: DEMO };
   return rpcWithStepUp(ceo.db, 'connector_set_tool_policies', { p_id: input.id, p_policies: policies }, input.totp);
 }
+
+// ---------- Storage (Google Drive / Dropbox, docs/15 §6) ----------
+type StorageProviderKey = 'drive' | 'dropbox';
+
+/** Sign in with the CEO's own OAuth app: returns the vendor's consent URL (the browser goes there). */
+export async function startStorageSignInAction(input: {
+  provider: StorageProviderKey; clientId: string; clientSecret: string; name?: string; appFolder?: string; totp?: string | null;
+}): Promise<ConnectorResult<{ authorizeUrl: string }>> {
+  const provider = input.provider === 'dropbox' ? 'dropbox' : input.provider === 'drive' ? 'drive' : null;
+  if (!provider) return { ok: false, error: 'Pick Google Drive or Dropbox.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  // Connecting storage hands HQ a place to write files: same fresh 2FA code as adding a Gmail account.
+  const step = await stepUpIfEnrolled(ceo.db, input.totp);
+  if (!step.ok) return step;
+  const r = await callWorker<{ authorizeUrl: string }>('/connectors/storage/start', {
+    provider, clientId: String(input.clientId ?? '').trim(), clientSecret: String(input.clientSecret ?? '').trim(),
+    name: String(input.name ?? '').trim() || undefined, appFolder: String(input.appFolder ?? '').trim() || undefined,
+  });
+  if (r.status !== 200 || !('authorizeUrl' in r.body)) return { ok: false, error: r.body.error ?? 'Could not start the sign-in.' };
+  const url = r.body.authorizeUrl;
+  const host = /^https:\/\/([^/]+)\//i.exec(url)?.[1]?.toLowerCase();
+  if (host !== 'accounts.google.com' && host !== 'www.dropbox.com') return { ok: false, error: 'The worker returned an unexpected sign-in link.' };
+  return { ok: true, authorizeUrl: url };
+}
+
+export async function setDefaultStorageAction(input: { id: string }): Promise<ConnectorResult> {
+  if (!ID.test(String(input.id ?? ''))) return { ok: false, error: 'Unknown storage.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const r = await ceo.db.rpc('storage_set_default', { p_connector: input.id });
+  return r.error ? { ok: false, error: friendly(r.error.message).replace(/^storage_set_default: /, '') } : { ok: true };
+}
+
+export async function testStorageAction(input: { id: string }): Promise<ConnectorResult<{ working: boolean; message: string }>> {
+  if (!ID.test(String(input.id ?? ''))) return { ok: false, error: 'Unknown storage.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: true, working: true, message: 'Demo mode: pretending the storage answered.' };
+  const r = await callWorker<{ ok: boolean; account?: string | null; error?: string }>('/connectors/storage/test', { id: input.id }, 45_000);
+  if (r.status !== 200) return { ok: false, error: r.body.error ?? 'Test failed.' };
+  return {
+    ok: true, working: Boolean(r.body.ok),
+    message: r.body.ok ? `Connected${r.body.account ? ` as ${r.body.account}` : ''}. HQ can save files.` : (r.body.error ?? 'The storage did not answer.'),
+  };
+}

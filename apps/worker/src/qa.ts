@@ -8,6 +8,8 @@ import { addUsage, costUsd, isQuotaError, normalizeUsage, type PickedModel, type
 import { cachedPrompt } from './models/cache';
 import { researchEnvFrom } from './research/env';
 import { attachEvidence, collectQaEvidence, type QaEvidence } from './research/qaEvidence';
+import { config } from './config';
+import { autoSaveDeliverable } from './connectors/storageDeliverable';
 
 export const QA_REVIEWER = 'qa-lead';
 
@@ -128,6 +130,11 @@ export async function reviewTask(task: TaskRow, deps: WorkerDeps): Promise<QaOut
     await screen(pass ? 'Passed' : 'Failed', 100, verdict.checks.map((c) => `${c.result === 'pass' ? '✓' : '✗'} ${c.criterion}`).join('\n'));
     const result = await db.recordQaVerdict(task.id, QA_REVIEWER, verdict, deps.qaThreshold);
     log(deps, `[qa-lead] ${task.title}: ${result} (score ${verdict.score})`);
+    // Passed: save the deliverable to the CEO's default storage (never fatal; see connectors/storageDeliverable.ts).
+    if (result === 'pass' && deps.storage) {
+      await autoSaveDeliverable(task, { db, env: deps.storage, workspacesDir: deps.workspacesDir ?? config.workspacesDir, log: (m) => log(deps, m) })
+        .catch((e) => log(deps, `[qa-lead] storage auto-save crashed: ${errMsg(e)}`));
+    }
     return { status: 'recorded', taskId: task.id, result, verdict, pass };
   } catch (e) {
     if (isQuotaError(e) && picked) deps.onProviderQuota?.(picked.provider, { modelId: picked.modelId, error: e });

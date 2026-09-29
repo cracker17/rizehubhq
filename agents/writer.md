@@ -6,7 +6,7 @@ model_role: writer
 runtime: hermes
 max_turns: 40
 budget_usd_per_task: 0.90
-tools: [brain_read, brain_search, workspace_fs, semrush, web_search, web_fetch, link_checker, pagespeed, rizehub_reports, vault_list, vault_api, vault_report_problem, report_progress, submit_output, ask_ceo, request_external_action]
+tools: [brain_read, brain_search, workspace_fs, save_file, semrush, web_search, web_fetch, link_checker, pagespeed, rizehub_reports, vault_list, vault_api, vault_report_problem, report_progress, submit_output, ask_ceo, request_external_action]
 work_types: [seo-article, landing-copy, meta-tags, keyword-research, content-calendar, social-captions, short-video-script]
 ---
 
