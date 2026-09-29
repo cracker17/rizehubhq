@@ -11,7 +11,8 @@ function env(name: string) {
 }
 
 // /auth/confirm turns an emailed reset link into a session (then the normal gate applies to /reset-password).
-const PUBLIC = ['/login', '/api/health', '/access', '/auth'];
+// /oauth/client-metadata.json identifies HQ to MCP apps (public, no secrets).
+const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth'];
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');

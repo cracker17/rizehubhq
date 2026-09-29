@@ -10,6 +10,7 @@ import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
 import { addUsage, isQuotaError, normalizeUsage, type PickedModel, type TokenUsage } from './models/usage';
 import { cachedPrompt, withRollingCache } from './models/cache';
 import { WORKER_EXECUTED_ACTIONS } from './rizehub/background';
+import { loadMcpTools, mcpToolEnv } from './tools/mcp';
 import { config } from './config';
 import { runHermesTask, type HermesRunOptions } from './hermes/runner';
 import { taskHandoffContext, type UpstreamOptions } from './handoff';
@@ -205,7 +206,7 @@ export function buildTools(ctx: ToolContext): ToolSet {
         const spec = specText(rawSpec);
         if (WORKER_EXECUTED_ACTIONS.has(t) || /^rizehub\./i.test(t)) {
           return `Not queued: "${t}" is executed by the worker and needs the exact payload its tool builds. Use `
-            + (t === 'gmail.send' ? 'gmail_send instead.' : 'the rizehub_* tool (e.g. rizehub_reports publish / rizehub_onboarding request_approval / request_invite_send) instead.');
+            + (t === 'gmail.send' ? 'gmail_send instead.' : t === 'mcp.call' ? 'the app tool itself (it queues the approval).' : 'the rizehub_* tool (e.g. rizehub_reports publish / rizehub_onboarding request_approval / request_invite_send) instead.');
         }
         const id = await db.requestExternalAction(task.id, t, externalActionSpec(t, spec));
         return `Queued for CEO approval (approval ${id}). This is a MANUAL action: nothing runs automatically after approval; `
@@ -279,6 +280,9 @@ export async function runBuiltinTask(task: TaskRow, deps: WorkerDeps, opts: RunO
 
     const prompt = await buildRunPrompt(task, client, deps, opts.handoff);
     const tools = buildTools({ task, role, deps, state });
+    // Connected MCP apps granted to this agent (Admin → Connectors → Apps, docs/15); built-in/role tools keep their names.
+    const mcpEnv = mcpToolEnv({ task, role, deps, state });
+    if (mcpEnv) for (const [n, t] of Object.entries(await loadMcpTools({ task, role, deps, state }, mcpEnv))) if (!(n in tools)) tools[n] = t;
     const stopWhen: StopCondition<ToolSet>[] = [stepCountIs(limits.maxSteps), () => state.ended !== null || state.overBudget || state.toolErrors >= 3];
     await db.reportProgress(task.id, 5, 'Reading the brief', { app: 'doc', title: task.title });
 

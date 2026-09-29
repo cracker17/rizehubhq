@@ -3,7 +3,7 @@
 // every other approved action is a MANUAL step for the CEO. Agent-proposed actions carry spec.executor.
 import type { ApprovalRow } from './types';
 
-export const WORKER_EXECUTED_ACTIONS: readonly string[] = ['rizehub.report_publish', 'rizehub.invite_send', 'rizehub.onboarding', 'gmail.send'];
+export const WORKER_EXECUTED_ACTIONS: readonly string[] = ['rizehub.report_publish', 'rizehub.invite_send', 'rizehub.onboarding', 'gmail.send', 'mcp.call'];
 
 export interface ActionExecution {
   /** payload.action_type, e.g. "merge_pr" */

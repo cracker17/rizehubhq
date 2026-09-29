@@ -23,8 +23,15 @@ export interface NewConnector {
   settings: Record<string, unknown>; sealed: Sealed; grants: string[]; catalogKey: string | null;
 }
 
+export interface SyncedTool { name: string; description: string; input_schema: Record<string, unknown>; annotations: Record<string, unknown>; policy: string; locked: string | null; badges: string[] }
+export interface AgentTool { connector_id: string; name: string; description: string; input_schema: Record<string, unknown>; policy: 'allow' | 'ask' }
+
 export interface ConnectorStore {
   forAgent(agentId: string, kind: ConnectorKind): Promise<ConnectorRow[]>;
+  /** MCP: replace the stored tool list (first sync applies the defaults; later new/changed tools arrive off for review). */
+  syncTools?(id: string, tools: SyncedTool[], initial: boolean): Promise<number>;
+  /** MCP: tools an agent may use now (granted, active, on, reviewed). */
+  toolsForAgent?(agentId: string): Promise<AgentTool[]>;
   get(id: string): Promise<ConnectorFull | null>;
   insert(c: NewConnector): Promise<string>;
   rotate(id: string, sealed: Sealed): Promise<void>;
@@ -66,5 +73,7 @@ export function createSupabaseConnectorStore(db: SupabaseClient): ConnectorStore
     }),
     rotate: async (id, s) => { await rpc('connector_rotate_secret', { p_id: id, p_cipher: toPgBytea(s.cipher), p_iv: toPgBytea(s.iv), p_key_version: s.keyVersion }); },
     mark: async (id, status, error = null, used = false) => { await rpc('connector_mark', { p_id: id, p_status: status, p_error: error, p_used: used }); },
+    syncTools: (id, tools, initial) => rpc<number>('connector_tools_sync', { p_id: id, p_tools: tools, p_initial: initial }),
+    toolsForAgent: async (agentId) => ((await rpc<AgentTool[]>('connector_tools_for_agent', { p_agent: agentId })) ?? []),
   };
 }

@@ -1,9 +1,9 @@
 'use client';
 // Admin → Connectors (docs/15, docs/06 §11): Gmail accounts now; MCP apps (sign-in wizard) next.
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
-import { Mail, Plus, RefreshCw, KeyRound, Pencil, Power, Trash2, ExternalLink, Blocks } from 'lucide-react';
+import { Mail, Plus, RefreshCw, KeyRound, Pencil, Power, Trash2, ExternalLink } from 'lucide-react';
 import type { ConnectorView, ConnectorsPage, GmailMode } from '@/lib/data/connectors';
 import {
   addGmailAction, deleteConnectorAction, replaceGmailPasswordAction, setConnectorAgentsAction, setConnectorStatusAction,
@@ -12,6 +12,7 @@ import {
 import { Dialog, Field, btn, inputCls, relTime } from '@/components/clients/ui';
 import { StepUpDialog, type StepUpRequest } from '@/components/StepUpDialog';
 import { useHq } from '@/lib/data/store';
+import { AppsSection } from './AppsSection';
 
 const STATUS: Record<ConnectorView['status'], { label: string; color: string }> = {
   active: { label: 'Connected', color: 'var(--color-success)' },
@@ -193,7 +194,7 @@ function ReplaceDialog({ c, onClose, run }: {
   );
 }
 
-export function ConnectorsView({ page }: { page: ConnectorsPage }) {
+export function ConnectorsView({ page, connected, mcpError }: { page: ConnectorsPage; connected?: string | null; mcpError?: string | null }) {
   const router = useRouter();
   const { toast } = useHq();
   const [adding, setAdding] = useState(false);
@@ -203,6 +204,12 @@ export function ConnectorsView({ page }: { page: ConnectorsPage }) {
   const [busy, setBusy] = useState<string | null>(null);
   const names = new Map(page.agents.map((a) => [a.id, a.name]));
   const gmail = page.connectors.filter((c) => c.kind === 'gmail');
+  // Back from an app's sign-in page (/api/connectors/callback): say how it went once, then clean the URL.
+  useEffect(() => {
+    if (mcpError) toast(mcpError, 'error');
+    else if (connected) toast('App connected. Choose what each tool may do.', 'success');
+    if (mcpError || connected) window.history.replaceState(null, '', '/admin/connectors');
+  }, [connected, mcpError, toast]);
 
   // Runs an action; when it needs a fresh 2FA code, asks for it and retries with the code.
   const run = (label: string, detail: string, call: (totp?: string) => Promise<ConnectorResult>, done: string) => {
@@ -286,13 +293,7 @@ export function ConnectorsView({ page }: { page: ConnectorsPage }) {
         )}
       </section>
 
-      <section className="card flex flex-col gap-2 p-5 sm:p-6" aria-labelledby="mcp-title">
-        <h2 id="mcp-title" className="flex items-center gap-2 text-lg font-semibold"><Blocks size={18} aria-hidden /> Apps (MCP)</h2>
-        <p className="max-w-2xl text-sm text-[var(--color-muted)]">
-          Coming in the next update: sign in to Notion, Linear, Supabase, Magnific, Higgsfield and ElevenLabs, or paste a GitHub
-          token, then choose per tool what agents may do on their own and what asks you first (docs/15).
-        </p>
-      </section>
+      <AppsSection page={page} run={run} toast={toast} refresh={() => router.refresh()} openToolsFor={connected ?? null} />
 
       <AddGmailDialog open={adding} onClose={() => setAdding(false)} page={page} onAdded={(email) => { toast(`${email} connected and tested.`, 'success'); router.refresh(); }} />
       {editing && <EditDialog key={editing.id} c={editing} page={page} onClose={() => setEditing(null)} run={run} />}

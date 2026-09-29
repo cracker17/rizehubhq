@@ -161,7 +161,7 @@ export const VARS = [
   S({ key: 'TELEGRAM_ALLOWED_USER_IDS', group: 'Telegram', svc: ['bot'], req: ['bot'], check: telegramIds }),
   S({ key: 'TELEGRAM_NOTIFY_CHAT_ID', group: 'Telegram', svc: ['bot'], check: (v) => (/^-?\d{3,15}$/.test(v) ? null : 'must be a numeric chat id') }),
   S({ key: 'BOT_POLL_MS', group: 'Telegram', svc: ['bot'], check: intIn(1000) }),
-  S({ key: 'DASHBOARD_URL', group: 'Telegram', svc: ['dashboard', 'bot'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.replace(/\/+$/, '') === 'https://hq.rizehub.ph' ? null : v.startsWith('https://') ? 'expected https://hq.rizehub.ph' : 'must be https://hq.rizehub.ph in production (client access links use it)') }),
+  S({ key: 'DASHBOARD_URL', group: 'Telegram', svc: ['dashboard', 'bot', 'worker'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.replace(/\/+$/, '') === 'https://hq.rizehub.ph' ? null : v.startsWith('https://') ? 'expected https://hq.rizehub.ph' : 'must be https://hq.rizehub.ph in production (client access links use it)') }),
   // Ops
   S({ key: 'SUPABASE_DB_URL', group: 'Ops', svc: ['ops'], secret: true, check: (v) => (isUrl(v, ['postgresql:', 'postgres:']) ? null : 'must be a postgresql:// connection string'), note: 'needed by deploy/backup.sh' }),
   S({ key: 'BACKUP_DIR', group: 'Ops', svc: ['ops'] }),

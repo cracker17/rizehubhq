@@ -124,3 +124,59 @@ export async function deleteConnectorAction(input: { id: string }): Promise<Conn
   const r = await ceo.db.rpc('connector_delete', { p_id: input.id });
   return r.error ? { ok: false, error: friendly(r.error.message) } : { ok: true };
 }
+
+// ---------- Apps (MCP) ----------
+export interface AppTarget { catalogKey?: string; url?: string; name?: string; agents: string[]; projectRef?: string }
+
+function cleanTarget(t: AppTarget) {
+  return {
+    catalogKey: t.catalogKey || undefined, url: t.url?.trim() || undefined, name: t.name?.trim() || undefined,
+    agents: agentsOf(t.agents), projectRef: t.projectRef?.trim() || undefined,
+  };
+}
+
+/** Sign in to an app: returns the vendor's consent URL (the browser goes there) or, rarely, a finished connection. */
+export async function startAppSignInAction(input: AppTarget & { own?: { clientId: string; clientSecret?: string }; totp?: string | null }): Promise<ConnectorResult<{ authorizeUrl?: string; id?: string }>> {
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const step = await stepUpIfEnrolled(ceo.db, input.totp);
+  if (!step.ok) return step;
+  const own = input.own?.clientId?.trim() ? { clientId: input.own.clientId.trim(), clientSecret: input.own.clientSecret?.trim() || undefined } : undefined;
+  const r = await callWorker<{ authorizeUrl?: string; id?: string }>('/connectors/mcp/start', { ...cleanTarget(input), own }, 45_000);
+  if (r.status !== 200) return { ok: false, error: r.body.error ?? 'Could not start the sign-in.' };
+  const authorizeUrl = r.body.authorizeUrl;
+  if (authorizeUrl && !/^https:\/\//i.test(authorizeUrl)) return { ok: false, error: 'The app returned an unsafe sign-in link.' };
+  return { ok: true, authorizeUrl, id: r.body.id };
+}
+
+export async function connectAppTokenAction(input: AppTarget & { token: string; header?: string; totp?: string | null }): Promise<ConnectorResult<{ id: string; tools: number }>> {
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const step = await stepUpIfEnrolled(ceo.db, input.totp);
+  if (!step.ok) return step;
+  const r = await callWorker<{ id: string; tools: number }>('/connectors/mcp/token', { ...cleanTarget(input), token: String(input.token ?? ''), header: input.header?.trim() || undefined }, 45_000);
+  if (r.status !== 200 || !('id' in r.body)) return { ok: false, error: r.body.error ?? 'Could not connect.' };
+  return { ok: true, id: r.body.id, tools: r.body.tools };
+}
+
+export async function syncAppAction(input: { id: string }): Promise<ConnectorResult<{ working: boolean; message: string }>> {
+  if (!ID.test(String(input.id ?? ''))) return { ok: false, error: 'Unknown app.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: true, working: true, message: 'Demo mode: pretending the app answered.' };
+  const r = await callWorker<{ ok: boolean; tools?: number; error?: string }>('/connectors/mcp/sync', { id: input.id }, 45_000);
+  if (r.status !== 200) return { ok: false, error: r.body.error ?? 'Refresh failed.' };
+  return { ok: true, working: Boolean(r.body.ok), message: r.body.ok ? `Connected: ${r.body.tools ?? 0} tools. New or changed tools wait for your review.` : (r.body.error ?? 'The app did not answer.') };
+}
+
+export async function setToolPoliciesAction(input: { id: string; policies: Record<string, 'allow' | 'ask' | 'off'>; totp?: string | null }): Promise<ConnectorResult> {
+  if (!ID.test(String(input.id ?? ''))) return { ok: false, error: 'Unknown app.' };
+  const policies = Object.fromEntries(Object.entries(input.policies ?? {})
+    .filter(([k, v]) => k.length <= 128 && (v === 'allow' || v === 'ask' || v === 'off')).slice(0, 300));
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  return rpcWithStepUp(ceo.db, 'connector_set_tool_policies', { p_id: input.id, p_policies: policies }, input.totp);
+}

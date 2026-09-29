@@ -17,6 +17,8 @@ import { setMcpDeps } from './hermes/mcp';
 import { hermesStartupReport } from './hermes/config';
 import { startSalesBackground, stopSalesBackground } from './sales/background';
 import { listApprovedGmailSends, startGmailSender } from './connectors/gmailSend';
+import { executeApprovedMcpCalls, listApprovedMcpCalls } from './connectors/mcpExecute';
+import { createMcpOpener } from './connectors/mcpClient';
 import { createSupabaseConnectorStore } from './connectors/store';
 import { loadKeyring } from './vault/crypto';
 
@@ -89,6 +91,26 @@ async function main() {
     },
     paused: async () => { const v = (await db.getSettings().catch(() => ({} as Record<string, unknown>))).paused; return v === true || v === 'true'; },
   });
+  // App tool calls the CEO approved (mcp.call, docs/15 §3), same cadence and pause rule.
+  const execDb = async (id: string, phase: 'claim' | 'done' | 'failed', result: Record<string, unknown> = {}) => {
+    const r = await sb.rpc('external_action_exec', { p_approval: id, p_phase: phase, p_result: result });
+    if (r.error) throw new Error(`external_action_exec: ${r.error.message}`);
+    return Boolean(r.data);
+  };
+  let mcpBusy = false;
+  const mcpRunner = setInterval(() => {
+    if (mcpBusy) return;
+    mcpBusy = true;
+    void (async () => {
+      const v = (await db.getSettings().catch(() => ({} as Record<string, unknown>))).paused;
+      if (v === true || v === 'true') return;
+      await executeApprovedMcpCalls({
+        list: listApprovedMcpCalls(sb), exec: execDb, store: createSupabaseConnectorStore(sb), keyring: loadKeyring(workerEnv()),
+        open: createMcpOpener((workerEnv().DASHBOARD_URL ?? 'https://hq.rizehub.ph').replace(/\/+$/, '')), log: (m) => console.log(m),
+      });
+    })().catch((e) => console.error('[mcp] approved-call loop failed', e instanceof Error ? e.message : e)).finally(() => { mcpBusy = false; });
+  }, 15_000);
+  mcpRunner.unref?.();
 
   const server = createHttpServer({
     chat: (agentId, question) => answerChat(agentId, question, deps),
@@ -105,6 +127,7 @@ async function main() {
     server.close();
     stopSalesBackground(salesTimers);
     clearInterval(gmailSender);
+    clearInterval(mcpRunner);
     await loop.stop();
     process.exit(0);
   };

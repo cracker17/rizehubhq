@@ -46,7 +46,7 @@ export async function pollPendingJobs(db: HqDb, client: RizehubClient, logf: Log
  * inside its resumed task, tools/rizehub.ts; gmail.send in connectors/gmailSend.ts). Every other approved action type is
  * a MANUAL step for the CEO. Agents can't queue these through request_external_action (runner.ts refuses them).
  */
-export const WORKER_EXECUTED_ACTIONS: ReadonlySet<string> = new Set(['rizehub.report_publish', 'rizehub.invite_send', 'rizehub.onboarding', 'gmail.send']);
+export const WORKER_EXECUTED_ACTIONS: ReadonlySet<string> = new Set(['rizehub.report_publish', 'rizehub.invite_send', 'rizehub.onboarding', 'gmail.send', 'mcp.call']);
 
 const MAX_ATTEMPTS = 3;
 /** Approved rizehub.report_publish / rizehub.invite_send actions → the real call, once. Onboarding runs in its task. */
