@@ -206,7 +206,8 @@ export default async function ({ db, step, val, one, status, agent, as, assert }
     await as('authenticated', OTHER, async () => {
       assert.equal(await val(`select count(*)::int from rizehub_refs`), 0);
       await assert.rejects(db.query(`select mark_job_applied($1)`, [job]), /not allowed/);
-      await assert.rejects(db.query(`select store_webhook_event('e', 'x.y', '{}'::jsonb, true)`), /not allowed/);
+      // worker-only since 20260929030000_security_hardening.sql: refused before the guard even runs
+      await assert.rejects(db.query(`select store_webhook_event('e', 'x.y', '{}'::jsonb, true)`), /not allowed|permission denied/);
     });
     await as('anon', null, async () => {
       await assert.rejects(db.query(`select process_rizehub_event(gen_random_uuid())`), /permission denied/);

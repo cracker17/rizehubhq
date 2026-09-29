@@ -437,6 +437,25 @@ end $$;
 
 Tests: `scripts/db-tests/110-totp-auto-approve.mjs` (stubs `auth.mfa_factors`). Details: docs/05 "[3]", docs/09 "Two-factor (TOTP)".
 
+## Security hardening (`20260929030000_security_hardening.sql`)
+
+Fixes the Supabase security-advisor WARNs on functions (before: 17 `function_search_path_mutable`, 6 `anon_security_definer_function_executable`, 59 `authenticated_security_definer_function_executable`).
+
+- **search_path**: every public function that is not owned by an extension gets `set search_path = public` (one deterministic pass over `pg_proc`).
+- **anon runs nothing.** Every RLS policy is `to authenticated`, and the public client access-link page goes through the worker, so the `anon` role (and `PUBLIC`) lose EXECUTE on every public function, `is_ceo()` included.
+- **Who keeps what**:
+
+| Group | Grant | Functions |
+|---|---|---|
+| A · CEO API | `authenticated` + `service_role` | `is_ceo` (RLS/Realtime), `ceo_step_up_status`, `create_request`, `decide_approval`, `report_facts`, vault `create_access_request` / `vault_cancel_access_request` / `vault_revoke` / `vault_set_grants` / `vault_grant` / `vault_revoke_grant` / `vault_update_credential`, `connector_set_grants` / `_update` / `_set_status` / `_delete`, `save_` / `delete_auto_approve_rule`, `mark_job_applied`, `set_job_status`, `sales_move_stage` |
+| B · worker / bot | `service_role` only | workflow engine (`claim_*`, `submit_*`, `report_progress`, `requeue_*`, `ask_ceo`, `fail_task`, `record_usage`, …), `save_report`, `set_paused`, RizeHub (`store_webhook_event`, `process_rizehub_event`, …), sales (`sales_create_daily_batch`, `sales_decide_batch`, `sales_suppress`, internal `sales_*` helpers) |
+| C · triggers | `service_role` only | `touch_updated_at`, `sales_suppression_permanent`, `sales_lead_emails_guard`, `sales_on_approval_decided` (triggers are not checked for EXECUTE when they fire) |
+| D · pure helpers | `authenticated` + `service_role` | `rizehub_clean`, `sales_denied_host` (a CHECK on `leads`), `sales_detect_flags`, `sales_manila_day_start`, `sales_next_follow_up`, `vault_platform_ok` |
+
+Group A keeps the `authenticated_security_definer` WARN on purpose: those are the dashboard's RPCs and each starts with `hq_guard()` / `is_ceo()`, so a signed-in non-CEO gets `not allowed`. A dashboard screen that needs a group-B function moves it to group A in a new migration.
+
+Every new function needs its own `revoke … from public, anon` + `grant` block: `scripts/db-tests/130-security-hardening.mjs` enumerates `pg_proc` and fails on any public function that lacks a search_path or is executable by `anon`/`PUBLIC`. The remaining advisor WARN, leaked-password protection, is an Auth setting (Supabase → Authentication → Passwords), not SQL.
+
 ## Realtime
 
 ```sql
