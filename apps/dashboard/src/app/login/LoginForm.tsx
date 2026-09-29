@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useActionState } from 'react';
 import { signInAction } from '@/app/actions';
 
@@ -21,6 +22,7 @@ export function LoginForm({ next }: { next: string }) {
       <button disabled={pending} className="h-11 rounded-xl bg-[var(--color-primary)] text-[15px] font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50">
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
+      <Link href="/login?step=reset" className="text-center text-sm text-[var(--color-muted)] hover:text-white">Forgot password?</Link>
     </form>
   );
 }

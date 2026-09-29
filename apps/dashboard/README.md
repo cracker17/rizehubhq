@@ -39,7 +39,7 @@ Email + password via Supabase Auth, SSR cookies (`@supabase/ssr`). Only accounts
 
 Supabase Auth MFA (TOTP), spec in docs/09 "Two-factor (TOTP)".
 
-- **Enroll:** Settings → Two-factor sign-in → *Set up 2FA* (`src/app/security-actions.ts`: `mfa.enroll` → QR + setup key shown once → `mfa.challengeAndVerify`).
+- **Enroll:** Admin → Security → Two-factor sign-in → *Set up 2FA* (`src/app/security-actions.ts`: `mfa.enroll` → QR + setup key shown once → `mfa.challengeAndVerify`).
 - **Sign-in:** `signInAction` sends a session with a verified factor to `/login?step=totp` (`verifySignInTotpAction`); `src/middleware.ts` keeps an aal1 session there (`authGate` in `src/lib/auth/stepUp.ts`). The database agrees: `is_ceo()` needs `aal2` once the CEO has a verified factor.
 - **Step-up:** approving a high-risk external action (`approvalRisk`), turning on an auto-approve rule, and revealing a vault secret need a TOTP code verified in the last 5 minutes. Server actions answer `{ ok: false, stepUp: true }`; the store opens `StepUpDialog` and retries with the code. `decide_approval` / `save_auto_approve_rule` check the JWT `amr` themselves.
 - Pure logic + tests: `src/lib/auth/stepUp.ts` (`stepUp.test.ts`). Supabase calls: `src/lib/auth/mfaServer.ts`.

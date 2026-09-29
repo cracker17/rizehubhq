@@ -27,10 +27,15 @@ export type AmrClaim = ReadonlyArray<{ method?: string; timestamp?: number } | s
 
 /** Epoch seconds of the latest TOTP verification in this session, or null. */
 export function lastTotpAt(amr: AmrClaim | null | undefined): number | null {
+  return lastAmrAt(amr, ['totp', 'mfa/totp']);
+}
+
+/** Epoch seconds of the latest amr entry with one of `methods` (e.g. 'recovery' after a password-reset link), or null. */
+export function lastAmrAt(amr: AmrClaim | null | undefined, methods: readonly string[]): number | null {
   let latest: number | null = null;
   for (const e of amr ?? []) {
     if (typeof e !== 'object' || !e) continue;
-    if (e.method !== 'totp' && e.method !== 'mfa/totp') continue;
+    if (!e.method || !methods.includes(e.method)) continue;
     if (typeof e.timestamp !== 'number' || !Number.isFinite(e.timestamp)) continue;
     if (latest === null || e.timestamp > latest) latest = e.timestamp;
   }

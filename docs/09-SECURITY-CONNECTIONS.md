@@ -131,15 +131,16 @@ Supabase Auth MFA with an authenticator app (migration `20260929000000_totp_auto
 
 | | What happens |
 |---|---|
-| **Enroll** | Settings → *Two-factor sign-in* → *Set up 2FA*: `mfa.enroll({ factorType: 'totp' })` shows the QR code and setup key **once** (never stored or logged by HQ), then a code from the app verifies it (`mfa.challengeAndVerify`). Half-finished enrollments are removed when you start again. |
+| **Enroll** | Admin → Security → *Two-factor sign-in* → *Set up 2FA*: `mfa.enroll({ factorType: 'totp' })` shows the QR code and setup key **once** (never stored or logged by HQ), then a code from the app verifies it (`mfa.challengeAndVerify`). Half-finished enrollments are removed when you start again. |
 | **Sign in** | Password → `/login?step=totp` → 6-digit code → session is `aal2`. The middleware keeps an `aal1` session on that step, and the database agrees: `is_ceo()` is false for an `aal1` session once the CEO has a verified factor, so RLS shows nothing and every workflow RPC refuses. |
 | **Step-up** | A TOTP code verified in the **last 5 minutes** (JWT `amr` entry `totp`, `ceo_totp_fresh(300)`) is required to: approve a **high-risk** approval, turn on (or save an enabled) auto-approve rule, and reveal a Client Vault secret (every reveal asks for a code). The dashboard asks for the code in a dialog and verifies it right before the RPC; `decide_approval()` / `save_auto_approve_rule()` check the JWT themselves (`ceo_step_up_guard()`). |
 | **Telegram** | The bot uses the service role and can't do a TOTP step-up, so once 2FA is on it can no longer **approve** high-risk actions ("Needs your 2FA code: approve this one in the dashboard"). Reject / request changes, plans, deliverables and questions still work there. |
 | **Not enrolled** | Nothing changes (password only, Telegram approves everything). Set 2FA up right after deploying. |
+| **Turn off / new phone** | Admin → Security → *Turn off 2FA*: current password + a code from the current app → `mfa.unenroll`, every other session signed out, `activity_log` `security.2fa_disabled`. Then *Set up 2FA* on the new phone. Without the old phone: recovery below. |
 
 **High-risk** = `approvals.kind = 'external_action'` with `payload.type = 'external_action'`: every agent/tool/sales proposal that changes the outside world (publish, merge, deploy, send, spend, `rizehub.*` actions, outreach email batches and single emails). Not high-risk: plans, deliverables, agent questions (`question`), failures (`task_failed`, `qa_stuck`, `qa_escalation`, `planning_failed`, `vault_problem`) and Vault 2FA code relays. The agent-written `risk` label is shown but never lowers this. Mirrors: `approval_is_high_risk()` (SQL) and `approvalRisk()` (dashboard). Rejecting or requesting changes never needs a step-up.
 
-**Recovery (lost phone).** Delete the CEO's TOTP factor with the service role; the next sign-in is password-only and Settings offers *Set up 2FA* again.
+**Recovery (lost phone).** Delete the CEO's TOTP factor with the service role; the next sign-in is password-only and Admin → Security offers *Set up 2FA* again.
 ```ts
 // server-side script with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (never in the browser)
 const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false } }).auth.admin;
@@ -148,6 +149,16 @@ for (const f of data?.factors ?? []) await admin.mfa.deleteFactor({ userId: ceoU
 ```
 or in the Supabase SQL editor: `delete from auth.mfa_factors where user_id = (select id from auth.users where email = 'you@example.com');`
 (Supabase signs the user out of sessions that used the factor.) The SQL editor / migrations run without a JWT and are never step-up-checked.
+
+### CEO password
+Admin → Security (`apps/dashboard/src/app/security-actions.ts`, rules in `src/lib/auth/password.ts`).
+
+| | What happens |
+|---|---|
+| **Change** | Current password (checked on a throwaway client, 5 tries / 10 min) + a fresh 2FA code when 2FA is on → `auth.updateUser({ password })` → every other session is signed out (`signOut({ scope: 'others' })`) → `activity_log` `security.password_changed`. Rules: 12+ characters, at most 72 bytes (bcrypt), not the current one, not repetitive, no email name. |
+| **Forgot** | *Forgot password?* on the sign-in page → `resetPasswordForEmail` (same answer whether or not the address exists; 3 / 15 min per IP) → the email link lands on `/auth/confirm` (PKCE `?code=`, or `?token_hash=&type=recovery` from a custom template) → a `recovery` session → **the 2FA step first when on** → `/reset-password` sets the new password. That page only accepts a session whose JWT `amr` has `recovery` from the last 15 minutes, so an ordinary signed-in session can't change the password without the current one. Other sessions are signed out; `activity_log` `security.password_reset`. |
+
+**Email delivery:** Supabase's built-in mailer only sends to members of the Supabase organisation and a few emails an hour. If the CEO address is not an org member, set a custom SMTP sender (Authentication → Emails → SMTP) or the reset email never arrives. The redirect allow-list must include `https://hq.rizehub.ph/**` (deploy/supabase-setup.md step 4).
 
 **Setup:** TOTP must be enabled in the Supabase project (Dashboard → Authentication → Multi-Factor → TOTP: enroll + verify; locally `[auth.mfa.totp]` in `supabase/config.toml` is already on).
 

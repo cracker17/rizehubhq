@@ -8,6 +8,10 @@ import { loadLiveSnapshot } from '@/lib/data/loaders';
 import { workerEnv } from '@/lib/env';
 import { approvalRisk, isStepUpError, needsTotpAtSignIn, safeNext, stepUpNeed } from '@/lib/auth/stepUp';
 import { ensureStepUp, totpState, verifyTotp } from '@/lib/auth/mfaServer';
+import { passwordProblem, recoveryFresh } from '@/lib/auth/password';
+import { rateLimited, type Tries } from '@/lib/auth/rateLimit';
+import { clientIp, dashboardOrigin } from '@/lib/auth/reauth';
+import type { AmrClaim } from '@/lib/auth/stepUp';
 import type { Decision, HqSnapshot, Priority } from '@/lib/data/types';
 
 /** `stepUp: true` = retry with a fresh 2FA code (the UI opens the code dialog). */
@@ -160,4 +164,49 @@ export async function signOutAction() {
   const db = await createSupabaseServer();
   if (db) await db.auth.signOut();
   redirect(db ? '/login' : '/');
+}
+
+// ---------- forgotten password (LIVE only; docs/09 "CEO password") ----------
+const resetTries: Tries = new Map();
+export interface ResetRequestState { sent: boolean; error: string | null }
+
+/**
+ * Emails a reset link (Supabase Auth). The answer never says whether the address has an account. The link lands on
+ * /auth/confirm, which signs in with a 'recovery' session and forwards to /reset-password (2FA step first when on).
+ */
+export async function requestPasswordResetAction(_prev: ResetRequestState, form: FormData): Promise<ResetRequestState> {
+  const db = await createSupabaseServer();
+  if (!db) redirect('/');
+  const email = String(form.get('email') ?? '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return { sent: false, error: 'Enter the email you sign in with.' };
+  const ip = await clientIp();
+  if (rateLimited(resetTries, ip, 3, 15 * 60_000) || rateLimited(resetTries, '*', 20, 15 * 60_000)) {
+    return { sent: false, error: 'Too many reset requests. Try again in 15 minutes.' };
+  }
+  const origin = await dashboardOrigin();
+  const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/confirm?next=/reset-password` });
+  // Logged without the address; the answer stays the same either way.
+  if (error) console.error('[auth] password reset email failed:', error.message);
+  return { sent: true, error: null };
+}
+
+/** Sets a new password from a fresh reset-link session (no current password: that is what was forgotten). */
+export async function setRecoveredPasswordAction(_prev: { error: string | null }, form: FormData): Promise<{ error: string | null }> {
+  const db = await createSupabaseServer();
+  if (!db) redirect('/');
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) redirect('/login');
+  const { data: aal } = await db.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (!recoveryFresh((aal?.currentAuthenticationMethods ?? []) as AmrClaim, Math.floor(Date.now() / 1000))) {
+    return { error: 'This reset link has expired. Ask for a new one from the sign-in page.' };
+  }
+  const next = String(form.get('password') ?? '');
+  const problem = passwordProblem(next, { email: user.email });
+  if (problem) return { error: problem };
+  if (next !== String(form.get('again') ?? '')) return { error: 'The two passwords don’t match.' };
+  const { error } = await db.auth.updateUser({ password: next });
+  if (error) return { error: /same.?password|should be different/i.test(error.message) ? 'That is already your password. Just sign in.' : error.message };
+  await db.auth.signOut({ scope: 'others' }).catch(() => undefined);
+  await db.from('activity_log').insert({ actor: 'ceo', action: 'security.password_reset', detail: { via: 'email_link' } }).then(() => undefined, () => undefined);
+  redirect('/admin/security');
 }

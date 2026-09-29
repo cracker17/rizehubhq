@@ -148,10 +148,15 @@ Status → color mapping (use everywhere: dots, bubbles, progress bars):
 
 ### 10. Settings `/settings`
 - Budgets (global daily, per agent default), digest time, QA thresholds per work type, auto-approve rules (off by default), Telegram link status.
-- Built in M12: **Two-factor sign-in** card (status pill "2FA on/off", *Set up 2FA* → QR + setup key shown once → code → on)
+- Built in M12 (moved to Admin → Security, §11): **Two-factor sign-in** card (status pill "2FA on/off", *Set up 2FA* → QR + setup key shown once → code → on)
   and **Auto-approve rules** card (the always-on guards, rule list with on/off switch, edit/delete, "Add rule" dialog:
   name, max estimated cost, max tasks, internal work-type chips, client scope chips, recent auto-approvals/skips).
   Turning a rule on asks for the 2FA code (StepUpDialog). Spec: docs/05 "[3]", docs/09 "Two-factor (TOTP)".
+
+### 11. Admin `/admin`
+- Sidebar: an **Admin** group under the main pages (Security, Connections, Settings; API keys, tool logins and connectors join it as they ship). On phones the bottom bar's **More** opens `/admin`, which lists the admin tools and every page the bar has no room for.
+- **Security** `/admin/security`: *CEO password* card (current password, new twice, 2FA code when on; live rule hints; "Show passwords") and the *Two-factor sign-in* card (set up; turn off with password + code, e.g. for a new phone). Spec: docs/09 "CEO password" + "Two-factor (TOTP)".
+- Sign-in page: *Forgot password?* → email a reset link → `/auth/confirm` → 2FA step (when on) → `/reset-password`.
 
 ## Agent panel (click any character/tile)
 Tabs: **Screen** (live POV monitor, 07 §6) · **Chat** (07 §7) · **Task** · **Today**.

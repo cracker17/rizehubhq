@@ -23,7 +23,7 @@ Each milestone ends with something you can **see working locally**. Don't start 
 | M9c Onboarding automation | ✅ Done: built and tested offline (mock) | Staging RizeHub test client |
 | **Go-live** (M11 deploy kit) | 🟡 Kit ready: `deploy/`, Dockerfiles, compose, CI image builds, `pnpm check:env`, `pnpm check:deploy`, Go-live runbook in docs/10 | **Pending:** hosted Supabase, DNS, `.env` with live keys, `setup-vps.sh`, CEO user, Telegram bot, `/assign` end-to-end (README "Go-live checklist") |
 | M10 Remaining roles | 🟡 Ready offline: role files, SOPs, tools and `pnpm eval:roles` (18 fixture tasks, all ≥ 85 offline) | AI keys, then `pnpm eval:roles -- --live`, then 3 real tasks with QA ≥ 85 per role |
-| M12 Hardening & scale | 🟡 In progress: TOTP 2FA + step-up, auto-approve rules for low-risk plans, /costs dashboard done | Secrets manager, QA-Dev / QA-Content split, voice notes, client status pages |
+| M12 Hardening & scale | 🟡 In progress: TOTP 2FA + step-up, auto-approve rules for low-risk plans, /costs dashboard, Admin section (password change/reset, 2FA turn-off) done | Secrets manager, QA-Dev / QA-Content split, voice notes, client status pages |
 
 ## M0 · Foundation (Day 1)
 - Monorepo, pnpm workspaces, local Supabase running, `.env.example`, `CLAUDE.md`.

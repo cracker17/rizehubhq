@@ -62,7 +62,8 @@ No storage policies are needed. Only the worker (service role) writes, and the d
 
 ## 7. Two-factor (recommended)
 - TOTP MFA is available by default in Supabase Auth (**Authentication → Multi-Factor**). Keep **TOTP** enabled.
-- The dashboard's TOTP enrol/verify screen is still a TODO (apps/dashboard/README.md "Two-factor", roadmap M12). Until it ships, your protection is a unique, long password plus 2FA on the supabase.com account (step 1.4), with sign-ups disabled (step 4).
+- Turn 2FA on in the dashboard right after the first sign-in: **Admin → Security → Set up 2FA** (docs/09 "Two-factor (TOTP)"). Keep 2FA on the supabase.com account too (step 1.4), with sign-ups disabled (step 4).
+- **Forgot password** emails come from Supabase Auth. Its built-in mailer only delivers to members of your Supabase organisation; for any other CEO address set a custom SMTP sender (Authentication → Emails → SMTP). docs/09 "CEO password".
 
 ## 8. Copy the keys into the VPS `.env`
 **Project Settings → API** (or **API Keys**):

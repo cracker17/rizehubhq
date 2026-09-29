@@ -10,7 +10,8 @@ function env(name: string) {
   return v && v.trim() ? v.trim() : undefined;
 }
 
-const PUBLIC = ['/login', '/api/health', '/access'];
+// /auth/confirm turns an emailed reset link into a session (then the normal gate applies to /reset-password).
+const PUBLIC = ['/login', '/api/health', '/access', '/auth'];
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');

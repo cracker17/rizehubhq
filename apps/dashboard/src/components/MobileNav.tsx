@@ -4,14 +4,17 @@ import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import { Building2, CheckCircle2, Plus, FileBarChart, Menu } from 'lucide-react';
 import { useHq } from '@/lib/data/store';
+import { ADMIN_NAV, NAV, isActive } from '@/lib/nav';
 
 const ITEMS = [
   { href: '/', label: 'Office', icon: Building2 },
   { href: '/approvals', label: 'Approvals', icon: CheckCircle2 },
   { href: '/requests', label: 'New', icon: Plus },
   { href: '/reports', label: 'Reports', icon: FileBarChart },
-  { href: '/settings', label: 'More', icon: Menu },
+  { href: '/admin', label: 'More', icon: Menu },
 ];
+
+const MORE = ['/admin', ...ADMIN_NAV.map((i) => i.href), ...NAV.map((i) => i.href).filter((h) => !['/', '/approvals', '/requests', '/reports'].includes(h))];
 
 export function MobileNav() {
   const path = usePathname();
@@ -19,7 +22,8 @@ export function MobileNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[var(--color-line)] bg-[var(--color-bg)]/95 backdrop-blur lg:hidden" aria-label="Mobile">
       {ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = href === '/' ? path === '/' : path.startsWith(href);
+        // 'More' opens the /admin hub, which also lists every page the bar has no room for.
+        const active = href === '/admin' ? MORE.some((h) => isActive(h, path)) : isActive(href, path);
         return (
           <Link key={href} href={href} aria-label={label === 'New' ? 'New request' : undefined} aria-current={active ? 'page' : undefined} className={clsx('relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px]', active ? 'text-white' : 'text-[var(--color-muted)]')}>
             {label === 'New' ? (

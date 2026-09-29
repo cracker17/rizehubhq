@@ -3,15 +3,18 @@ import { isLive } from '@/lib/env';
 import { safeNext } from '@/lib/auth/stepUp';
 import { LoginForm } from './LoginForm';
 import { TotpForm } from './TotpForm';
+import { ResetRequestForm } from './ResetRequestForm';
 
 export const metadata = { title: 'Sign in · RizeHub HQ' };
 export const dynamic = 'force-dynamic';
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; step?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; step?: string; reset?: string }> }) {
   if (!isLive()) redirect('/'); // DEMO mode has no accounts
-  const { next, step } = await searchParams;
-  // step=totp: the middleware only shows it to a password-signed-in session whose 2FA step is still open.
+  const { next, step, reset } = await searchParams;
+  // step=totp: the middleware only shows it to a signed-in session whose 2FA step is still open (after the password,
+  // or after a reset link). step=reset: "Forgot password?" (docs/09 "CEO password").
   const totp = step === 'totp';
+  const forgot = !totp && step === 'reset';
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm">
@@ -23,9 +26,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </span>
         </div>
         <div className="card p-6 sm:p-7">
-          <h1 className="text-xl font-semibold">{totp ? 'Two-factor check' : 'Sign in'}</h1>
-          <p className="mt-1 text-sm text-[var(--color-muted)]">{totp ? 'Password accepted. One more step.' : 'CEO account only.'}</p>
-          {totp ? <TotpForm next={safeNext(next)} /> : <LoginForm next={next ?? '/'} />}
+          <h1 className="text-xl font-semibold">{totp ? 'Two-factor check' : forgot ? 'Reset password' : 'Sign in'}</h1>
+          <p className="mt-1 text-sm text-[var(--color-muted)]">
+            {totp ? 'One more step.' : forgot ? 'We’ll email you a link to set a new password.' : 'CEO account only.'}
+          </p>
+          {reset === 'expired' && forgot && (
+            <p role="alert" className="mt-4 text-sm text-[#ff8a8d]">That reset link is invalid or expired. Ask for a new one.</p>
+          )}
+          {totp ? <TotpForm next={safeNext(next)} /> : forgot ? <ResetRequestForm /> : <LoginForm next={next ?? '/'} />}
         </div>
       </div>
     </main>

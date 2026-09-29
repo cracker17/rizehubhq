@@ -8,13 +8,13 @@
 // * The public access form (submitAccessAction) needs no session: it is rate-limited here, validated, and the
 //   worker verifies the one-time token.
 import { createHash, randomBytes } from 'node:crypto';
-import { headers } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv, workerEnv } from '@/lib/env';
 import { CRED_COLS, PLATFORMS, type CredentialView, type SecretType, type TwofaMethod } from '@/lib/data/vault';
 import { demoVault } from '@/lib/data/vaultDemo';
 import { ensureStepUp } from '@/lib/auth/mfaServer';
+import { clientIp, dashboardOrigin, passwordMatches } from '@/lib/auth/reauth';
+import { rateLimited, type Tries } from '@/lib/auth/rateLimit';
 
 export type VaultResult<T = object> = ({ ok: true } & T) | { ok: false; error: string; stepUp?: boolean };
 
@@ -253,18 +253,7 @@ export async function reactivateCredentialAction(input: { id: string }): Promise
 }
 
 // Reveal: re-authentication + a small per-user limiter (in memory, per server process).
-const revealTries = new Map<string, { n: number; reset: number }>();
-function limited(map: Map<string, { n: number; reset: number }>, key: string, max: number, windowMs: number): boolean {
-  const now = Date.now();
-  const h = map.get(key);
-  if (!h || h.reset <= now) {
-    if (map.size > 5000) for (const [k, v] of map) if (v.reset <= now) map.delete(k);
-    map.set(key, { n: 1, reset: now + windowMs });
-    return false;
-  }
-  h.n++;
-  return h.n > max;
-}
+const revealTries: Tries = new Map();
 
 export async function revealSecretAction(input: { id: string; password: string; totp?: string | null }): Promise<VaultResult<{ label: string; secret: string; showMs: number }>> {
   if (!ID.test(String(input.id ?? ''))) return { ok: false, error: 'Unknown credential.' };
@@ -278,28 +267,15 @@ export async function revealSecretAction(input: { id: string; password: string; 
   // 2FA on → a TOTP code is required for every reveal (docs/06 "Auth"), checked before the password attempt counts.
   const step = await ensureStepUp(ceo.db, (s) => (s.factorId ? 'required' : 'not_needed'), input.totp);
   if (!step.ok) return step;
-  if (limited(revealTries, ceo.userId, 5, 10 * 60_000)) return { ok: false, error: 'Too many reveal attempts. Wait 10 minutes.' };
+  if (rateLimited(revealTries, ceo.userId, 5, 10 * 60_000)) return { ok: false, error: 'Too many reveal attempts. Wait 10 minutes.' };
   if (!ceo.email) return { ok: false, error: 'Your account has no email to re-authenticate with.' };
-  // Re-authenticate on a throwaway client (no cookies), then drop that extra session locally.
-  const env = supabaseEnv()!;
-  const check = createClient(env.url, env.anonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
-  const { data, error } = await check.auth.signInWithPassword({ email: ceo.email, password });
-  if (error || data.user?.id !== ceo.userId) return { ok: false, error: 'Wrong password.' };
-  await check.auth.signOut({ scope: 'local' }).catch(() => undefined);
+  if (!(await passwordMatches(ceo.email, password, ceo.userId))) return { ok: false, error: 'Wrong password.' };
   const r = await callWorker<{ label: string; secret: string }>('/vault/reveal', { id: input.id });
   if (r.status !== 200 || !('secret' in r.body)) return { ok: false, error: friendly(r.body.error ?? 'Could not reveal it.') };
   return { ok: true, label: r.body.label, secret: r.body.secret, showMs: 30_000 };
 }
 
 // ---------- secure client links ----------
-async function origin(): Promise<string> {
-  const h = await headers();
-  const host = h.get('x-forwarded-host') ?? h.get('host');
-  const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') || host?.startsWith('127.') ? 'http' : 'https');
-  const fromEnv = process.env.DASHBOARD_URL?.trim().replace(/\/+$/, '');
-  return fromEnv || (host ? `${proto}://${host}` : '');
-}
-
 export async function createAccessLinkAction(input: { clientId: string; platforms: string[]; note?: string | null }): Promise<VaultResult<{ url: string; expiresAt: string }>> {
   if (!ID.test(String(input.clientId ?? ''))) return { ok: false, error: 'Unknown client.' };
   const platforms = [...new Set((input.platforms ?? []).map((p) => String(p).toLowerCase()).filter((p) => PLATFORM.test(p)))].slice(0, 10);
@@ -307,7 +283,7 @@ export async function createAccessLinkAction(input: { clientId: string; platform
   const note = text(input.note, 500);
   const ceo = await requireCeo();
   if ('error' in ceo) return { ok: false, error: ceo.error };
-  const base = await origin();
+  const base = await dashboardOrigin();
   if (ceo.demo) {
     try {
       const { token, expires_at } = demoVault().createLink(input.clientId, platforms, note);
@@ -388,13 +364,12 @@ export async function createClientAction(input: { name: string; website?: string
 }
 
 // ---------- the client's public form (no session) ----------
-const accessTries = new Map<string, { n: number; reset: number }>();
+const accessTries: Tries = new Map();
 export interface AccessFormState { status: 'idle' | 'ok' | 'error' | 'closed'; error?: string }
 
 export async function submitAccessAction(_prev: AccessFormState, form: FormData): Promise<AccessFormState> {
-  const h = await headers();
-  const ip = (h.get('x-forwarded-for')?.split(',')[0] ?? h.get('x-real-ip') ?? 'unknown').trim().slice(0, 64);
-  if (limited(accessTries, ip, 10, 10 * 60_000) || limited(accessTries, '*', 200, 10 * 60_000)) {
+  const ip = await clientIp();
+  if (rateLimited(accessTries, ip, 10, 10 * 60_000) || rateLimited(accessTries, '*', 200, 10 * 60_000)) {
     return { status: 'error', error: 'Too many attempts. Please wait a few minutes and try again.' };
   }
   const token = String(form.get('token') ?? '');

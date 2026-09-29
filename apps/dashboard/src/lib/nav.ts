@@ -1,9 +1,9 @@
 import {
   Building2, CheckCircle2, ListTodo, Inbox, FileBarChart, ShieldCheck, Target, Briefcase,
-  Users, Bot, Plug, Settings, CircleDollarSign, type LucideIcon,
+  Users, Bot, Plug, Settings, CircleDollarSign, LockKeyhole, type LucideIcon,
 } from 'lucide-react';
 
-export interface NavItem { href: string; label: string; icon: LucideIcon; milestone?: string }
+export interface NavItem { href: string; label: string; icon: LucideIcon; milestone?: string; description?: string }
 
 export const NAV: NavItem[] = [
   { href: '/', label: 'Office', icon: Building2 },
@@ -17,6 +17,13 @@ export const NAV: NavItem[] = [
   { href: '/clients', label: 'Clients', icon: Users, milestone: 'M9a' },
   { href: '/agents', label: 'Agents', icon: Bot, milestone: 'M10' },
   { href: '/costs', label: 'Costs', icon: CircleDollarSign },
-  { href: '/connections', label: 'Connections', icon: Plug, milestone: 'M9' },
-  { href: '/settings', label: 'Settings', icon: Settings, milestone: 'M3' },
 ];
+
+/** Admin section (docs/06 §11): account security, keys, logins and connectors. Hub page: /admin. */
+export const ADMIN_NAV: NavItem[] = [
+  { href: '/admin/security', label: 'Security', icon: LockKeyhole, description: 'CEO password and two-factor sign-in.' },
+  { href: '/connections', label: 'Connections', icon: Plug, milestone: 'M9', description: 'Every client login and token, by platform.' },
+  { href: '/settings', label: 'Settings', icon: Settings, milestone: 'M3', description: 'Plan auto-approve rules.' },
+];
+
+export const isActive = (href: string, path: string) => (href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`));

@@ -25,6 +25,13 @@ export interface SettingsPage {
   error?: string;
 }
 
+/** Admin → Security: 2FA status of the signed-in CEO (null in DEMO mode or without a session). */
+export async function loadSecurity(): Promise<{ mode: 'demo' | 'live'; security: SecurityStatus | null }> {
+  if (!supabaseEnv()) return { mode: 'demo', security: null };
+  const state = await totpState((await createSupabaseServer())!);
+  return { mode: 'live', security: state ? { totp: state.factorId ? 'on' : 'off', since: state.factorCreatedAt, level: state.currentLevel } : null };
+}
+
 export async function loadSettings(): Promise<SettingsPage> {
   if (!supabaseEnv()) {
     return { mode: 'demo', security: null, rules: demoRules().list(), clients: demoSnapshot().clients.map((c) => ({ slug: c.slug, name: c.name })), events: [] };

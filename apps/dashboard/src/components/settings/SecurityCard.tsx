@@ -1,10 +1,11 @@
 'use client';
-// Settings → Security: TOTP 2FA status and enrollment (docs/09 "Two-factor (TOTP)").
+// Admin → Security: TOTP 2FA status, enrollment and turning it off (docs/09 "Two-factor (TOTP)").
 // The QR code and secret are shown once, in this component's state only; closing the setup forgets them.
+// Turning 2FA off (e.g. to move it to a new phone) needs the password and a current code.
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Copy, Check, ShieldCheck, ShieldAlert, KeyRound } from 'lucide-react';
-import { cancelTotpEnrollAction, confirmTotpEnrollAction, startTotpEnrollAction } from '@/app/security-actions';
+import { cancelTotpEnrollAction, confirmTotpEnrollAction, disableTotpAction, startTotpEnrollAction } from '@/app/security-actions';
 import type { SecurityStatus } from '@/lib/data/settings';
 import { Field, btn, inputCls, relTime } from '@/components/clients/ui';
 
@@ -19,7 +20,10 @@ export function SecurityCard({ status, demo }: { status: SecurityStatus | null; 
   const [showSecret, setShowSecret] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
-  const on = done || status?.totp === 'on';
+  const [offOpen, setOffOpen] = useState(false);
+  const [offPassword, setOffPassword] = useState('');
+  const [off, setOff] = useState(false);
+  const on = !off && (done || status?.totp === 'on');
 
   const begin = () => start(async () => {
     setError(null);
@@ -39,6 +43,17 @@ export function SecurityCard({ status, demo }: { status: SecurityStatus | null; 
       setCode('');
       if (!r.ok) { setError(r.error); return; }
       setEnroll(null); setShowSecret(false); setDone(true); setError(null);
+      router.refresh();
+    });
+  };
+  const turnOff = (e: React.FormEvent) => {
+    e.preventDefault();
+    start(async () => {
+      setError(null);
+      const r = await disableTotpAction({ password: offPassword, totp: code });
+      setCode('');
+      if (!r.ok) { setError(r.error); return; }
+      setOffPassword(''); setOffOpen(false); setDone(false); setOff(true);
       router.refresh();
     });
   };
@@ -69,10 +84,35 @@ export function SecurityCard({ status, demo }: { status: SecurityStatus | null; 
 
       {demo && <p className="item px-4 py-3 text-sm text-[var(--color-muted)]">Demo mode: 2FA needs a real Supabase project with MFA (TOTP) enabled.</p>}
 
-      {!demo && on && !enroll && (
-        <p className="text-sm text-[var(--color-muted)]" suppressHydrationWarning>
-          Authenticator app linked{status?.since ? ` ${relTime(status.since)}` : ''}. Lost the phone? Reset it with the service role (docs/09), then set it up again here.
-        </p>
+      {!demo && on && !enroll && !offOpen && (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-[var(--color-muted)]" suppressHydrationWarning>
+            Authenticator app linked{status?.since ? ` ${relTime(status.since)}` : ''}. New phone? Turn 2FA off here with a code from the
+            current app, then set it up again. Lost the phone? Reset it with the service role (docs/09).
+          </p>
+          <div><button type="button" className={btn.danger} onClick={() => { setOffOpen(true); setError(null); }}>Turn off 2FA</button></div>
+        </div>
+      )}
+
+      {!demo && on && offOpen && (
+        <form onSubmit={turnOff} className="grid max-w-3xl gap-3.5 sm:grid-cols-2">
+          <p className="text-sm text-[var(--color-muted)] sm:col-span-2">
+            While 2FA is off, signing in needs only the password and Telegram can approve outside-world actions again.
+            Every other device is signed out.
+          </p>
+          <Field label="Your password">
+            <input className={inputCls} type="password" autoComplete="current-password" value={offPassword} onChange={(e) => setOffPassword(e.target.value)} required autoFocus />
+          </Field>
+          <Field label="Code from the app">
+            <input className={`${inputCls} max-w-[200px] text-center font-mono tracking-[0.35em]`} inputMode="numeric" autoComplete="one-time-code"
+              pattern="[0-9 ]{6,7}" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} required />
+          </Field>
+          {error && <p role="alert" className="text-sm text-[#ff8a8d] sm:col-span-2">{error}</p>}
+          <div className="flex flex-wrap gap-2 sm:col-span-2">
+            <button className={btn.danger} disabled={pending || !offPassword || code.replace(/\s/g, '').length !== 6}>{pending ? 'Turning off…' : 'Turn off 2FA'}</button>
+            <button type="button" className={btn.ghost} onClick={() => { setOffOpen(false); setOffPassword(''); setCode(''); setError(null); }} disabled={pending}>Cancel</button>
+          </div>
+        </form>
       )}
 
       {!demo && !on && !enroll && (
@@ -112,7 +152,7 @@ export function SecurityCard({ status, demo }: { status: SecurityStatus | null; 
           </div>
         </form>
       )}
-      {!enroll && error && <p role="alert" className="text-sm text-[#ff8a8d]">{error}</p>}
+      {!enroll && !offOpen && error && <p role="alert" className="text-sm text-[#ff8a8d]">{error}</p>}
     </section>
   );
 }
