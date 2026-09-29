@@ -56,3 +56,6 @@ export interface QuickFacts {
   blocked: { title: string; agent_id: string; reason: string }[];
   approvals_waiting: { title: string; kind: string }[];
 }
+
+/** A voice_notes row as the bot polls it (no audio). */
+export interface VoiceNoteState { status: 'pending' | 'working' | 'done' | 'failed'; text: string | null; error: string | null }

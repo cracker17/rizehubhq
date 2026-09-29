@@ -1,13 +1,14 @@
 // BotDb: everything the bot reads/writes in Supabase (service role, server-only). Decisions go
 // through the decide_approval RPC so the bot and dashboard share one set of rules.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow } from './types';
+import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
 export const APPROVAL_COLS = '*, requests(priority,title,due_date,clients(name))';
 const REPORT_COLS = 'id,agent_id,report_date,kind,body_md,data,created_at,telegram_sent_at';
 export const BROADCAST_KINDS = ['daily_digest', 'morning_brief', 'weekly'] as const;
 
 export interface NewRequest { text: string; priority: string; dueDate: string | null; clientSlug: string | null }
+export interface NewVoiceNote { chatId: number; messageId: number; audio: Uint8Array; mediaType: string; seconds: number | null }
 
 export interface BotDb {
   getSettings(): Promise<Record<string, unknown>>;
@@ -29,6 +30,12 @@ export interface BotDb {
   spendRows(sinceIso: string): Promise<SpendRow[]>;
   agents(): Promise<AgentLite[]>;
   createRequest(r: NewRequest): Promise<{ id: string; clientFound: boolean }>;
+  /** Queues a Telegram voice note for the worker (voice_notes, 20260929050000_voice_notes.sql). Returns its id. */
+  createVoiceNote(v: NewVoiceNote): Promise<string>;
+  /** Status + transcript (never the audio); null when the row is gone. */
+  getVoiceNote(id: string): Promise<VoiceNoteState | null>;
+  /** The bot stopped waiting: mark it failed and drop the audio (only while still pending / working). */
+  abandonVoiceNote(id: string, error: string): Promise<void>;
 }
 
 export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
@@ -80,6 +87,14 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
         .insert({ source: 'telegram', raw_text: r.text, priority: r.priority, due_date: r.dueDate, client_id: clientId }).select('id').single(), 'requests');
       await sb.from('activity_log').insert({ actor: 'ceo', action: 'request.created', request_id: row.id, detail: { source: 'telegram' } });
       return { id: row.id, clientFound: clientId !== null };
+    },
+    createVoiceNote: async (v) => must<{ id: string }>(await sb.from('voice_notes').insert({
+      chat_id: v.chatId, message_id: v.messageId, media_type: v.mediaType, seconds: v.seconds,
+      audio: `\\x${Buffer.from(v.audio).toString('hex')}`, // bytea hex input through PostgREST
+    }).select('id').single(), 'voice_notes').id,
+    getVoiceNote: async (id) => must<VoiceNoteState | null>(await sb.from('voice_notes').select('status,text,error').eq('id', id).maybeSingle(), 'voice_notes'),
+    abandonVoiceNote: async (id, error) => {
+      must(await sb.from('voice_notes').update({ status: 'failed', error, audio: null }).eq('id', id).in('status', ['pending', 'working']), 'voice_notes');
     },
   };
 }

@@ -19,6 +19,8 @@ import { startSalesBackground, stopSalesBackground } from './sales/background';
 import { listApprovedGmailSends, startGmailSender } from './connectors/gmailSend';
 import { createSupabaseConnectorStore } from './connectors/store';
 import { loadKeyring } from './vault/crypto';
+import { transcribeAudio } from './models/transcribe';
+import { startVoiceNotes, supabaseVoiceNoteDeps } from './voiceNotes';
 
 async function main() {
   if (!config.supabaseUrl || !config.supabaseServiceKey) {
@@ -73,7 +75,7 @@ async function main() {
   loop.start();
   // Sales outreach (send approved emails, IMAP replies, daily batch, follow-ups): nothing starts unless OUTREACH_ENABLED=true,
   // and nothing is sent without SMTP + CAN-SPAM settings (sales/background.ts).
-  const salesTimers = startSalesBackground(deps);
+  const salesTimers = startSalesBackground(deps);
   // Emails the CEO approved from connected Gmail accounts (gmail_send → gmail.send approval → sent once, docs/15 §5).
   const sb = createServiceClient();
   const gmailSender = startGmailSender({
@@ -88,6 +90,12 @@ async function main() {
       log: (m) => console.log(m),
     },
     paused: async () => { const v = (await db.getSettings().catch(() => ({} as Record<string, unknown>))).paused; return v === true || v === 'true'; },
+  });
+  // Telegram voice notes: the bot queues clips in voice_notes; transcribed here with config/models.yaml `transcription:`.
+  const voiceNotes = startVoiceNotes({
+    ...supabaseVoiceNoteDeps(sb),
+    transcribe: (audio, type) => transcribeAudio(audio, type, { cfg: loadModelsConfig(), env: workerEnv() }),
+    warn: (m) => console.warn(m),
   });
 
   const server = createHttpServer({
@@ -105,6 +113,7 @@ async function main() {
     server.close();
     stopSalesBackground(salesTimers);
     clearInterval(gmailSender);
+    clearInterval(voiceNotes);
     await loop.stop();
     process.exit(0);
   };
