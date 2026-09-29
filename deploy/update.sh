@@ -72,18 +72,18 @@ wait_healthy() {
 if $HEALTH_ONLY; then wait_healthy; exit $?; fi
 
 # One deploy at a time (manual + GitHub Action).
-exec 9>"${TMPDIR:-/tmp}/rizehubhq-update.lock"
+exec 9>"${TMPDIR:-/tmp}/rizehubhq-update-$(id -u).lock"
 flock -n 9 || die "another update is running"
 
 # ---------- validate .env, split per service (inside a node container: no Node needed on the host) ----------
 node_run() { docker run --rm -u "$(id -u):$(id -g)" -v "${APP_DIR}:/app:$1" -w /app node:22-alpine node "${@:2}"; }
-fail_env() { cat /tmp/rizehubhq-check-env.log; git reset --quiet --hard "$PREV_SHA"; die "$1; code reset to ${PREV_SHA:0:7}, nothing deployed"; }
+fail_env() { cat "${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log"; git reset --quiet --hard "$PREV_SHA"; die "$1; code reset to ${PREV_SHA:0:7}, nothing deployed"; }
 prepare_env() {
-  node_run ro scripts/check-env.mjs --file .env --production >/tmp/rizehubhq-check-env.log 2>&1 || fail_env ".env check failed"
+  node_run ro scripts/check-env.mjs --file .env --production >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env ".env check failed"
   # Each container gets only its own variables (the dashboard never sees the service-role or vault key).
-  node_run rw scripts/split-env.mjs --in .env >/tmp/rizehubhq-check-env.log 2>&1 || fail_env "splitting .env failed"
+  node_run rw scripts/split-env.mjs --in .env >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env "splitting .env failed"
   chmod 600 .env.dashboard .env.bot .env.worker
-  node_run ro scripts/check-env.mjs --split --production --file .env >/tmp/rizehubhq-check-env.log 2>&1 || fail_env "per-service env files failed the check"
+  node_run ro scripts/check-env.mjs --split --production --file .env >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env "per-service env files failed the check"
   bash "${APP_DIR}/deploy/fix-perms.sh" || log "warning: deploy/fix-perms.sh failed (brain/ or workspaces ownership); continuing"
 }
 
