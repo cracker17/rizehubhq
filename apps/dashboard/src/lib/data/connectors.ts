@@ -20,7 +20,9 @@ export interface ConnectorView {
   catalog: string | null;
   url: string | null;
   tools: ToolView[];
-  kind: 'gmail' | 'mcp';
+  kind: 'gmail' | 'mcp' | 'ical';
+  /** Calendars (kind 'ical'): non-secret facts only. The secret iCal address itself is sealed in the worker. */
+  calendar: { host: string | null; calendarName: string | null; timezone: string | null } | null;
   name: string;
   account_email: string | null;
   status: ConnectorStatus;
@@ -50,9 +52,15 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
       connectors: [{
         id: 'demo-gmail', kind: 'gmail', catalog: 'gmail', url: null, tools: [], name: 'Main inbox', account_email: 'you@gmail.com', status: 'active', mode: 'read',
         agents: ['coo', 'sales'], last_checked_at: new Date().toISOString(), last_used_at: null, last_error: null, created_at: new Date().toISOString(),
+        calendar: null,
+      }, {
+        id: 'demo-calendar', kind: 'ical', catalog: 'google_calendar', url: null, tools: [], name: 'CEO calendar', account_email: null, status: 'active', mode: 'read',
+        agents: ['coo'], last_checked_at: new Date().toISOString(), last_used_at: new Date().toISOString(), last_error: null, created_at: new Date().toISOString(),
+        calendar: { host: 'calendar.google.com', calendarName: 'RizeHub CEO', timezone: 'Asia/Manila' },
       }, {
         id: 'demo-magnific', kind: 'mcp', catalog: 'magnific', url: 'https://mcp.magnific.com', name: 'Magnific', account_email: null, status: 'active', mode: 'read',
         agents: ['designer'], last_checked_at: new Date().toISOString(), last_used_at: null, last_error: null, created_at: new Date().toISOString(),
+        calendar: null,
         tools: [
           { name: 'search_stock', description: 'Search stock photos, vectors and videos.', policy: 'allow', locked: null, badges: [], review: false, annotations: { readOnlyHint: true } },
           { name: 'generate_image', description: 'Generate an image from a prompt. Spends credits.', policy: 'ask', locked: null, badges: ['credits'], review: false },
@@ -81,10 +89,13 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
     mode: 'live',
     totpOn: Boolean(state?.factorId),
     agents: (agents.data ?? []) as { id: string; name: string }[],
-    connectors: ((rows.data ?? []) as (Omit<ConnectorView, 'mode' | 'agents' | 'catalog' | 'tools'> & { catalog_key: string | null; settings: { mode?: GmailMode } | null })[]).map((r) => ({
+    connectors: ((rows.data ?? []) as (Omit<ConnectorView, 'mode' | 'agents' | 'catalog' | 'tools' | 'calendar'> & { catalog_key: string | null; settings: { mode?: GmailMode; host?: string; calendar_name?: string; timezone?: string } | null })[]).map((r) => ({
       id: r.id, kind: r.kind, catalog: r.catalog_key, url: r.url, tools: toolsBy.get(r.id) ?? [], name: r.name, account_email: r.account_email, status: r.status,
       mode: r.settings?.mode === 'read_draft_send' || r.settings?.mode === 'read_draft' ? r.settings.mode : 'read', agents: byConnector.get(r.id) ?? [],
       last_checked_at: r.last_checked_at, last_used_at: r.last_used_at, last_error: r.last_error, created_at: r.created_at,
+      calendar: r.kind === 'ical'
+        ? { host: r.settings?.host ?? null, calendarName: r.settings?.calendar_name ?? null, timezone: r.settings?.timezone ?? null }
+        : null,
     })),
     error: rows.error?.message ?? grants.error?.message,
   };

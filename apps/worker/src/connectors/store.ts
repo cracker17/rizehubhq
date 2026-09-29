@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fromPgBytea, toPgBytea, type Sealed } from '../vault/crypto';
 
-export type ConnectorKind = 'gmail' | 'mcp';
+export type ConnectorKind = 'gmail' | 'mcp' | 'ical';
 export type ConnectorStatus = 'active' | 'needs_reauth' | 'error' | 'disabled';
 export interface GmailSettings { mode?: 'read' | 'read_draft' | 'read_draft_send' }
 

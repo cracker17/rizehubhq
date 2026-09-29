@@ -7,7 +7,9 @@ import { researchTools } from './research';
 import { brainWriteTools } from './brainWrite';
 import { salesTools } from './sales';
 import { gmailTools } from './gmail';
+import { calendarTools } from './calendar';
 
 // salesTools returns nothing for any role but `sales` (and the runner only exposes names listed in the role file).
-// First factory wins a name: gmailTools (connected Gmail accounts) comes before researchTools (old placeholders).
-export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools, devTools, gmailTools, researchTools, brainWriteTools, salesTools];
+// First factory wins a name: gmailTools (connected Gmail accounts) and calendarTools (connected calendars) come before
+// researchTools (old placeholders).
+export const TOOL_FACTORIES: ToolFactory[] = [vaultTools, rizehubTools, devTools, gmailTools, calendarTools, researchTools, brainWriteTools, salesTools];

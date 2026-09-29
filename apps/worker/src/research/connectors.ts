@@ -145,7 +145,8 @@ export interface GoogleWorkspacePort {
 
 export const GOOGLE_NOT_CONFIGURED = 'Google OAuth is not configured on the worker (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, '
   + 'GOOGLE_OAUTH_REFRESH_TOKEN). The Calendar tool is not connected. Do NOT ask the CEO to type the calendar for you: '
-  + 'continue without it and say in your output that the calendar needs connecting in Admin → Connectors.';
+  + 'continue without it and say in your output that the calendar needs connecting in Admin → Connectors → Calendars.';
+// (calendar_read itself now lives in tools/calendar.ts, which shadows the placeholder in tools/research.ts.)
 
 export function googleWorkspace(env: Env): GoogleWorkspacePort {
   const configured = !!(env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET && env.GOOGLE_OAUTH_REFRESH_TOKEN);

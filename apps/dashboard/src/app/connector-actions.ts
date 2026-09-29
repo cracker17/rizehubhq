@@ -85,9 +85,33 @@ export async function testConnectorAction(input: { id: string }): Promise<Connec
   const ceo = await requireCeo();
   if ('error' in ceo) return { ok: false, error: ceo.error };
   if (ceo.demo) return { ok: true, working: true, message: 'Demo mode: pretending the login works.' };
-  const r = await callWorker<{ ok: boolean; error?: string }>('/connectors/test', { id: input.id });
+  const r = await callWorker<{ ok: boolean; error?: string; message?: string }>('/connectors/test', { id: input.id }, 45_000);
   if (r.status !== 200) return { ok: false, error: r.body.error ?? 'Test failed.' };
-  return { ok: true, working: Boolean(r.body.ok), message: r.body.ok ? 'Signed in to Gmail successfully.' : (r.body.error ?? 'Gmail refused the login.') };
+  return {
+    ok: true, working: Boolean(r.body.ok),
+    message: r.body.ok ? (r.body.message ?? 'Signed in to Gmail successfully.') : (r.body.error ?? 'Gmail refused the login.'),
+  };
+}
+
+// ---------- Calendars (Google Calendar secret iCal address, read-only) ----------
+/**
+ * The secret address is a credential (anyone holding it can read the calendar): it goes browser → here → worker, which
+ * test-reads it, seals it and stores it. It is never stored in a readable column, logged or sent back.
+ */
+export async function addCalendarAction(input: { url: string; name?: string; agents: string[]; totp?: string | null }): Promise<ConnectorResult<{ id: string; name: string; events: number }>> {
+  const url = String(input.url ?? '').trim();
+  if (!url) return { ok: false, error: 'Paste the calendar’s secret address.' };
+  if (url.length > 2000) return { ok: false, error: 'That address is too long.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const step = await stepUpIfEnrolled(ceo.db, input.totp);
+  if (!step.ok) return step;
+  const r = await callWorker<{ id: string; name: string; events: number }>('/connectors/ical/add', {
+    url, name: String(input.name ?? '').trim().slice(0, 120) || undefined, agents: agentsOf(input.agents),
+  }, 45_000);
+  if (r.status !== 200 || !('id' in r.body)) return { ok: false, error: r.body.error ?? 'Could not add the calendar.' };
+  return { ok: true, id: r.body.id, name: r.body.name, events: r.body.events };
 }
 
 export async function setConnectorAgentsAction(input: { id: string; agents: string[]; totp?: string | null }): Promise<ConnectorResult> {

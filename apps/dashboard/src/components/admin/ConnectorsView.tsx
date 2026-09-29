@@ -1,5 +1,5 @@
 'use client';
-// Admin → Connectors (docs/15, docs/06 §11): Gmail accounts now; MCP apps (sign-in wizard) next.
+// Admin → Connectors (docs/15, docs/06 §11): Gmail accounts, Calendars (Google Calendar secret iCal address), MCP apps.
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
@@ -13,6 +13,7 @@ import { Dialog, Field, btn, inputCls, relTime } from '@/components/clients/ui';
 import { StepUpDialog, type StepUpRequest } from '@/components/StepUpDialog';
 import { useHq } from '@/lib/data/store';
 import { AppsSection } from './AppsSection';
+import { CalendarsSection } from './CalendarsSection';
 
 const STATUS: Record<ConnectorView['status'], { label: string; color: string }> = {
   active: { label: 'Connected', color: 'var(--color-success)' },
@@ -292,6 +293,8 @@ export function ConnectorsView({ page, connected, mcpError }: { page: Connectors
           </ul>
         )}
       </section>
+
+      <CalendarsSection page={page} run={run} test={test} busy={busy} toast={toast} refresh={() => router.refresh()} />
 
       <AppsSection page={page} run={run} toast={toast} refresh={() => router.refresh()} openToolsFor={connected ?? null} />
 
