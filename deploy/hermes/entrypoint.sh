@@ -11,7 +11,8 @@ HERMES_HOME="${HERMES_HOME:-/data/hermes}"
 : "${HQ_MCP_TOKEN:?HQ_MCP_TOKEN is empty: set HQ_MCP_TOKEN_<AGENT> in the master .env and run scripts/split-env.mjs}"
 : "${HERMES_MODEL:?HERMES_MODEL is empty: set HERMES_MODEL (or HERMES_MODEL_<AGENT>) in the master .env}"
 : "${HQ_MCP_URL:=http://hq-worker:4000/mcp}"
-export HQ_MCP_URL
+: "${HERMES_PROVIDER:=openrouter}"
+export HQ_MCP_URL HERMES_PROVIDER
 
 if [ ! -f /etc/hermes-hq/config.yaml ]; then
   echo "missing /etc/hermes-hq/config.yaml (mount deploy/hermes/<agent>/config.yaml)" >&2
@@ -27,6 +28,7 @@ cp /etc/hermes-hq/config.yaml "$HERMES_HOME/config.yaml"
   echo "API_SERVER_HOST=${API_SERVER_HOST:-0.0.0.0}"
   echo "API_SERVER_PORT=${API_SERVER_PORT:-8642}"
   echo "API_SERVER_KEY=${API_SERVER_KEY}"
+  if [ -n "${OPENROUTER_API_KEY:-}" ]; then echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}"; fi
   if [ -n "${ANTHROPIC_API_KEY:-}" ]; then echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"; fi
   if [ -n "${OPENAI_API_KEY:-}" ]; then echo "OPENAI_API_KEY=${OPENAI_API_KEY}"; fi
 } > "$HERMES_HOME/.env"

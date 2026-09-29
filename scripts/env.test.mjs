@@ -46,16 +46,17 @@ test('check-env: a dashboard file with SUPABASE_SERVICE_ROLE_KEY or VAULT_MASTER
 });
 
 test('split: .env.hermes-<agent> only for configured agents, with only its own key/token + model provider key', () => {
-  const master = `${MASTER}\nANTHROPIC_API_KEY=sk-ant-${'x'.repeat(30)}\nHERMES_MODEL=claude-sonnet-5\nHERMES_MODEL_WEB_DEV=claude-opus-5-5\n`
+  const master = `${MASTER}\nOPENROUTER_API_KEY=sk-or-v1-${'x'.repeat(30)}\nHERMES_PROVIDER=openrouter\nHERMES_MODEL=moonshotai/kimi-k2.6\nHERMES_MODEL_WEB_DEV=anthropic/claude-sonnet-5\n`
     + `HERMES_URL_WEB_DEV=http://hermes-web-dev:8642\nHERMES_KEY_WEB_DEV=${'k'.repeat(64)}\nHQ_MCP_TOKEN_WEB_DEV=${'t'.repeat(64)}\n`
     + `HERMES_KEY_WRITER=${'w'.repeat(64)}\nHQ_MCP_TOKEN_SALES=${'s'.repeat(64)}\n`;
   const env = parseEnv(master);
   const files = splitHermesEnv(env);
   assert.deepEqual(Object.keys(files), ['.env.hermes-web-dev'], 'writer/sales lack a key or token');
   const h = parseEnv(files['.env.hermes-web-dev']);
-  assert.deepEqual([...h.keys()].sort(), ['ANTHROPIC_API_KEY', 'API_SERVER_KEY', 'HERMES_MODEL', 'HQ_MCP_TOKEN', 'TZ']);
+  assert.deepEqual([...h.keys()].sort(), ['API_SERVER_KEY', 'HERMES_MODEL', 'HERMES_PROVIDER', 'HQ_MCP_TOKEN', 'OPENROUTER_API_KEY', 'TZ']);
   assert.equal(h.get('API_SERVER_KEY'), 'k'.repeat(64));
-  assert.equal(h.get('HERMES_MODEL'), 'claude-opus-5-5');
+  assert.equal(h.get('HERMES_MODEL'), 'anthropic/claude-sonnet-5');
+  assert.equal(h.get('HERMES_PROVIDER'), 'openrouter');
   const w = parseEnv(splitEnv(env).worker);
   for (const k of ['HERMES_URL_WEB_DEV', 'HERMES_KEY_WEB_DEV', 'HQ_MCP_TOKEN_WEB_DEV', 'HERMES_MODEL']) assert.ok(w.has(k), k);
 });

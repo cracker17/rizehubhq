@@ -114,10 +114,15 @@ export function parseFinalAnswer(text: string): FinalAnswer {
   };
 }
 
-/** Provider + model to price Hermes usage with (docs/14 prices). Unknown → unpriced ($0, flagged in the usage detail). */
+/**
+ * Provider + model to price Hermes usage with (docs/14 prices). A vendor/model id is an OpenRouter model (Hermes'
+ * default provider): priced like the router's OpenRouter models (known price, else the mid-tier fallback; `:free` = $0).
+ * Unknown → unpriced ($0, flagged in the usage detail).
+ */
 export function hermesPricing(responseModel: string | null, configured: string | null): { provider: string; modelId: string } {
   for (const m of [responseModel, configured]) {
     if (!m) continue;
+    if (/^[\w.-]+\/[\w.:-]+$/.test(m)) return { provider: 'openrouter', modelId: m };
     const id = m.replace(/^(anthropic|openai)[/:]/, '');
     if (/^claude-/.test(id)) return { provider: 'anthropic', modelId: id };
     if (/^(gpt-|o\d)/.test(id)) return { provider: 'openai', modelId: id };

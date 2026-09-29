@@ -13,6 +13,7 @@ import type { WorkerDeps } from '../deps';
 import { createHqMcpRoutes } from './mcp';
 import { activeHermesLease } from './mcpState';
 import { hermesPricing, parseFinalAnswer } from './runner';
+import { costUsd } from '../models/usage';
 import { completion, deadUrl, startMockHermes, type MockHandler } from './testServer';
 
 const KEY = 'hermes-writer-api-key';
@@ -215,7 +216,15 @@ test('parseFinalAnswer / hermesPricing', () => {
   const rec = parseFinalAnswer('{"summary":"s","criteria_map":{"a":"b"}}');
   assert.deepEqual(rec.kind === 'output' && rec.output.criteria_map, { a: 'b' });
   assert.equal(parseFinalAnswer('  ').kind, 'empty');
-  assert.deepEqual(hermesPricing('anthropic/claude-haiku-5', null), { provider: 'anthropic', modelId: 'claude-haiku-5' });
+  // vendor/model = OpenRouter (Hermes' default provider): priced, never silently $0 unless it is a :free model
+  assert.deepEqual(hermesPricing('anthropic/claude-haiku-5', null), { provider: 'openrouter', modelId: 'anthropic/claude-haiku-5' });
+  assert.deepEqual(hermesPricing('hermes-agent', 'moonshotai/kimi-k2.6'), { provider: 'openrouter', modelId: 'moonshotai/kimi-k2.6' });
+  const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
+  const cost = (m: string) => { const p = hermesPricing('hermes-agent', m); return costUsd(p.provider, p.modelId, usage); };
+  assert.equal(cost('moonshotai/kimi-k2.6'), 0.95 + 4, 'known model: its own price');
+  assert.equal(cost('anthropic/claude-sonnet-5'), 2 + 10);
+  assert.ok(cost('some-lab/unknown-model') > 0, 'unknown paid model: fallback price, not free');
+  assert.equal(cost('meta-llama/llama-4:free'), 0);
   assert.deepEqual(hermesPricing('hermes-agent', 'claude-sonnet-5'), { provider: 'anthropic', modelId: 'claude-sonnet-5' });
   assert.equal(hermesPricing('hermes-agent', null).provider, 'hermes');
 });

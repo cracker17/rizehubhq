@@ -4,10 +4,16 @@
 # ${VAR} placeholders are resolved by Hermes from the container env (.env.hermes-writer, made by scripts/split-env.mjs).
 # Secrets are NOT in this file: API_SERVER_KEY and the provider key go to $HERMES_HOME/.env (entrypoint.sh).
 
-# Model: Anthropic, model id from HERMES_MODEL_WRITER or HERMES_MODEL (e.g. claude-sonnet-5).
+# Model: provider from HERMES_PROVIDER (openrouter by default; anthropic / openai also work), model id from
+# HERMES_MODEL_<AGENT> or HERMES_MODEL (OpenRouter ids are vendor/model, e.g. moonshotai/kimi-k2.6).
 model:
-  provider: anthropic
+  provider: ${HERMES_PROVIDER}
   default: ${HERMES_MODEL}
+
+# OpenRouter only (ignored by other providers): cheapest healthy backend, never one that trains on our prompts.
+provider_routing:
+  sort: "price"
+  data_collection: "deny"
 
 # Commands run inside this container only (local backend). No Docker backend: the container has no Docker socket.
 terminal:

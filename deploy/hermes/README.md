@@ -30,13 +30,18 @@ worker (hq-worker) ──POST /v1/chat/completions (Bearer HERMES_KEY_<AGENT>)�
    HERMES_URL_WEB_DEV=http://hermes-web-dev:8642
    HERMES_KEY_WEB_DEV=<random>        # becomes that container's API_SERVER_KEY
    HQ_MCP_TOKEN_WEB_DEV=<random>      # that container's token for the worker's /mcp endpoint
-   HERMES_MODEL=claude-sonnet-…       # Anthropic model id for Hermes (HERMES_MODEL_WEB_DEV overrides per agent)
-   ANTHROPIC_API_KEY=sk-ant-…         # Hermes uses the same provider key
+   HERMES_PROVIDER=openrouter         # default; anthropic / openai also work (then set that provider's key)
+   HERMES_MODEL=moonshotai/kimi-k2.6  # OpenRouter vendor/model id (HERMES_MODEL_WEB_DEV overrides per agent)
+   OPENROUTER_API_KEY=sk-or-…         # the key the worker already uses; OpenRouter needs credits for non-:free models
    ```
    Same for `DESIGNER`, `WRITER`, `SALES`. Leave an agent's values empty to keep it on the built-in runner.
+   The worker prices Hermes usage from the model id (vendor/model → OpenRouter price, unknown paid model → the
+   $2/$10 fallback), so Hermes spend counts toward `MONTHLY_BUDGET_USD` like any other paid call. Set a credit limit on
+   the OpenRouter key too (openrouter.ai → Keys): that is the hard stop. The config asks OpenRouter for the cheapest
+   provider that does not train on prompts (`provider_routing`).
 2. **Split:** `node scripts/split-env.mjs` writes `.env.hermes-<agent>` (mode 600) for every agent whose
    `HERMES_KEY_<AGENT>` and `HQ_MCP_TOKEN_<AGENT>` are set. Each file holds only `API_SERVER_KEY`, `HQ_MCP_TOKEN`,
-   `HERMES_MODEL`, the model provider key(s) and `TZ`. The worker keeps `HERMES_URL_*`, `HERMES_KEY_*`, `HQ_MCP_TOKEN_*`.
+   `HERMES_MODEL`, `HERMES_PROVIDER`, the model provider key(s) and `TZ`. The worker keeps `HERMES_URL_*`, `HERMES_KEY_*`, `HQ_MCP_TOKEN_*`.
 3. **Build and start** (the services are opt-in, profile `hermes`):
    ```bash
    docker compose --profile hermes build hermes-web-dev      # all four share one image
@@ -55,7 +60,7 @@ step 3 again.
 |---|---|
 | `Dockerfile` | Debian slim + Hermes via its `install.sh --non-interactive --skip-browser --skip-computer-use` (see the note in the file) |
 | `entrypoint.sh` | Copies `<agent>/config.yaml` into `$HERMES_HOME`, writes `$HERMES_HOME/.env` (API server + provider key), runs `hermes gateway` |
-| `<agent>/config.yaml` | Model (`provider: anthropic`, `default: ${HERMES_MODEL}`), `terminal.backend: local`, `mcp_servers.hq` → `${HQ_MCP_URL}` with `Bearer ${HQ_MCP_TOKEN}` |
+| `<agent>/config.yaml` | Model (`provider: ${HERMES_PROVIDER}`, `default: ${HERMES_MODEL}`, OpenRouter `provider_routing`), `terminal.backend: local`, `mcp_servers.hq` → `${HQ_MCP_URL}` with `Bearer ${HQ_MCP_TOKEN}` |
 
 The templates are the source of truth: they are copied on every start, so `hermes config set` inside a container
 does not survive a restart. Edit the file in the repo instead.
@@ -72,4 +77,7 @@ does not survive a restart. Edit the file in the repo instead.
   `docker-compose.yml` (keep everything else).
 - **Egress.** The `hermes` network is not `internal` because Hermes must reach the model provider API over HTTPS.
   Nothing is published to the host; add an egress proxy/firewall rule if you want to limit outbound hosts.
+- **`provider: ${HERMES_PROVIDER}`.** `${VAR}` placeholders already work for `model.default` and the MCP URL; check
+  on the first start (`docker compose exec hermes-web-dev hermes config show`) that the provider resolves to
+  `openrouter`. If it doesn't, write `provider: openrouter` literally in the four config.yaml files.
 - **Chat `model` field.** The worker sends `"model": "hermes-agent"`; Hermes uses the model from its config.yaml.

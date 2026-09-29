@@ -154,6 +154,7 @@ export const VARS = [
     S({ key: `HERMES_MODEL_${s}`, group: 'Hermes', svc: ['worker'], check: (v) => (/^[\w./:-]+$/.test(v) ? null : 'must be a model id like claude-sonnet-5') }),
   ]),
   S({ key: 'HERMES_MODEL', group: 'Hermes', svc: ['worker'], check: (v) => (/^[\w./:-]+$/.test(v) ? null : 'must be a model id like claude-sonnet-5') }),
+  S({ key: 'HERMES_PROVIDER', group: 'Hermes', svc: ['worker'], check: (v) => (['openrouter', 'anthropic', 'openai'].includes(v) ? null : 'must be openrouter | anthropic | openai') }),
   S({ key: 'HERMES_FALLBACK', group: 'Hermes', svc: ['worker'], check: (v) => (['on', 'off'].includes(v.toLowerCase()) ? null : 'must be on | off') }),
   S({ key: 'HERMES_TIMEOUT_MS', group: 'Hermes', svc: ['worker'], check: intIn(10_000) }),
   // Telegram
