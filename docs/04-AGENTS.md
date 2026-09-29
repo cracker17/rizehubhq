@@ -16,7 +16,9 @@
 
 Ids: `coo`, `web-dev`, `designer`, `writer`, `sales`, `qa-lead`. `runtime` (role front-matter + `agents.runtime`): `worker` = the
 AI SDK runner in `apps/worker` (COO, QA); `hermes` = a Hermes Agent instance (Web Developer, Graphic Designer, Content Writer, Sales
-Agent; until that runtime lands they run on the worker runner too). The team was 22 agents until migration
+Agent; until that runtime lands they run on the worker runner too); `claude` = the Claude Agent SDK inside the worker (opt-in, no agent
+uses it by default; needs `CLAUDE_RUNTIME_ENABLED`, `ANTHROPIC_API_KEY` and a monthly budget, see docs/05 "Claude runtime"). Every
+runtime falls back to the worker runner when it is not available. The team was 22 agents until migration
 `20260928080000_six_agent_roster.sql`, which moved their work to these six. Video editing and sound/voice work types were dropped.
 
 ## Role file format — `agents/<id>.md`
@@ -29,7 +31,7 @@ id: web-dev
 name: Web Developer
 department: dev
 model_role: dev            # lead | dev | design | writer | sales | qa → resolved via config/models.yaml (see 14)
-runtime: hermes            # worker | hermes
+runtime: hermes            # worker | hermes | claude
 max_turns: 60
 budget_usd_per_task: 1.50
 tools: [brain_read, workspace_fs, bash_sandboxed, github, shopify_theme, report_progress, submit_output, ask_ceo]

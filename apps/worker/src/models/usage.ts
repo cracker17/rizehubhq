@@ -159,6 +159,9 @@ export interface ModelPickerOptions {
   dailyBudgetUsd?: number | null;
 }
 
+/** Paid-spend figures at one moment (Asia/Manila month/day). dailyBudgetUsd null / 0 = no daily cap. */
+export interface SpendSnapshot { monthlyBudgetUsd: number; spentThisMonthUsd: number; dailyBudgetUsd: number | null; spentTodayUsd: number }
+
 /** What the worker loop learned about today's total spend (GlobalDailyBudget.check()). */
 export interface DailySpendUpdate { day: string; spentUsd: number; budgetUsd: number | null }
 
@@ -227,6 +230,23 @@ export class ModelPicker {
       return { error: e instanceof Error ? e.message : String(e) };
     }
   }
+
+  /** Current paid-spend figures (Claude runtime budget cap). */
+  spendSnapshot = (): SpendSnapshot => {
+    this.rollDay();
+    return {
+      monthlyBudgetUsd: this.opts.monthlyBudgetUsd, spentThisMonthUsd: this.spentThisMonthUsd,
+      dailyBudgetUsd: this.dailyBudgetUsd, spentTodayUsd: this.spentTodayUsd,
+    };
+  };
+
+  /** Adds spend made outside pick()/recordCall (a Claude runtime run) to the month and day totals. */
+  addSpend = (usd: number): void => {
+    this.rollDay();
+    if (!Number.isFinite(usd) || usd <= 0) return;
+    this.spentThisMonthUsd += usd;
+    this.spentTodayUsd += usd;
+  };
 
   /** Feeds today's DB total (and the resolved cap) from the loop's budget check. Never lowers today's figure. */
   setDailySpend(u: DailySpendUpdate): void {

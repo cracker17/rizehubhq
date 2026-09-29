@@ -15,6 +15,7 @@ import { answerChat } from './chat';
 import type { WorkerDeps } from './deps';
 import { setMcpDeps } from './hermes/mcp';
 import { hermesStartupReport } from './hermes/config';
+import { claudeStartupReport } from './claude/config';
 import { startSalesBackground, stopSalesBackground } from './sales/background';
 import { listApprovedGmailSends, startGmailSender } from './connectors/gmailSend';
 import { executeApprovedMcpCalls, listApprovedMcpCalls } from './connectors/mcpExecute';
@@ -88,12 +89,16 @@ async function main() {
     agentsDir: config.agentsDir, qaThreshold: config.qaThreshold,
     get monthlyBudgetUsd() { return activePicker.settings.monthlyBudgetUsd; },
     onProviderQuota: (p, detail) => activePicker.markExhausted(p, detail),
+    spend: activePicker.spendSnapshot, recordSpend: activePicker.addSpend, // Claude runtime budget cap (dashboard-aware)
     storage: defaultStorageEnv(), // save_file + automatic save of QA-passed deliverables (docs/15 §6)
   };
-  setMcpDeps(deps); // HQ MCP tool server for Hermes agents (POST /mcp)
+  setMcpDeps(deps); // HQ MCP tool server for Hermes and Claude agents (POST /mcp)
   const hermes = hermesStartupReport(roles, workerEnv());
   console.log(hermes.line);
   for (const w of hermes.warnings) console.warn(w);
+  const claude = claudeStartupReport(roles, workerEnv(), ai.monthlyBudgetUsd);
+  console.log(claude.line);
+  for (const w of claude.warnings) console.warn(w);
   console.log(`[worker] ${roles.length} agents · profile "${ai.profile}" (${ai.profileSource}) · budget $${ai.monthlyBudgetUsd}/month (${ai.monthlySource})`
     + `${ai.dailyBudgetUsd !== null ? ` · $${ai.dailyBudgetUsd}/day (${ai.dailySource})` : ''}`
     + `${runtime.snapshot?.keys.length ? ` · ${runtime.snapshot.keys.length} dashboard key(s)` : ''}`

@@ -3,7 +3,7 @@ import path from 'node:path';
 import YAML from 'yaml';
 import type { Brain } from './brain';
 import type { HqDb } from './hqdb';
-import type { PickModel, PickedModel, TokenUsage } from './models/usage';
+import type { PickModel, PickedModel, SpendSnapshot, TokenUsage } from './models/usage';
 import type { Role } from './roles';
 import type { StorageEnv } from './connectors/storage';
 
@@ -22,7 +22,11 @@ export interface WorkerDeps {
   monthlyBudgetUsd?: number;
   /** Called on a quota-type provider error so the picker can fall back (a 404/413 blocks only `modelId`). */
   onProviderQuota?: (provider: string, detail?: { modelId?: string; error?: unknown }) => void;
-  log?: (msg: string, extra?: unknown) => void;
+  /** Live paid-spend figures (ModelPicker.spendSnapshot): the Claude runtime caps a run at what the month/day have left. */
+  spend?: () => SpendSnapshot;
+  /** Adds spend made outside the picker (Claude runtime runs) to its in-memory month/day totals. */
+  recordSpend?: (usd: number) => void;
+  log?:(msg: string, extra?: unknown) => void;
   now?: () => Date;
   /**
    * The CEO's storage (Google Drive / Dropbox, docs/15 §6) for save_file and the automatic save of QA-passed deliverables.

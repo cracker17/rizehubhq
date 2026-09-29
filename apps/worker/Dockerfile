@@ -24,8 +24,12 @@ COPY apps/worker/package.json apps/worker/
 COPY apps/bot/package.json apps/bot/
 COPY packages/shared/package.json packages/shared/
 # Worker + its workspace deps only. Dev deps are kept on purpose: the worker runs TypeScript through tsx.
+# @anthropic-ai/claude-agent-sdk (Claude runtime, docs/05) ships Claude Code as a native binary in a per-platform optional
+# package (~240 MB; linux-x64 = glibc, which this Ubuntu image has). pnpm 9's lockfile has no libc field, so the musl
+# build may be installed too: it is never used here, so it is removed in the same layer.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --offline --frozen-lockfile --filter "worker..."
+    pnpm install --offline --frozen-lockfile --filter "worker..." \
+ && rm -rf node_modules/.pnpm/@anthropic-ai+claude-agent-sdk-linux-*-musl@*
 
 COPY packages/shared packages/shared
 COPY apps/worker apps/worker

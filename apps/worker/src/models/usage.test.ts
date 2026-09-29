@@ -171,3 +171,18 @@ test('429: a daily quota (Gemini free: 20/day per model) skips that model until 
   now = new Date('2026-09-29T16:30:00Z'); // 00:30 on 30 Sep in Manila
   assert.equal(await id(), 'google:flash', 'daily quotas reset with the Manila day');
 });
+
+test('ModelPicker spend snapshot + addSpend (Claude runtime runs count toward the month and the day)', async () => {
+  const { ModelPicker } = await import('./usage');
+  const s = ['google:flash'];
+  const cfg = { active_profile: 'free', transcription: [], daily_request_caps: {}, profiles: { free: { lead: s, specialist: s, dev: s, reports: s, qa: s, light: s } } };
+  let now = new Date('2026-09-29T02:00:00Z');
+  const picker = new ModelPicker({ cfg, env: {}, monthlyBudgetUsd: 30, spentThisMonthUsd: 12, dailyBudgetUsd: 3, create: async () => ({}) as never, now: () => now });
+  picker.addSpend(0.75);
+  picker.addSpend(-1);
+  picker.addSpend(Number.NaN);
+  assert.deepEqual(picker.spendSnapshot(), { monthlyBudgetUsd: 30, spentThisMonthUsd: 12.75, dailyBudgetUsd: 3, spentTodayUsd: 0.75 });
+  now = new Date('2026-09-30T02:00:00Z'); // next Manila day
+  assert.equal(picker.spendSnapshot().spentTodayUsd, 0);
+  assert.equal(picker.spendSnapshot().spentThisMonthUsd, 12.75);
+});

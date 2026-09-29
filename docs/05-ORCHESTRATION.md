@@ -201,7 +201,8 @@ deploy: `deploy/hermes/README.md`). The worker still claims the task, heartbeats
    plus a short "Running on Hermes" note. `X-Hermes-Session-Id` = task id (the transcript continues across revisions),
    `X-Hermes-Session-Key` = agent id (long-term memory per employee).
 2. Hermes runs its own tool loop. HQ tools come from the worker's MCP endpoint `POST /mcp` (Streamable HTTP, JSON-RPC:
-   initialize, tools/list, tools/call). Bearer `HQ_MCP_TOKEN_<AGENT>` → agent → only that role's tools (`buildTools`).
+   initialize, tools/list, tools/call). Bearer `HQ_MCP_TOKEN_<AGENT>` → agent → only that role's tools (`buildTools`) plus
+   the connected MCP apps granted to that agent (`loadMcpTools`, docs/15; "Ask me" tools still queue an `mcp.call` approval).
    Calls act on the agent's current `working` task (resolved server-side from `agents.current_task_id`, or the
    `task_id` argument); gated tools create approvals exactly as in the built-in runner. Each call → activity
    `mcp.tool_call` (tool, ok, ms, run_id; never arguments). Every call must also carry the attempt's `run_id` (see
@@ -230,6 +231,57 @@ deploy: `deploy/hermes/README.md`). The worker still claims the task, heartbeats
 
 Hermes holds no publish/send/platform credentials: vault logins, RizeHub keys and platform tokens stay in the worker
 and are only used by HQ tools.
+
+### Claude runtime (Claude Agent SDK; opt-in, no agent uses it by default)
+Agents with `runtime: claude` (role file + roster) run on the Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`,
+`apps/worker/src/claude/`) inside the worker: `query()` spawns the bundled Claude Code binary for one task. The worker
+still claims the task, heartbeats and reports progress.
+1. **When**: only if `CLAUDE_RUNTIME_ENABLED=true`, `ANTHROPIC_API_KEY` is set (Console API key; the Agent SDK must not use
+   a claude.ai login), `MONTHLY_BUDGET_USD > 0` with at least $0.05 left this month and today (daily AI budget), and an
+   Anthropic model resolves (docs/14 "Claude runtime"). Otherwise the task runs on the built-in runner and activity
+   `claude.fallback` says "Claude unavailable for <agent>, ran on the built-in runner (<reason>)".
+2. **SDK options**: system prompt = the role file body; prompt = `buildRunPrompt` (same as the other runtimes) + a short
+   "Running on Claude" note; `cwd` = the task workspace `WORKSPACES_DIR/<task-id>` (never the repo); `permissionMode:
+   'dontAsk'` + an explicit `allowedTools` list (never `bypassPermissions`) and `permissionPrompts: 'none'`;
+   `settingSources: []`, `strictMcpConfig`, `persistSession: false` (no user/project settings, CLAUDE.md, skills or other
+   MCP servers are loaded); `maxTurns` = the stricter of `max_turns` / `MAX_STEPS_PER_TASK`; `maxBudgetUsd` = the stricter
+   of the task budget and what is left of the monthly and daily budgets. The Claude Code process gets a replaced env: only
+   PATH/locale/proxy basics, a throwaway HOME / `CLAUDE_CONFIG_DIR` (deleted after the run) and `ANTHROPIC_API_KEY`; no
+   other worker secret. It runs as the worker uid (not the agent uid, which could otherwise read its API key).
+3. **Tools**: HQ tools come only from the worker's own `/mcp` endpoint (`mcpServers.hq`, http, `CLAUDE_HQ_MCP_URL`, default
+   `http://127.0.0.1:<WORKER_HTTP_PORT>/mcp`) with a random per-run bearer token bound to the run lease
+   (`hermes/mcpState.ts issueRunToken`): the token names agent, task and run, so no `task_id`/`run_id` is passed and it is
+   worthless once the run ends. That endpoint serves exactly the agent's `buildTools` + connected MCP apps, so
+   `submit_output`, `ask_ceo`, `request_external_action`, `gmail_*`, `bash_sandboxed` and app tools keep every approval gate.
+   `allowedTools` = those `mcp__hq__<tool>` names. Claude Code's Bash, BashOutput, KillShell, WebFetch, WebSearch,
+   Task/Agent, NotebookEdit and Skill are always disallowed: HQ's `bash_sandboxed` (agent uid, allowlist) is the only shell.
+   Files: `CLAUDE_FILE_TOOLS=hq` (default) = no Claude Code built-ins, files through HQ `workspace_fs` (race-safe jail);
+   `native` = Claude Code's Read/Edit/Write/Glob/Grep for roles with `workspace_fs`, each call checked by a PreToolUse hook
+   (`claude/guard.ts`: inside the workspace, no `..`, no symlink out, no secret-looking files, no `.git` writes, Grep refuses
+   folders holding secret files); written files are chowned to the agent uid. Caveat: those tools open files as the worker
+   uid after the check, so unlike `dev/safefs.ts` they are not race-safe against a symlink swapped in by an agent-uid process
+   between check and open; keep `hq` unless the task needs Claude Code's editing tools. A PreToolUse hook also denies any
+   tool not on the allowed list (a hook deny is final).
+4. **Output**: `submit_output` / `ask_ceo` over MCP stand; otherwise the final `result` text is parsed like a Hermes
+   answer (fenced json → output or `ask_ceo`; plain text → `fallback: true` output). `error_max_turns` / `error_max_budget_usd`
+   fail the task with the built-in runner's reasons (no fallback). Usage → `usage.task` with `detail.runtime = 'claude'`,
+   priced with `PRICES` from the SDK's per-model token totals, and added to the picker's month/day spend.
+5. **Fallback + lease** (same model as Hermes): SDK error, API error result, `error_during_execution` or timeout
+   (`CLAUDE_TIMEOUT_MS`, default 30 min; the SDK's AbortController kills Claude Code) → the lease is revoked first (waiting up
+   to 30 s for HQ calls still running), the Claude Code process is closed, the task is re-read (a submit/ask over MCP
+   stands), then the built-in runner takes over (`claude.fallback`), or the task is re-queued if a call was still running.
+   Worker shutdown → re-queued. No SDK message is read after that, and late MCP calls get "HQ ended this Claude run".
+   Errors, stderr and reasons are redacted of the API key and run token before they are logged or stored.
+
+**Turning it on for one agent** (e.g. web-dev), once the CEO has an Anthropic Console API key and a budget:
+1. `.env.worker`: `ANTHROPIC_API_KEY=…`, `MONTHLY_BUDGET_USD=<cap>` (and `DAILY_AI_BUDGET_USD`), `CLAUDE_RUNTIME_ENABLED=true`;
+   optionally `CLAUDE_MODEL_WEB_DEV=claude-sonnet-5`.
+2. `agents/web-dev.md` front-matter `runtime: claude`, and `agents/roster.yaml` `web-dev: { …, runtime: claude }` (they
+   must match: `pnpm check:roles`); optionally raise `budget_usd_per_task` and `MAX_COST_PER_TASK_USD` / `MAX_STEPS_PER_TASK`.
+3. Dashboard label: `update agents set runtime = 'claude' where id = 'web-dev';` (migration `20260929100000_claude_runtime.sql`
+   allows the value).
+4. Restart the worker; its startup log says `runtime:claude agents on Claude: web-dev`. Undo: set `runtime` back (or
+   `CLAUDE_RUNTIME_ENABLED=false`, which sends every `runtime: claude` agent to the built-in runner).
 
 ## [5] QA
 

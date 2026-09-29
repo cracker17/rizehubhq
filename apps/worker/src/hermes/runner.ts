@@ -161,8 +161,8 @@ export async function runHermesTask(task: TaskRow, deps: WorkerDeps, role: Role,
   return builtin(task, deps, opts);
 }
 
-/** Current state of the task after Hermes returned (it may have finished or paused it through the HQ MCP tools). */
-async function settledByMcp(task: TaskRow, deps: WorkerDeps, costUsd: number): Promise<RunResult | null> {
+/** Current state of the task after Hermes (or Claude) returned (it may have finished or paused it through the HQ MCP tools). */
+export async function settledByMcp(task: TaskRow, deps: WorkerDeps, costUsd: number): Promise<RunResult | null> {
   const cur = await deps.db.getTask(task.id);
   if (!cur || cur.status === 'working') return null;
   if (cur.status === 'qa_pending' || cur.status === 'qa_reviewing') return { status: 'submitted', costUsd, fallback: false };

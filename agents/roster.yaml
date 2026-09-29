@@ -2,7 +2,9 @@
 # Six agents: coo, web-dev, designer, writer, sales, qa-lead. work_type → owning agent.
 # Every work_type has an SOP at brain/sops/<work_type>.md and a QA checklist at brain/qa-checklists/<work_type>.md
 # runtime: worker = Vercel AI SDK runner in apps/worker; hermes = the agent's Hermes Agent instance (deploy/hermes;
-# falls back to the worker runner when that instance is not configured or down). Set per agent in the role file front-matter.
+# falls back to the worker runner when that instance is not configured or down); claude = the Claude Agent SDK in the worker
+# (opt-in: CLAUDE_RUNTIME_ENABLED + ANTHROPIC_API_KEY + a monthly budget, docs/05 "Claude runtime"; falls back likewise).
+# Set per agent in the role file front-matter.
 
 agents:
   coo:      { name: COO,              department: leadership, runtime: worker, model_role: lead }
