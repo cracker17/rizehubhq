@@ -29,6 +29,12 @@ export class BudgetExceededError extends Error {}
  * Payload spec for an agent-proposed external action. Types without a worker executor are marked
  * executor: 'manual' so the dashboard/bot show "you do this after approving" instead of implying automation.
  */
+/** request_external_action's spec as text: strings as given, objects/arrays as readable JSON (capped at 4000 chars). */
+export function specText(spec: unknown): string {
+  const s = typeof spec === 'string' ? spec : JSON.stringify(spec, null, 2) ?? '';
+  return s.length > 4000 ? `${s.slice(0, 3997)}...` : s;
+}
+
 export function externalActionSpec(type: string, spec: string): Record<string, unknown> {
   return WORKER_EXECUTED_ACTIONS.has(type) ? { description: spec, executor: 'worker' } : { description: spec, executor: 'manual' };
 }
@@ -190,10 +196,13 @@ export function buildTools(ctx: ToolContext): ToolSet {
         + 'the CEO carries the action out by hand, exactly as your spec says (RizeHub actions go through the rizehub_* tools instead).',
       inputSchema: z.object({
         type: z.string().describe('e.g. publish_article, send_email, merge_pr, publish_theme'),
-        spec: z.string().describe('Exactly what should happen, with targets (URLs, ids, recipients), written so the CEO can do it step by step'),
+        // Models often send a JSON object here; accept it and store it as readable text instead of failing the task.
+        spec: z.union([z.string(), z.record(z.string(), z.unknown()), z.array(z.unknown())])
+          .describe('Exactly what should happen, with targets (URLs, ids, recipients), written so the CEO can do it step by step'),
       }),
-      execute: async ({ type, spec }) => {
+      execute: async ({ type, spec: rawSpec }) => {
         const t = type.trim();
+        const spec = specText(rawSpec);
         if (WORKER_EXECUTED_ACTIONS.has(t) || /^rizehub\./i.test(t)) {
           return `Not queued: "${t}" is executed by the worker and needs the exact payload its tool builds. Use the rizehub_* tool `
             + '(e.g. rizehub_reports publish / rizehub_onboarding request_approval / request_invite_send) instead.';

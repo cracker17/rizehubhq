@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { APICallError } from 'ai';
-import { buildTaskPrompt, buildTools, externalActionSpec, runTask } from './runner';
+import { buildTaskPrompt, buildTools, externalActionSpec, specText, runTask } from './runner';
 import { FakeHqDb } from './fakeHqDb';
 import { loadRole } from './roles';
 import { makeDeps, mockModel, promptText, textResponse, toolCalls } from './testing';
@@ -130,6 +130,21 @@ test('request_external_action: types without a worker executor are marked manual
   assert.match(promptText(model.doGenerateCalls[1]!), /MANUAL action: nothing runs automatically after approval/);
   assert.match(promptText(model.doGenerateCalls[2]!), /Not queued: \\?"rizehub\.report_publish\\?" is executed by the worker/);
   assert.deepEqual(externalActionSpec('rizehub.invite_send', 'x'), { description: 'x', executor: 'worker' });
+});
+
+test('request_external_action: a JSON object spec (what the COO sent on 2026-09-29) is queued as readable text', async () => {
+  const { db, task } = setup();
+  const model = mockModel([
+    toolCalls([{ name: 'request_external_action', input: { type: 'inbox_access', spec: { mailbox: 'ceo@example.com', scope: ['unread'] } } }]),
+    toolCalls([{ name: 'ask_ceo', input: { question: 'ok?' } }]),
+  ]);
+  const r = await runTask(task, makeDeps({ db, model }));
+  assert.notEqual(r.status, 'failed');
+  const action = db.approvals.find((a) => a.payload.type === 'external_action' && a.payload.action_type === 'inbox_access');
+  assert.ok(action, 'queued, not a schema error');
+  assert.match(String((action!.payload as { spec: { description: string } }).spec.description), /"mailbox": "ceo@example.com"/);
+  assert.equal(specText('plain'), 'plain');
+  assert.equal(specText({ a: 'x'.repeat(5000) }).length, 4000);
 });
 
 test('provider 429 → task re-queued, not failed', async () => {
