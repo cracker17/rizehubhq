@@ -19,7 +19,7 @@ ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
 ARG HERMES_INSTALL_ARGS="--non-interactive --skip-browser --skip-computer-use --dir /opt/hermes/hermes-agent"
 
 RUN export DEBIAN_FRONTEND=noninteractive && apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl git bash tzdata xz-utils libstdc++6 \
+ && apt-get install -y --no-install-recommends ca-certificates curl git bash tzdata xz-utils libstdc++6 libatomic1 \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 10001 --shell /bin/bash hermes \
  && mkdir -p /opt/hermes /data/hermes /workspace /etc/hermes-hq \
