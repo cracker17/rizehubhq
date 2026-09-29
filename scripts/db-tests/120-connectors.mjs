@@ -63,7 +63,7 @@ export default async function ({ db, step, val, as, assert }) {
     assert.deepEqual(await val(`select array_agg(agent_id order by agent_id) from connector_grants where connector_id = $1`, [G1]), ['coo']);
   });
 
-  await step('connectors: Gmail read → read + draft needs a fresh code; unknown modes are refused', async () => {
+  await step('connectors: raising a Gmail level (read → draft → send) needs a fresh code, lowering does not; unknown modes refused', async () => {
     await asJwt('authenticated', stale, async () => {
       await assert.rejects(db.query(`select connector_update($1, 'Main inbox', '{"mode":"read_draft"}'::jsonb)`, [G1]), /step_up_required/);
       await assert.rejects(db.query(`select connector_update($1, 'Main inbox', '{"mode":"send"}'::jsonb)`, [G1]), /bad mode/);
@@ -71,6 +71,12 @@ export default async function ({ db, step, val, as, assert }) {
     });
     await asJwt('authenticated', fresh, async () => { await db.query(`select connector_update($1, 'Main inbox', '{"mode":"read_draft"}'::jsonb)`, [G1]); });
     assert.equal(await val(`select settings->>'mode' from connectors where id = $1`, [G1]), 'read_draft');
+    await asJwt('authenticated', stale, async () => {
+      await assert.rejects(db.query(`select connector_update($1, 'Main inbox', '{"mode":"read_draft_send"}'::jsonb)`, [G1]), /step_up_required/, 'send is a higher level');
+    });
+    await asJwt('authenticated', fresh, async () => { await db.query(`select connector_update($1, 'Main inbox', '{"mode":"read_draft_send"}'::jsonb)`, [G1]); });
+    await asJwt('authenticated', stale, async () => { await db.query(`select connector_update($1, 'Main inbox', '{"mode":"read_draft"}'::jsonb)`, [G1]); });
+    assert.equal(await val(`select settings->>'mode' from connectors where id = $1`, [G1]), 'read_draft', 'lowering needs no code');
     assert.equal(await val(`select name from connectors where id = $1`, [G1]), 'Main inbox');
   });
 

@@ -52,7 +52,10 @@ async function rpcWithStepUp(db: Db, fn: string, args: Record<string, unknown>, 
   return { ok: true };
 }
 
-export async function addGmailAction(input: { email: string; appPassword: string; name?: string; agents: string[]; mode: 'read' | 'read_draft'; totp?: string | null }): Promise<ConnectorResult<{ id: string }>> {
+type Mode = 'read' | 'read_draft' | 'read_draft_send';
+const modeOf = (m: unknown): Mode => (m === 'read_draft' || m === 'read_draft_send' ? m : 'read');
+
+export async function addGmailAction(input: { email: string; appPassword: string; name?: string; agents: string[]; mode: Mode; totp?: string | null }): Promise<ConnectorResult<{ id: string }>> {
   const ceo = await requireCeo();
   if ('error' in ceo) return { ok: false, error: ceo.error };
   if (ceo.demo) return { ok: false, error: DEMO };
@@ -60,7 +63,7 @@ export async function addGmailAction(input: { email: string; appPassword: string
   if (!step.ok) return step;
   const r = await callWorker<{ id: string }>('/connectors/gmail/add', {
     email: String(input.email ?? '').trim(), appPassword: String(input.appPassword ?? ''), name: String(input.name ?? '').trim() || undefined,
-    agents: agentsOf(input.agents), mode: input.mode === 'read_draft' ? 'read_draft' : 'read',
+    agents: agentsOf(input.agents), mode: modeOf(input.mode),
   });
   if (r.status !== 200 || !('id' in r.body)) return { ok: false, error: r.body.error ?? 'Could not add the account.' };
   return { ok: true, id: r.body.id };
@@ -95,13 +98,13 @@ export async function setConnectorAgentsAction(input: { id: string; agents: stri
   return rpcWithStepUp(ceo.db, 'connector_set_grants', { p_id: input.id, p_agents: agentsOf(input.agents) }, input.totp);
 }
 
-export async function updateConnectorAction(input: { id: string; name: string; mode: 'read' | 'read_draft'; totp?: string | null }): Promise<ConnectorResult> {
+export async function updateConnectorAction(input: { id: string; name: string; mode: Mode; totp?: string | null }): Promise<ConnectorResult> {
   if (!ID.test(String(input.id ?? ''))) return { ok: false, error: 'Unknown account.' };
   const ceo = await requireCeo();
   if ('error' in ceo) return { ok: false, error: ceo.error };
   if (ceo.demo) return { ok: false, error: DEMO };
   return rpcWithStepUp(ceo.db, 'connector_update', {
-    p_id: input.id, p_name: String(input.name ?? '').slice(0, 120), p_settings: { mode: input.mode === 'read_draft' ? 'read_draft' : 'read' },
+    p_id: input.id, p_name: String(input.name ?? '').slice(0, 120), p_settings: { mode: modeOf(input.mode) },
   }, input.totp);
 }
 

@@ -37,7 +37,7 @@
 - HQ never uses a RizeHub admin login or its database password.
 
 ### Gmail / Calendar (EA) — later
-- **Built (M13.4, docs/15 §5):** @gmail.com accounts connect with a Google **App Password** in Admin → Connectors (IMAP read-only, drafts via IMAP, never sent). The App Password is tested against Google, sealed with the vault keyring (context `connector:<id>`) and stored in `connectors.secret_cipher` (browser role can't read it); agents get only accounts granted to them; a rejected password marks the account *needs a new App Password*. The OAuth plan below stays for Calendar.
+- **Built (M13.4, docs/15 §5):** @gmail.com accounts connect with a Google **App Password** in Admin → Connectors (IMAP read-only; drafts via IMAP; sending only per email after the CEO approves it, level *Read + drafts + send*). The App Password is tested against Google, sealed with the vault keyring (context `connector:<id>`) and stored in `connectors.secret_cipher` (browser role can't read it); agents get only accounts granted to them; a rejected password marks the account *needs a new App Password*. The OAuth plan below stays for Calendar.
 - Google OAuth with `gmail.readonly` + `gmail.compose` (drafts only) + `calendar.readonly`. Sending = approval, executed by worker code.
 
 ### Social platforms & job sites

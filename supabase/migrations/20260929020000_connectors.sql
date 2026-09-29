@@ -11,7 +11,7 @@ create table connectors (
   account_email   text,
   url             text,
   auth_type       text not null check (auth_type in ('app_password', 'oauth', 'bearer', 'header', 'none')),
-  settings        jsonb not null default '{}',      -- gmail: {"mode": "read" | "read_draft"}
+  settings        jsonb not null default '{}',      -- gmail: {"mode": "read" | "read_draft" | "read_draft_send"}
   status          text not null default 'active' check (status in ('active', 'needs_reauth', 'error', 'disabled')),
   last_checked_at timestamptz,
   last_used_at    timestamptz,
@@ -47,7 +47,13 @@ alter publication supabase_realtime add table connectors, connector_grants;
 
 create or replace function connector_mode_ok(p_kind text, p_settings jsonb) returns boolean
 language sql immutable set search_path = public as $$
-  select p_kind <> 'gmail' or coalesce(p_settings ->> 'mode', 'read') in ('read', 'read_draft');
+  select p_kind <> 'gmail' or coalesce(p_settings ->> 'mode', 'read') in ('read', 'read_draft', 'read_draft_send');
+$$;
+
+-- Gmail permission levels, lowest first: read < read_draft < read_draft_send (each email still needs the CEO's approval).
+create or replace function connector_mode_rank(p_settings jsonb) returns int
+language sql immutable set search_path = public as $$
+  select case coalesce(p_settings ->> 'mode', 'read') when 'read_draft_send' then 2 when 'read_draft' then 1 else 0 end;
 $$;
 
 -- ---------- worker only (ciphertext) ----------
@@ -123,7 +129,7 @@ begin
 end $$;
 
 -- ---------- CEO (dashboard) ----------
--- Giving more agents access, switching Gmail to read + draft, or re-enabling loosens access → fresh 2FA code.
+-- Giving more agents access, raising a Gmail permission level, or re-enabling loosens access → fresh 2FA code.
 create or replace function connector_set_grants(p_id uuid, p_agents text[])
 returns void language plpgsql security definer set search_path = public as $$
 declare added text[];
@@ -148,7 +154,7 @@ begin
   select * into c from connectors where id = p_id;
   if c.id is null then raise exception 'connector_update: unknown connector' using errcode = 'P0002'; end if;
   if not connector_mode_ok(c.kind, p_settings) then raise exception 'connector_update: bad mode' using errcode = '22023'; end if;
-  if c.kind = 'gmail' and coalesce(p_settings ->> 'mode', 'read') = 'read_draft' and coalesce(c.settings ->> 'mode', 'read') <> 'read_draft' then
+  if c.kind = 'gmail' and connector_mode_rank(p_settings) > connector_mode_rank(c.settings) then
     perform ceo_step_up_guard();
   end if;
   update connectors set name = coalesce(nullif(left(trim(p_name), 120), ''), name), settings = coalesce(p_settings, settings)
@@ -191,7 +197,7 @@ begin
   foreach f in array array[
     'connector_insert(uuid, text, text, text, text, text, jsonb, bytea, bytea, int, text[], text)',
     'connector_rotate_secret(uuid, bytea, bytea, int)', 'connectors_for_agent(text, text)', 'connector_get_sealed(uuid)',
-    'connector_mark(uuid, text, text, boolean)', 'connector_mode_ok(text, jsonb)']
+    'connector_mark(uuid, text, text, boolean)', 'connector_mode_ok(text, jsonb)', 'connector_mode_rank(jsonb)']
   loop
     execute format('revoke execute on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);

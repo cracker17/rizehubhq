@@ -28,7 +28,7 @@ function fakeStore(rows: ConnectorFull[] = [], grants: Record<string, string[]> 
   };
   return { store, marks, inserted, rows };
 }
-const gmailRow = (id: string, email: string, mode: 'read' | 'read_draft' = 'read'): ConnectorFull => ({
+const gmailRow = (id: string, email: string, mode: 'read' | 'read_draft' | 'read_draft_send' = 'read'): ConnectorFull => ({
   id, kind: 'gmail', status: 'active', name: email, account_email: email, url: null, auth_type: 'app_password',
   settings: { mode }, sealed: seal(PASS, kr, connectorContext(id)),
 });
@@ -130,4 +130,63 @@ test('connector routes: add tests the login first, seals with the connector cont
   assert.deepEqual(await call('/connectors/test', { id: c.id }), [200, { ok: true }]);
   assert.equal(s.marks.at(-1)!.status, 'active');
   assert.deepEqual(await call('/connectors/gmail/replace', { id: c.id, appPassword: 'yyyy yyyy yyyy yyyy' }), [400, { error: 'Google rejected the App Password.' }]);
+});
+
+test('gmail_send: refused unless the account allows sending; otherwise queues the exact email for approval (nothing sent)', async () => {
+  const { store } = fakeStore([gmailRow('g1', 'ceo@gmail.com', 'read_draft'), gmailRow('g2', 'sales@gmail.com', 'read_draft_send')], { g1: ['sales'], g2: ['sales'] });
+  const mb = fakeMailbox();
+  const queued: { type: string; spec: Record<string, unknown> }[] = [];
+  const c = {
+    task: { id: 't1', agent_id: 'sales', request_id: 'r1' },
+    deps: { db: { logActivity: async () => undefined, requestExternalAction: async (_t: string, type: string, spec: Record<string, unknown>) => { queued.push({ type, spec }); return 'ap-1'; } }, log: () => undefined },
+  } as never;
+  const tools = createGmailTools(c, { store, keyring: kr, open: mb.openFn }) as never;
+  assert.match(await run(tools, 'gmail_send', { account: 'ceo@gmail.com', to: 'x@y.com', subject: 'Hi', body: 'Hello' }), /does not allow sending/);
+  assert.match(await run(tools, 'gmail_send', { account: 'sales@gmail.com', to: 'not an email', subject: 'Hi', body: 'Hello' }), /plain recipient addresses/);
+  const out = await run(tools, 'gmail_send', { account: 'sales@gmail.com', to: 'client@shop.com', subject: 'Re: Hi', body: 'Thanks!\n- Julev', reply_to_id: '42' });
+  assert.match(out, /Queued for the CEO's approval \(approval ap-1\)\. Nothing is sent yet/);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0]!.type, 'gmail.send');
+  assert.equal(queued[0]!.spec.executor, 'worker');
+  assert.deepEqual(queued[0]!.spec.gmail, { connector_id: 'g2', account: 'sales@gmail.com', agent_id: 'sales', to: 'client@shop.com', cc: null, subject: 'Re: Hi', body: 'Thanks!\n- Julev', in_reply_to: '<m42@b.c>' });
+  assert.match(String(queued[0]!.spec.description), /^Send from sales@gmail\.com to client@shop\.com\nSubject: Re: Hi\n\nThanks!/);
+  // Drafting still works on the send level.
+  assert.match(await run(tools, 'gmail_draft', { account: 'sales@gmail.com', to: 'x@y.com', subject: 'Hi', body: 'Hello' }), /Draft saved/);
+});
+
+test('approved gmail.send: sent once with the stored App Password; refused if access changed after approval; bad password stops retries', async () => {
+  const { executeApprovedGmailSends } = await import('./gmailSend');
+  const spec = { connector_id: 'g1', account: 'sales@gmail.com', agent_id: 'sales', to: 'client@shop.com', cc: null, subject: 'Hi', body: 'Hello', in_reply_to: null };
+  const s = fakeStore([gmailRow('g1', 'sales@gmail.com', 'read_draft_send')], { g1: ['sales'] });
+  const execs: { id: string; phase: string; result?: Record<string, unknown> }[] = [];
+  const claimed = new Set<string>();
+  const sent: unknown[] = [];
+  const deps = (approvals: { id: string; spec: typeof spec }[], sendImpl?: () => Promise<never>) => ({
+    list: async () => approvals.map((a) => ({ id: a.id, payload: { spec: { gmail: a.spec } } })),
+    exec: async (id: string, phase: 'claim' | 'done' | 'failed', result?: Record<string, unknown>) => {
+      execs.push({ id, phase, result });
+      if (phase !== 'claim') return true;
+      if (claimed.has(id)) return false;
+      claimed.add(id); return true;
+    },
+    store: s.store, keyring: kr,
+    send: sendImpl ?? (async (acct: string, pass: string, m: unknown) => { sent.push({ acct, pass, m }); return { messageId: '<sent1@gmail.com>', accepted: ['client@shop.com'], rejected: [] }; }),
+  });
+  assert.equal(await executeApprovedGmailSends(deps([{ id: 'ap1', spec }])), 1);
+  assert.deepEqual(sent, [{ acct: 'sales@gmail.com', pass: PASS, m: spec }]);
+  assert.equal(execs.at(-1)!.phase, 'done');
+  assert.equal(execs.at(-1)!.result!.message_id, '<sent1@gmail.com>');
+  assert.equal(await executeApprovedGmailSends(deps([{ id: 'ap1', spec }])), 0, 'already claimed: never sent twice');
+  assert.equal(sent.length, 1);
+
+  s.rows[0]!.settings = { mode: 'read_draft' }; // the CEO lowered the permission after approving
+  assert.equal(await executeApprovedGmailSends(deps([{ id: 'ap2', spec }])), 0);
+  assert.deepEqual([execs.at(-1)!.phase, execs.at(-1)!.result!.code, execs.at(-1)!.result!.retryable], ['failed', 'access_changed', false]);
+  s.rows[0]!.settings = { mode: 'read_draft_send' };
+
+  const bad = await executeApprovedGmailSends(deps([{ id: 'ap3', spec }], async () => { throw new Error('535-5.7.8 Username and Password not accepted'); }));
+  assert.equal(bad, 0);
+  assert.deepEqual([execs.at(-1)!.result!.code, execs.at(-1)!.result!.retryable], ['auth', false]);
+  assert.equal(s.marks.at(-1)!.status, 'needs_reauth');
+  assert.equal(sent.length, 1);
 });

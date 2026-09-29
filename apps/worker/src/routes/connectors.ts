@@ -17,7 +17,7 @@ const AddGmail = z.object({
   appPassword: z.string().max(64),
   name: z.string().max(120).optional(),
   agents: z.array(z.string().regex(AGENT)).max(10).default([]),
-  mode: z.enum(['read', 'read_draft']).default('read'),
+  mode: z.enum(['read', 'read_draft', 'read_draft_send']).default('read'),
 });
 const Replace = z.object({ id: z.string().uuid(), appPassword: z.string().max(64) });
 const Test = z.object({ id: z.string().uuid() });

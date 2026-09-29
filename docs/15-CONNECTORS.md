@@ -100,9 +100,11 @@ tokens expire every 7 days for unreviewed apps, and permanent access needs a pai
   (imap.gmail.com:993) and SMTP (smtp.gmail.com:465) → stored encrypted. Google revokes it when the Google password
   changes.
 - Tools (replace today's single-account Google OAuth versions, which stay as a fallback): `gmail_read` (account,
-  Gmail search syntax via IMAP `X-GM-RAW`), `gmail_draft` (saves to that account's Drafts via IMAP). Sending is never
-  *Allowed*: it is an approval executed by the worker over SMTP.
-- Per account: which agents, and read-only vs read + draft.
+  Gmail search syntax via IMAP `X-GM-RAW`), `gmail_draft` (saves to that account's Drafts via IMAP), `gmail_send` (queues a
+  `gmail.send` approval holding the exact email; after the CEO approves, `connectors/gmailSend.ts` sends it once over SMTP,
+  re-checking that the account is active, still at the send level and still granted to that agent).
+- Per account: which agents, and a level: **Read only**, **Read + save drafts**, or **Read + drafts + send** (every email
+  still waits for the CEO's approval, word for word; raising a level needs the 2FA code).
 - Job hunting stays within OnlineJobs.ph's terms (no automated use, no account sharing): the Sales Agent reads the
   OnlineJobs/Indeed/LinkedIn **alert emails** in the granted accounts, scores the jobs and drafts applications; the CEO
   opens the listing and applies. Agents never log in to job sites (brain/playbooks/job-hunt.md).

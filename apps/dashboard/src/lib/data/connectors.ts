@@ -7,7 +7,7 @@ import { totpState } from '@/lib/auth/mfaServer';
 import { demoSnapshot } from '@/lib/mock';
 
 export type ConnectorStatus = 'active' | 'needs_reauth' | 'error' | 'disabled';
-export type GmailMode = 'read' | 'read_draft';
+export type GmailMode = 'read' | 'read_draft' | 'read_draft_send';
 
 export interface ConnectorView {
   id: string;
@@ -61,7 +61,7 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
     agents: (agents.data ?? []) as { id: string; name: string }[],
     connectors: ((rows.data ?? []) as (Omit<ConnectorView, 'mode' | 'agents'> & { settings: { mode?: GmailMode } | null })[]).map((r) => ({
       id: r.id, kind: r.kind, name: r.name, account_email: r.account_email, status: r.status,
-      mode: r.settings?.mode === 'read_draft' ? 'read_draft' : 'read', agents: byConnector.get(r.id) ?? [],
+      mode: r.settings?.mode === 'read_draft_send' || r.settings?.mode === 'read_draft' ? r.settings.mode : 'read', agents: byConnector.get(r.id) ?? [],
       last_checked_at: r.last_checked_at, last_used_at: r.last_used_at, last_error: r.last_error, created_at: r.created_at,
     })),
     error: rows.error?.message ?? grants.error?.message,

@@ -204,8 +204,8 @@ export function buildTools(ctx: ToolContext): ToolSet {
         const t = type.trim();
         const spec = specText(rawSpec);
         if (WORKER_EXECUTED_ACTIONS.has(t) || /^rizehub\./i.test(t)) {
-          return `Not queued: "${t}" is executed by the worker and needs the exact payload its tool builds. Use the rizehub_* tool `
-            + '(e.g. rizehub_reports publish / rizehub_onboarding request_approval / request_invite_send) instead.';
+          return `Not queued: "${t}" is executed by the worker and needs the exact payload its tool builds. Use `
+            + (t === 'gmail.send' ? 'gmail_send instead.' : 'the rizehub_* tool (e.g. rizehub_reports publish / rizehub_onboarding request_approval / request_invite_send) instead.');
         }
         const id = await db.requestExternalAction(task.id, t, externalActionSpec(t, spec));
         return `Queued for CEO approval (approval ${id}). This is a MANUAL action: nothing runs automatically after approval; `

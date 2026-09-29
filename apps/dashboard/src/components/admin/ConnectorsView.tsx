@@ -19,7 +19,12 @@ const STATUS: Record<ConnectorView['status'], { label: string; color: string }> 
   error: { label: 'Error', color: 'var(--color-warning)' },
   disabled: { label: 'Off', color: 'var(--color-dim)' },
 };
-const MODE_LABEL: Record<GmailMode, string> = { read: 'Read only', read_draft: 'Read + save drafts' };
+const MODE_LABEL: Record<GmailMode, string> = { read: 'Read only', read_draft: 'Read + save drafts', read_draft_send: 'Read + drafts + send (asks you)' };
+const MODE_HELP: Record<GmailMode, string> = {
+  read: 'Search and read mail. Nothing is marked as read.',
+  read_draft: 'Also save replies in your Drafts folder for you to review and send.',
+  read_draft_send: 'Agents may also ask to send. Every email appears in your Approvals, word for word, and is sent only after you approve it.',
+};
 const DEFAULT_AGENTS = ['coo', 'sales'];
 
 function Pill({ status }: { status: ConnectorView['status'] }) {
@@ -57,18 +62,16 @@ function ModePicker({ value, onChange }: { value: GmailMode; onChange: (m: Gmail
   return (
     <fieldset className="flex flex-col gap-1.5">
       <legend className="mb-1.5 text-[13px] text-[var(--color-muted)]">What agents may do</legend>
-      {(['read', 'read_draft'] as const).map((m) => (
+      {(['read', 'read_draft', 'read_draft_send'] as const).map((m) => (
         <label key={m} className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-[var(--color-line)] p-3 text-sm has-[:checked]:border-[var(--color-line-active)]">
           <input type="radio" name="gmail-mode" className="mt-0.5 accent-[var(--color-primary)]" checked={value === m} onChange={() => onChange(m)} />
           <span>
             <span className="block text-white">{MODE_LABEL[m]}</span>
-            <span className="text-xs text-[var(--color-muted)]">
-              {m === 'read' ? 'Search and read mail. Nothing is marked as read.' : 'Also save replies in your Drafts folder for you to review and send.'}
-            </span>
+            <span className="text-xs text-[var(--color-muted)]">{MODE_HELP[m]}</span>
           </span>
         </label>
       ))}
-      <p className="text-xs text-[var(--color-dim)]">Agents never send email. You send drafts yourself from Gmail.</p>
+      <p className="text-xs text-[var(--color-dim)]">No email is ever sent without your approval of that exact email.</p>
     </fieldset>
   );
 }
@@ -238,8 +241,8 @@ export function ConnectorsView({ page }: { page: ConnectorsPage }) {
           <div className="min-w-0">
             <h2 id="gmail-title" className="flex items-center gap-2 text-lg font-semibold"><Mail size={18} aria-hidden /> Gmail accounts</h2>
             <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">
-              Agents can search and read the accounts you give them (job alerts, lead replies, client mail) and, if you allow it,
-              save draft replies. They never send: drafts wait in your Gmail for you.
+              Agents can search and read the accounts you give them (job alerts, lead replies, client mail). If you allow it they
+              save draft replies, or ask to send: each email waits in your Approvals and goes out only after you approve it.
             </p>
           </div>
           <button type="button" className={btn.primary} onClick={() => setAdding(true)}><Plus size={16} aria-hidden /> Add Gmail account</button>

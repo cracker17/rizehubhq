@@ -16,6 +16,9 @@ import type { WorkerDeps } from './deps';
 import { setMcpDeps } from './hermes/mcp';
 import { hermesStartupReport } from './hermes/config';
 import { startSalesBackground, stopSalesBackground } from './sales/background';
+import { listApprovedGmailSends, startGmailSender } from './connectors/gmailSend';
+import { createSupabaseConnectorStore } from './connectors/store';
+import { loadKeyring } from './vault/crypto';
 
 async function main() {
   if (!config.supabaseUrl || !config.supabaseServiceKey) {
@@ -70,7 +73,22 @@ async function main() {
   loop.start();
   // Sales outreach (send approved emails, IMAP replies, daily batch, follow-ups): nothing starts unless OUTREACH_ENABLED=true,
   // and nothing is sent without SMTP + CAN-SPAM settings (sales/background.ts).
-  const salesTimers = startSalesBackground(deps);
+  const salesTimers = startSalesBackground(deps);
+  // Emails the CEO approved from connected Gmail accounts (gmail_send → gmail.send approval → sent once, docs/15 §5).
+  const sb = createServiceClient();
+  const gmailSender = startGmailSender({
+    deps: {
+      list: listApprovedGmailSends(sb),
+      exec: async (id, phase, result = {}) => {
+        const r = await sb.rpc('external_action_exec', { p_approval: id, p_phase: phase, p_result: result });
+        if (r.error) throw new Error(`external_action_exec: ${r.error.message}`);
+        return Boolean(r.data);
+      },
+      store: createSupabaseConnectorStore(sb), keyring: loadKeyring(workerEnv()),
+      log: (m) => console.log(m),
+    },
+    paused: async () => { const v = (await db.getSettings().catch(() => ({} as Record<string, unknown>))).paused; return v === true || v === 'true'; },
+  });
 
   const server = createHttpServer({
     chat: (agentId, question) => answerChat(agentId, question, deps),
@@ -86,6 +104,7 @@ async function main() {
     console.log(`[worker] ${sig}: stopping (running tasks are re-queued)`);
     server.close();
     stopSalesBackground(salesTimers);
+    clearInterval(gmailSender);
     await loop.stop();
     process.exit(0);
   };

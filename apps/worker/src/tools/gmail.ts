@@ -1,6 +1,7 @@
-// gmail_read / gmail_draft on the Gmail accounts the CEO connected and granted to this agent (Admin → Connectors,
-// docs/15 §5). Replaces the old single-account placeholders (research.ts); this module is listed before researchTools so
-// its tools win. Reading is read-only; drafting needs the account's "read + draft" mode; nothing is ever sent.
+// gmail_read / gmail_draft / gmail_send on the Gmail accounts the CEO connected and granted to this agent (Admin →
+// Connectors, docs/15 §5). Replaces the old single-account placeholders (research.ts); this module is listed before
+// researchTools so its tools win. Reading is read-only; drafting needs "read + draft"; gmail_send needs "read + drafts +
+// send" and only queues a gmail.send approval: the worker sends it (connectors/gmailSend.ts) after the CEO approves.
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import type { ToolFactory } from './types';
@@ -97,7 +98,7 @@ export function createGmailTools(ctx: ToolContext, getEnv: GmailToolEnv | (() =>
       execute: async ({ account, to, cc, subject, body, reply_to_id }) => {
         const c = pick(await accounts(), account);
         if (typeof c === 'string') return c;
-        if (c.settings.mode !== 'read_draft') {
+        if (c.settings.mode !== 'read_draft' && c.settings.mode !== 'read_draft_send') {
           return `${c.account_email} is read-only for agents. Put the draft text in your output instead, or ask the CEO to allow drafts for this account.`;
         }
         return withSession(c, async (s) => {
@@ -106,6 +107,40 @@ export function createGmailTools(ctx: ToolContext, getEnv: GmailToolEnv | (() =>
           await ctx.deps.db.logActivity(agent, 'gmail.draft_saved', ctx.task.request_id, ctx.task.id, { account: c.account_email, to, subject: subject.slice(0, 120) }).catch(() => undefined);
           return `Draft saved in ${c.account_email} → Drafts ("${subject}" to ${to}). It is NOT sent: the CEO reviews and sends it from Gmail. Mention it in your output.`;
         });
+      },
+    }),
+    gmail_send: tool({
+      description: 'Ask the CEO to send an email from one of their connected Gmail accounts. Nothing is sent now: the full email goes '
+        + 'to the CEO\'s Approval inbox and HQ sends it exactly as written only after they approve. Only accounts set to '
+        + '"read + drafts + send" allow this. Write the final text: it cannot be edited after approval.',
+      inputSchema: z.object({
+        account: z.string().max(254).optional(),
+        to: z.string().max(500).describe('Recipient address(es), comma-separated'),
+        cc: z.string().max(500).optional(),
+        subject: z.string().min(1).max(300),
+        body: z.string().min(1).max(20_000).describe('Plain-text body, signed as the CEO'),
+        reply_to_id: z.string().max(20).optional().describe('Message id (from gmail_read) this replies to, to keep the thread'),
+      }),
+      execute: async ({ account, to, cc, subject, body, reply_to_id }) => {
+        const c = pick(await accounts(), account);
+        if (typeof c === 'string') return c;
+        if (c.settings.mode !== 'read_draft_send') {
+          return `${c.account_email} does not allow sending for agents. Save a draft with gmail_draft instead (if allowed), or put the text in your output.`;
+        }
+        const recipients = to.split(',').map((x) => x.trim()).filter(Boolean);
+        if (!recipients.length || recipients.some((r) => !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(r))) return 'Give plain recipient addresses (name@example.com), comma-separated.';
+        let inReplyTo: string | null = null;
+        if (reply_to_id) {
+          const r = await withSession(c, async (s) => (await s.read(reply_to_id))?.messageId ?? null);
+          inReplyTo = typeof r === 'string' && r.startsWith('<') ? r : null;
+        }
+        const description = `Send from ${c.account_email} to ${recipients.join(', ')}${cc ? ` (cc ${cc})` : ''}\nSubject: ${subject}\n\n${body}`;
+        const id = await ctx.deps.db.requestExternalAction(ctx.task.id, 'gmail.send', {
+          description: description.slice(0, 4000), executor: 'worker',
+          gmail: { connector_id: c.id, account: c.account_email, agent_id: agent, to: recipients.join(', '), cc: cc?.trim() || null, subject, body, in_reply_to: inReplyTo },
+        });
+        return `Queued for the CEO's approval (approval ${id}). Nothing is sent yet: HQ sends it from ${c.account_email} exactly as written once `
+          + 'the CEO approves. Do not send it another way and do not report it as sent; mention in your output that it is waiting for approval.';
       },
     }),
   };
