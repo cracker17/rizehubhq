@@ -197,7 +197,7 @@ test('no token configured → clear instruction, no calls', async () => {
 
 test('privilege drop: git without a token runs as the agent uid; clone/push (token) run as the worker uid and hand files over', async () => {
   const s = setup({ head: 'agent/x' });
-  s.env.agentUser = { uid: 1001, gid: 1001 };
+  s.env.agentUser = { uid: 4242, gid: 4242 };  // not 1001: that is the GitHub runner's own uid (files already "owned" → no chown)
   const chowned: string[] = [];
   const real = fs.lchownSync;
   (fs as { lchownSync: typeof fs.lchownSync }).lchownSync = ((p: fs.PathLike) => { chowned.push(String(p)); }) as typeof fs.lchownSync;
@@ -211,7 +211,7 @@ test('privilege drop: git without a token runs as the agent uid; clone/push (tok
     const plain = s.runCalls.filter((c) => gitSub(c) !== 'clone');
     assert.ok(plain.length > 0);
     for (const c of plain) {
-      assert.equal(c.opts.uid, 1001, `git ${gitSub(c)} runs as the agent`);
+      assert.equal(c.opts.uid, 4242, `git ${gitSub(c)} runs as the agent`);
       assert.equal(c.opts.env.RIZEHUB_GIT_TOKEN, undefined);
     }
   } finally { (fs as { lchownSync: typeof fs.lchownSync }).lchownSync = real; }

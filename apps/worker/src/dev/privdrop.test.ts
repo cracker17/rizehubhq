@@ -11,11 +11,11 @@ import { openJail } from './jail';
 import { defaultSandboxPath, makeRunProcess, runProcess } from './env';
 import { agentIdentity, chownTreeToAgent, sandboxStatus } from './agentUser';
 import { BASE_ALLOWED_HOSTS, planCommand, runSandboxed, ShellRefusal, tokenize, type ShellPolicyCtx } from './shell';
-import { devSetup, fakeEnv, run, tmpDir } from './testkit';
+import { devSetup, fakeEnv, policySandboxPath, run, tmpDir } from './testkit';
 import { mkdirpInJail, readInJail, writeInJail } from './safefs';
 import { JailError } from './jail';
 
-const SP = defaultSandboxPath();
+const SP = policySandboxPath();
 function ctx(isolated = false): ShellPolicyCtx {
   const j = openJail(path.join(tmpDir(), 'ws'), 'task-pd');
   fs.mkdirSync(path.join(j.root, 'src'));

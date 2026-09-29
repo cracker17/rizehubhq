@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { ToolSet } from 'ai';
 import type { DevEnv, RunOptions, RunResult } from './env';
-import { defaultSandboxPath } from './env';
+import { defaultSandboxPath, which } from './env';
 import { createDevTools } from '../tools/dev';
 import { loadKeyring, seal, type Keyring } from '../vault/crypto';
 import { FakeVaultStore } from '../vault/fakeStore';
@@ -16,6 +16,20 @@ import { makeDeps, mockModel } from '../testing';
 
 export interface FetchCall { url: string; method: string; headers: Headers; body: string }
 export interface RunCall { file: string; args: string[]; opts: RunOptions }
+
+/** The worker's sandbox PATH plus no-op stubs for dev tools this machine lacks (a CI runner installs pnpm outside
+ *  /usr/local/bin), so policy tests don't depend on what happens to be installed. Real binaries still win. */
+export function policySandboxPath(): string {
+  const base = defaultSandboxPath();
+  const dir = tmpDir('rzh-bin-');
+  for (const bin of ['node', 'npm', 'npx', 'pnpm', 'git', 'playwright', 'lighthouse', 'shopify']) {
+    if (which(bin, base)) continue;
+    const p = path.join(dir, bin);
+    fs.writeFileSync(p, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(p, 0o755);
+  }
+  return `${base}:${dir}`;
+}
 
 export function tmpDir(prefix = 'rzh-dev-'): string {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));

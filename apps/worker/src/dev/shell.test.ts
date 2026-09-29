@@ -7,9 +7,9 @@ import { openJail } from './jail';
 import { defaultSandboxPath, runProcess } from './env';
 import { fdPath } from './safefs';
 import { BASE_ALLOWED_HOSTS, planCommand, runSandboxed, sandboxEnv, ShellRefusal, tokenize, wrapWithPrefix, type ShellPolicyCtx } from './shell';
-import { devSetup, fakeEnv, run, tmpDir } from './testkit';
+import { devSetup, fakeEnv, policySandboxPath, run, tmpDir } from './testkit';
 
-const SP = defaultSandboxPath();
+const SP = policySandboxPath();
 function ctx(isolated = false): ShellPolicyCtx {
   const j = openJail(path.join(tmpDir(), 'ws'), 'task-sh');
   fs.mkdirSync(path.join(j.root, 'src'));

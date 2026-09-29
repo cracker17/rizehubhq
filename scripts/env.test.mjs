@@ -24,8 +24,8 @@ test('split: dashboard never gets the service-role or vault key; bot gets Telegr
   assert.deepEqual(keys(parts.dashboard).sort(), ['DASHBOARD_URL', 'HQ_INTERNAL_SECRET', 'HQ_WORKER_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_URL']);
   assert.deepEqual(keys(parts.bot).sort(), ['BOT_POLL_MS', 'DASHBOARD_URL', 'MONTHLY_BUDGET_USD', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_URL', 'TELEGRAM_ALLOWED_USER_IDS', 'TELEGRAM_BOT_TOKEN', 'TZ']);
   const w = parseEnv(parts.worker);
-  for (const k of ['SUPABASE_SERVICE_ROLE_KEY', 'VAULT_MASTER_KEY', 'GROQ_API_KEY', 'SHOPIFY_TOKEN_MADAM_MUSE', 'HQ_INTERNAL_SECRET']) assert.ok(w.has(k), k);
-  for (const k of ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'DASHBOARD_URL']) assert.ok(!w.has(k), k);
+  for (const k of ['SUPABASE_SERVICE_ROLE_KEY', 'VAULT_MASTER_KEY', 'GROQ_API_KEY', 'SHOPIFY_TOKEN_MADAM_MUSE', 'HQ_INTERNAL_SECRET', 'DASHBOARD_URL']) assert.ok(w.has(k), k);
+  for (const k of ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY']) assert.ok(!w.has(k), k);
   assert.equal(w.get('WEIRD'), 'a b # c', 'values survive the round trip');
 });
 
