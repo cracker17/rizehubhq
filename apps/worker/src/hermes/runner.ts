@@ -16,7 +16,8 @@ import { z } from 'zod';
 import type { TaskOutput, TaskRow } from '../hqdb';
 import type { Role } from '../roles';
 import { errMsg, log, usageDetail, type WorkerDeps } from '../deps';
-import { costUsd, type TokenUsage } from '../models/usage';
+import { costUsd, priceFor, type TokenUsage } from '../models/usage';
+import { claudeBudget } from '../claude/runner';
 import type { RunOptions, RunResult } from '../runner';
 import { buildRunPrompt, taskLimits } from '../runner';
 import { HermesClient, HermesError, type HermesUsage } from './client';
@@ -132,14 +133,27 @@ export function hermesPricing(responseModel: string | null, configured: string |
 
 type Attempt = { result: RunResult } | { fallback: string; requeue: boolean };
 
+/** Budget check for a paid Hermes model (null = free or unpriced model: nothing to check). Same rules as the Claude runtime. */
+function hermesPaidBudget(deps: WorkerDeps, role: Role, opts: RunOptions, cfg: HermesAgentConfig): Promise<{ capUsd: number } | { reason: string }> | null {
+  const p = hermesPricing(null, cfg.model);
+  if (p.provider === 'hermes' || !priceFor(p.provider, p.modelId)) return null;
+  return claudeBudget(deps, taskLimits(role, opts.limits));
+}
+
 export async function runHermesTask(task: TaskRow, deps: WorkerDeps, role: Role, opts: RunOptions, builtin: BuiltinRunner): Promise<RunResult> {
   const h = opts.hermes ?? {};
   const cfg = (h.resolve ?? hermesAgentConfig)(task.agent_id);
   const fallbackOn = h.fallback ?? hermesFallbackEnabled();
 
-  const attempt: Attempt = cfg
-    ? await attemptHermes(task, deps, role, cfg, opts)
-    : { fallback: `not configured: set HERMES_URL_${task.agent_id.toUpperCase().replace(/-/g, '_')} and HERMES_KEY_…`, requeue: false };
+  // A paid Hermes model spends outside the model picker, so check the budget first (Hermes has no per-run cap:
+  // the task cap is enforced after the fact, like the built-in runner's). Free (:free) models skip the check.
+  const paid = cfg ? hermesPaidBudget(deps, role, opts, cfg) : null;
+  const budget = paid ? await paid : null;
+  const attempt: Attempt = !cfg
+    ? { fallback: `not configured: set HERMES_URL_${task.agent_id.toUpperCase().replace(/-/g, '_')} and HERMES_KEY_…`, requeue: false }
+    : budget && 'reason' in budget
+      ? { fallback: `no paid budget for the Hermes model (${budget.reason})`, requeue: false }
+      : await attemptHermes(task, deps, role, cfg, opts);
   if ('result' in attempt) return attempt.result;
 
   const db = deps.db;
@@ -280,6 +294,7 @@ async function attemptHermes(task: TaskRow, deps: WorkerDeps, role: Role, cfg: H
         detail: usageDetail(pricing, u, { runtime: 'hermes', cost_usd: cost, ended, ...(pricing.provider === 'hermes' ? { unpriced: true } : {}),
           ...(cost > limitUsd ? { over_task_budget: limitUsd } : {}) }),
       }).catch((e) => log(deps, `[${task.agent_id}] usage log failed`, errMsg(e)));
+      deps.recordSpend?.(cost); // month/day totals the budget guards read (the picker only sees its own calls)
     }
     if (ended !== 'fallback') await db.finishAgentTurn(task.agent_id).catch(() => undefined);
   }

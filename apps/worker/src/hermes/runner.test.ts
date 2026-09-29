@@ -27,6 +27,31 @@ function setup() {
 }
 const cfg = (url: string, extra: Partial<HermesAgentConfig> = {}): HermesAgentConfig =>
   ({ agentId: 'writer', url, key: KEY, timeoutMs: 5_000, model: 'claude-sonnet-5', ...extra });
+/** Deps with a paid budget: the configured Hermes model (claude-sonnet-5) is paid, so it needs one to run. */
+const paidDeps = (o: Parameters<typeof makeDeps>[0], monthlyBudgetUsd = 50) => Object.assign(makeDeps(o), { monthlyBudgetUsd });
+
+test('budget: a paid Hermes model needs budget left (else built-in runner); a :free model runs with $0', async () => {
+  const srv = await hermes(() => [200, completion('Done: the article.', { prompt_tokens: 100, completion_tokens: 50 })]);
+  try {
+    const a = setup();
+    await runTask(a.task, paidDeps({ db: a.db, model: mockModel([]) }, 0), { hermes: { resolve: () => cfg(srv.url, { model: 'moonshotai/kimi-k2.6' }) } });
+    const fb = a.db.activity.find((x) => x.action === 'hermes.fallback');
+    assert.match(String((fb?.detail as { reason?: string } | undefined)?.reason), /no paid budget for the Hermes model \(MONTHLY_BUDGET_USD is 0/);
+    assert.equal(srv.seen.filter((s) => s.path === '/v1/chat/completions').length, 0, 'Hermes was never asked');
+
+    const b = setup();
+    await runTask(b.task, paidDeps({ db: b.db, model: mockModel([]) }, 0), { hermes: { resolve: () => cfg(srv.url, { model: 'meta-llama/llama-4:free' }) } });
+    assert.equal(b.db.activity.filter((x) => x.action === 'hermes.fallback').length, 0, 'a :free model needs no budget');
+    assert.equal(srv.seen.filter((s) => s.path === '/v1/chat/completions').length, 1);
+
+    const c = setup();
+    const spent: number[] = [];
+    const deps = Object.assign(paidDeps({ db: c.db, model: mockModel([]) }), { recordSpend: (usd: number) => { spent.push(usd); } });
+    await runTask(c.task, deps, { hermes: { resolve: () => cfg(srv.url, { model: 'moonshotai/kimi-k2.6' }) } });
+    assert.equal(spent.length, 1, 'Hermes spend reaches the live month/day totals');
+    assert.ok(spent[0]! > 0);
+  } finally { await srv.close(); }
+});
 
 async function hermes(handler: MockHandler) {
   return startMockHermes((r) => (r.path === '/health' ? [200, { status: 'ok' }] : handler(r)));
@@ -40,7 +65,7 @@ test('hermes agent: task goes to its Hermes instance; the final answer is saved 
   }) + '\n```';
   const srv = await hermes(() => [200, completion(answer, { prompt_tokens: 10_000, completion_tokens: 2_000 })]);
   const model = mockModel([]);
-  const deps = makeDeps({ db, model });
+  const deps = paidDeps({ db, model });
   try {
     const r = await runTask(task, deps, { hermes: { resolve: () => cfg(srv.url) }, heartbeatMs: 5 });
     assert.deepEqual(r.status === 'submitted' && r.fallback, false);
@@ -93,7 +118,7 @@ function runIdOf(req: { body: unknown }): string {
 
 test('hermes agent: submit_output through the HQ MCP endpoint during the run wins over the final text', async () => {
   const { db, task } = setup();
-  const deps = makeDeps({ db, model: mockModel([]) });
+  const deps = paidDeps({ db, model: mockModel([]) });
   const w = await mcpWorker(() => deps);
   let runId = '';
   const srv = await hermes(async (req) => {
@@ -124,7 +149,7 @@ test('hermes agent: {"ask_ceo": …} in the final answer pauses the task', async
   const { db, task } = setup();
   const srv = await hermes(() => [200, completion('```json\n{"ask_ceo":{"question":"Which collection should it link to?","options":["Bundles","Sale"]}}\n```')]);
   try {
-    const r = await runTask(task, makeDeps({ db, model: mockModel([]) }), { hermes: { resolve: () => cfg(srv.url) } });
+    const r = await runTask(task, paidDeps({ db, model: mockModel([]) }), { hermes: { resolve: () => cfg(srv.url) } });
     assert.equal(r.status, 'asked_ceo');
     assert.equal(db.tasks.get(task.id)!.status, 'awaiting_ceo');
     assert.deepEqual(db.callsOf('askCeo')[0]?.args.slice(1), ['Which collection should it link to?', ['Bundles', 'Sale']]);
@@ -139,7 +164,7 @@ const fallbackRows = (db: FakeHqDb) => db.activity.filter((a) => a.action === 'h
 test('fallback: Hermes not configured → built-in runner + activity note', async () => {
   const { db, task } = setup();
   const model = builtinWorks();
-  const deps = makeDeps({ db, model });
+  const deps = paidDeps({ db, model });
   const r = await runTask(task, deps, { hermes: { resolve: () => null } });
   assert.equal(r.status, 'submitted');
   assert.equal(model.doGenerateCalls.length, 1);
@@ -155,7 +180,7 @@ test('fallback: /health down → built-in runner', async () => {
   const { db: db3, task: task3 } = setup();
   const model3 = builtinWorks();
   const url = await deadUrl();
-  const r3 = await runTask(task3, makeDeps({ db: db3, model: model3 }), { hermes: { resolve: () => cfg(url), healthTimeoutMs: 1_000 } });
+  const r3 = await runTask(task3, paidDeps({ db: db3, model: model3 }), { hermes: { resolve: () => cfg(url), healthTimeoutMs: 1_000 } });
   assert.equal(r3.status, 'submitted');
   assert.equal(model3.doGenerateCalls.length, 1);
   assert.match(String(fallbackRows(db3)[0]!.detail.note), /\(health check failed: down: Hermes unreachable/);
@@ -166,7 +191,7 @@ test('fallback: Hermes times out mid-run → built-in runner (task still working
   const model = builtinWorks();
   const srv = await hermes(() => 'hang');
   try {
-    const r = await runTask(task, makeDeps({ db, model }), { hermes: { resolve: () => cfg(srv.url, { timeoutMs: 150 }) } });
+    const r = await runTask(task, paidDeps({ db, model }), { hermes: { resolve: () => cfg(srv.url, { timeoutMs: 150 }) } });
     assert.equal(r.status, 'submitted');
     assert.equal((db.tasks.get(task.id)!.output as unknown as TaskOutput).summary, 'built-in output');
     assert.match(String(fallbackRows(db)[0]!.detail.reason), /^timeout: Hermes did not answer/);
@@ -176,13 +201,13 @@ test('fallback: Hermes times out mid-run → built-in runner (task still working
 test('HERMES_FALLBACK=off: down → task re-queued; not configured → task failed; 401 → task failed (no fallback)', async () => {
   {
     const { db, task } = setup();
-    const r = await runTask(task, makeDeps({ db, model: mockModel([]) }), { hermes: { resolve: () => cfg('http://127.0.0.1:1'), fallback: false, healthTimeoutMs: 500 } });
+    const r = await runTask(task, paidDeps({ db, model: mockModel([]) }), { hermes: { resolve: () => cfg('http://127.0.0.1:1'), fallback: false, healthTimeoutMs: 500 } });
     assert.equal(r.status, 'requeued');
     assert.equal(db.tasks.get(task.id)!.status, 'queued');
   }
   {
     const { db, task } = setup();
-    const r = await runTask(task, makeDeps({ db, model: mockModel([]) }), { hermes: { resolve: () => null, fallback: false } });
+    const r = await runTask(task, paidDeps({ db, model: mockModel([]) }), { hermes: { resolve: () => null, fallback: false } });
     assert.equal(r.status, 'failed');
     assert.match(String(db.callsOf('failTask')[0]?.args[1]), /HERMES_FALLBACK=off/);
   }
@@ -191,7 +216,7 @@ test('HERMES_FALLBACK=off: down → task re-queued; not configured → task fail
     const model = mockModel([]);
     const srv = await hermes(() => [401, { error: 'bad key' }]);
     try {
-      const r = await runTask(task, makeDeps({ db, model }), { hermes: { resolve: () => cfg(srv.url) } });
+      const r = await runTask(task, paidDeps({ db, model }), { hermes: { resolve: () => cfg(srv.url) } });
       assert.deepEqual(r.status === 'failed' && r.reason, 'Hermes run failed (unauthorized): Hermes rejected the API key (HTTP 401)');
       assert.equal(model.doGenerateCalls.length, 0);
       assert.equal(db.tasks.get(task.id)!.status, 'failed');
@@ -204,7 +229,7 @@ test('worker-runtime agents never touch Hermes', async () => {
   const task = db.addTask({ agent_id: 'coo', work_type: 'daily-report', status: 'working' });
   const model = builtinWorks();
   let resolved = 0;
-  const r = await runTask(task, makeDeps({ db, model }), { hermes: { resolve: () => { resolved++; return null; } } });
+  const r = await runTask(task, paidDeps({ db, model }), { hermes: { resolve: () => { resolved++; return null; } } });
   assert.equal(r.status, 'submitted');
   assert.equal(resolved, 0);
   assert.equal(fallbackRows(db).length, 0);
@@ -254,7 +279,7 @@ test('run lease: after a timeout fallback, late Hermes tool calls are refused an
       return toolCalls([{ name: 'submit_output', input: { summary: 'built-in output', content: 'x' } }]);
     },
   });
-  const deps = makeDeps({ db, model });
+  const deps = paidDeps({ db, model });
   w = await mcpWorker(() => deps);
   const srv = await hermes((req) => { runId = runIdOf(req); return 'hang'; });
   try {
@@ -293,7 +318,7 @@ test('run lease: a Hermes tool call already executing at the timeout finishes be
   const model: MockLanguageModelV2 = new MockLanguageModelV2({
     doGenerate: async () => { order.push('builtin:step'); return toolCalls([{ name: 'submit_output', input: { summary: 'built-in output', content: 'x' } }]); },
   });
-  const deps = makeDeps({ db, model });
+  const deps = paidDeps({ db, model });
   const orig = db.reportProgress.bind(db);
   db.reportProgress = async (...a: Parameters<typeof orig>) => {
     if (a[2] === 'slow Hermes step') { order.push('hermes:start'); await new Promise((r) => setTimeout(r, 400)); order.push('hermes:end'); }
@@ -314,7 +339,7 @@ test('run lease: a Hermes tool call already executing at the timeout finishes be
 test('run lease: a Hermes tool call still running past the drain window → task re-queued, built-in runner not started', async () => {
   const { db, task } = setup();
   const model = mockModel([]);
-  const deps = makeDeps({ db, model });
+  const deps = paidDeps({ db, model });
   const orig = db.reportProgress.bind(db);
   let release!: () => void;
   const gate = new Promise<void>((r) => { release = r; });
