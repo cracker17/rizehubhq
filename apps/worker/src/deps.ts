@@ -5,6 +5,7 @@ import type { Brain } from './brain';
 import type { HqDb } from './hqdb';
 import type { PickModel, PickedModel, TokenUsage } from './models/usage';
 import type { Role } from './roles';
+import type { StorageEnv } from './connectors/storage';
 
 /** Everything planner/runner/qa/chat need; injected so tests can use fakes and mock models. */
 export interface WorkerDeps {
@@ -23,6 +24,13 @@ export interface WorkerDeps {
   onProviderQuota?: (provider: string, detail?: { modelId?: string; error?: unknown }) => void;
   log?: (msg: string, extra?: unknown) => void;
   now?: () => Date;
+  /**
+   * The CEO's storage (Google Drive / Dropbox, docs/15 §6) for save_file and the automatic save of QA-passed deliverables.
+   * Unset (tests): save_file uses the production env and QA skips the automatic save.
+   */
+  storage?: StorageEnv | null;
+  /** WORKSPACES_DIR override (tests); default config.workspacesDir. */
+  workspacesDir?: string;
 }
 
 export interface RosterAgent { name?: string; department?: string; runtime?: string; model_role?: string }

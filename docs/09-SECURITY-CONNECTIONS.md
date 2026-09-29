@@ -49,6 +49,12 @@
   Connectors, or add the new address.
 - Google OAuth (not built; App Passwords and the iCal address replaced it) with `gmail.readonly` + `gmail.compose` (drafts only) + `calendar.readonly`. Sending = approval, executed by worker code.
 
+### Storage: Google Drive / Dropbox (docs/15 §6)
+- **Built (M13.5):** the CEO's **own** OAuth apps (a Google Cloud web client with only the `drive.file` scope; a Dropbox *App folder* app). Sign-in is authorization code + PKCE (S256) with an offline refresh token; the client secret travels browser → dashboard server action → worker only and is never sent to the browser again.
+- The client ID/secret and refresh token are sealed with the vault keyring (context `connector:<id>`) in `connectors.secret_cipher` (kind `storage`); access tokens live only in the worker's memory; a vendor-rotated refresh token is re-sealed. A refused refresh (`invalid_grant`, revoked app) marks the connection *Sign in again*.
+- Scope is minimal by design: Drive `drive.file` = HQ sees only files it created; Dropbox App folder = HQ sees only `/Apps/<app>`. HQ never creates a public or shared link (that would be an approval); uploads to the CEO's own storage are internal.
+- Removing a storage connection in HQ deletes the sealed secret. **Also revoke HQ at the vendor**: Google → myaccount.google.com/connections (and delete the OAuth client in Cloud Console if no longer needed); Dropbox → dropbox.com/account/connected_apps (or delete the app in the App Console).
+
 ### Social platforms & job sites
 - The Sales Agent **drafts only** (outreach, DM replies, follow-ups). You send social messages yourself — automated DMs break platform rules and risk your accounts.
 - The Sales Agent (job search) reads job alerts and public feeds only; it never logs into job sites or submits applications. You apply.

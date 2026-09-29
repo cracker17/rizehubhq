@@ -1,5 +1,6 @@
 'use client';
-// Admin → Connectors (docs/15, docs/06 §11): Gmail accounts, Calendars (Google Calendar secret iCal address), MCP apps.
+// Admin → Connectors (docs/15, docs/06 §11): Gmail accounts, Calendars (Google Calendar secret iCal address), storage
+// (Google Drive / Dropbox) and MCP apps.
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
@@ -14,6 +15,7 @@ import { StepUpDialog, type StepUpRequest } from '@/components/StepUpDialog';
 import { useHq } from '@/lib/data/store';
 import { AppsSection } from './AppsSection';
 import { CalendarsSection } from './CalendarsSection';
+import { StorageSection } from './StorageSection';
 
 const STATUS: Record<ConnectorView['status'], { label: string; color: string }> = {
   active: { label: 'Connected', color: 'var(--color-success)' },
@@ -195,7 +197,9 @@ function ReplaceDialog({ c, onClose, run }: {
   );
 }
 
-export function ConnectorsView({ page, connected, mcpError }: { page: ConnectorsPage; connected?: string | null; mcpError?: string | null }) {
+export function ConnectorsView({ page, connected, storageConnected, mcpError }: {
+  page: ConnectorsPage; connected?: string | null; storageConnected?: string | null; mcpError?: string | null;
+}) {
   const router = useRouter();
   const { toast } = useHq();
   const [adding, setAdding] = useState(false);
@@ -208,9 +212,10 @@ export function ConnectorsView({ page, connected, mcpError }: { page: Connectors
   // Back from an app's sign-in page (/api/connectors/callback): say how it went once, then clean the URL.
   useEffect(() => {
     if (mcpError) toast(mcpError, 'error');
+    else if (storageConnected) toast('Storage connected. Deliverables that pass QA are saved there.', 'success');
     else if (connected) toast('App connected. Choose what each tool may do.', 'success');
-    if (mcpError || connected) window.history.replaceState(null, '', '/admin/connectors');
-  }, [connected, mcpError, toast]);
+    if (mcpError || connected || storageConnected) window.history.replaceState(null, '', '/admin/connectors');
+  }, [connected, storageConnected, mcpError, toast]);
 
   // Runs an action; when it needs a fresh 2FA code, asks for it and retries with the code.
   const run = (label: string, detail: string, call: (totp?: string) => Promise<ConnectorResult>, done: string) => {
@@ -295,6 +300,8 @@ export function ConnectorsView({ page, connected, mcpError }: { page: Connectors
       </section>
 
       <CalendarsSection page={page} run={run} test={test} busy={busy} toast={toast} refresh={() => router.refresh()} />
+
+      <StorageSection page={page} run={run} toast={toast} refresh={() => router.refresh()} />
 
       <AppsSection page={page} run={run} toast={toast} refresh={() => router.refresh()} openToolsFor={connected ?? null} />
 

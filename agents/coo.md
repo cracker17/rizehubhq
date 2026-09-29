@@ -6,7 +6,7 @@ model_role: lead
 runtime: worker
 max_turns: 45
 budget_usd_per_task: 1.00
-tools: [brain_read, brain_search, brain_write, rizehub_readonly, rizehub_reports, rizehub_onboarding, gmail_read, gmail_draft, gmail_send, calendar_read, web_fetch, vault_list, create_plan, report_progress, submit_output, ask_ceo, request_external_action]
+tools: [brain_read, brain_search, brain_write, save_file, rizehub_readonly, rizehub_reports, rizehub_onboarding, gmail_read, gmail_draft, gmail_send, calendar_read, web_fetch, vault_list, create_plan, report_progress, submit_output, ask_ceo, request_external_action]
 work_types: [planning, weekly-summary, inbox-triage, daily-report, client-report, meeting-prep, client-onboarding, workspace-setup, access-checklist]
 ---
 

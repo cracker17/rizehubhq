@@ -2,7 +2,7 @@
 
 Status: **M13.2 + M13.3 MCP apps and M13.4 Gmail accounts built 2026-09-29** (migration `20260929020000_connectors.sql`, Admin → Connectors);
 **Calendars (read-only, secret iCal address, §5b) built 2026-09-29 on branch `feat/calendar-ical`, not deployed** (migration
-`20260929090000_calendar_ical.sql`); the rest planned. Research sources are listed at the end; every vendor detail was checked on
+`20260929090000_calendar_ical.sql`); **M13.5 storage built on branch `feat/storage`, not deployed** (migration `20260929080000_storage.sql`, §6); the rest planned. Research sources are listed at the end; every vendor detail was checked on
 2026-09-29 against the vendor's own docs or live OAuth discovery files.
 
 ## Goal
@@ -159,6 +159,27 @@ Storage is an HQ function (every deliverable and image gets saved), so it uses t
   saved automatically. Uploading to the CEO's own storage is internal (no approval); making a public/shared link is an
   approval.
 
+**Status (2026-09-29): built on branch `feat/storage`, not deployed.**
+- DB (`20260929080000_storage.sql`): `connectors.kind` also allows `'storage'` (and `'ical'`, so the calendar migration and
+  this one can run in either order). The default is the storage row with `settings.default = true`, set by the CEO through
+  `storage_set_default(uuid)` (hq_guard, audited `storage.default_set`); with none marked, the oldest active one is used.
+  Worker-only: `storage_default_connector()` (sealed secret) and `task_record_storage(task, jsonb)` (puts the saved links on
+  `tasks.output.storage` and on the pending deliverable card). DB suite `scripts/db-tests/170-storage.mjs`.
+- Worker: `connectors/storageOAuth.ts` (authorize URL, PKCE, code exchange, refresh), `connectors/storage.ts` (Drive v3
+  folder find-or-create + multipart ≤ 5 MB / resumable above; Dropbox `/2/files/upload` ≤ 150 MB, capped at 100 MB per file
+  by HQ), routes `/connectors/storage/start|finish|test`. Storage sign-ins use a state starting `st_`; the dashboard callback
+  sends those to `/connectors/storage/finish` and everything else to the MCP finish, unchanged. Secret = client ID/secret +
+  refresh token (sealed); access tokens stay in memory; a rotated refresh token is re-sealed via `store.rotate`.
+- `save_file` tool (designer, writer, web-dev, coo): text content or a file from the task workspace (jail-checked) → link.
+- QA pass → `connectors/storageDeliverable.ts` saves the deliverable text (summary, content, links → `<title>.md`) and the
+  workspace files listed in `output.files`; logs `storage.saved` / `storage.failed`; never blocks the verdict.
+- Links: Drive = the file's `webViewLink` (private to the owner); Dropbox = `dropbox.com/home/Apps/<app folder>/…?preview=<file>`
+  (no per-file web link exists without a shared link). Test = forced token refresh + account read (Drive `about`, Dropbox
+  `users/get_current_account`).
+- Still to verify with real apps: the Dropbox `?preview=` web link, whether Dropbox accepts `client_secret` together with the
+  PKCE `code_verifier` (the official JS SDK sends both), and that a Google *web* client accepts PKCE (Google documents it for
+  installed apps; web servers normally accept it too).
+
 ## 7. Kimi as a backup model
 
 - No free Kimi route exists (Moonshot has no free tier; OpenRouter has no `:free` Kimi; Groq retired it on 2026-04-15).
@@ -184,7 +205,7 @@ Storage is an HQ function (every deliverable and image gets saved), so it uses t
 | M13.3 ✅ | Catalog: Magnific, Higgsfield, ElevenLabs, Supabase, GitHub; own-app form for HubSpot, Meta Ads, Dropbox MCP | Each connects and lists tools; locked rules hold |
 | M13.4 ✅ | Gmail accounts (built first: the COO's inbox tasks were blocked) | Two accounts connected; job-alert search and a draft land in the right account; a send needs approval |
 | M13.4b (code done, branch `feat/calendar-ical`) | Calendars: Google Calendar read-only via the secret iCal address, `calendar_read` | A real secret address connects; "what meetings today?" is answered from the calendar without asking the CEO |
-| M13.5 | Storage: Drive + Dropbox, default picker, `save_file`, deliverable auto-save | A QA-passed deliverable appears in the default storage folder |
+| M13.5 (code on `feat/storage`) | Storage: Drive + Dropbox, default picker, `save_file`, deliverable auto-save | A QA-passed deliverable appears in the default storage folder |
 | then | API & AI panel, Tool logins (agreed earlier) | |
 
 Each step: new migration only, tests, docs, and a heads-up before deploying (an open tab reloads itself after a deploy).
@@ -199,6 +220,14 @@ Each step: new migration only, tests, docs, and a heads-up before deploying (an 
 - **GitHub**: a fine-grained personal access token (repos HQ may touch; read-only first).
 - **HubSpot / Meta Ads / Dropbox / Google Drive**: create the vendor app (guided in the wizard), redirect URL
   `https://hq.rizehub.ph/api/connectors/callback`.
+- **Google Drive storage**: Cloud project → enable the Google Drive API → Google Auth Platform: Branding (app name, support
+  email), Audience *External*, Data access: only `…/auth/drive.file` → **Publish app** (*In production*; drive.file is
+  non-sensitive, so no verification is required — in *Testing* the refresh token expires after 7 days) → Clients → *Web
+  application* with the redirect URL above → client ID + secret into HQ. Without brand verification the consent screen shows
+  no logo; that is fine.
+- **Dropbox storage**: App Console → Scoped access → *App folder* → Permissions: `files.content.write` (+ `files.content.read`,
+  `files.metadata.read`) → Submit → Settings: redirect URI above → App key + secret into HQ. A development-status app works for
+  the owner's own account (no production approval needed for one user).
 - One-click services need nothing beforehand.
 
 ## Sources

@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fromPgBytea, toPgBytea, type Sealed } from '../vault/crypto';
 
-export type ConnectorKind = 'gmail' | 'mcp' | 'ical';
+export type ConnectorKind = 'gmail' | 'mcp' | 'ical' | 'storage';
 export type ConnectorStatus = 'active' | 'needs_reauth' | 'error' | 'disabled';
 export interface GmailSettings { mode?: 'read' | 'read_draft' | 'read_draft_send' }
 
@@ -32,6 +32,8 @@ export interface ConnectorStore {
   syncTools?(id: string, tools: SyncedTool[], initial: boolean): Promise<number>;
   /** MCP: tools an agent may use now (granted, active, on, reviewed). */
   toolsForAgent?(agentId: string): Promise<AgentTool[]>;
+  /** Storage: the connection to save to now (the CEO's default, else the oldest active one), or null. */
+  defaultStorage?(): Promise<ConnectorFull | null>;
   get(id: string): Promise<ConnectorFull | null>;
   insert(c: NewConnector): Promise<string>;
   rotate(id: string, sealed: Sealed): Promise<void>;
@@ -75,5 +77,9 @@ export function createSupabaseConnectorStore(db: SupabaseClient): ConnectorStore
     mark: async (id, status, error = null, used = false) => { await rpc('connector_mark', { p_id: id, p_status: status, p_error: error, p_used: used }); },
     syncTools: (id, tools, initial) => rpc<number>('connector_tools_sync', { p_id: id, p_tools: tools, p_initial: initial }),
     toolsForAgent: async (agentId) => ((await rpc<AgentTool[]>('connector_tools_for_agent', { p_agent: agentId })) ?? []),
+    defaultStorage: async () => {
+      const r = ((await rpc<Raw[]>('storage_default_connector', {})) ?? [])[0];
+      return r ? { ...rowOf(r), kind: r.kind as ConnectorKind, status: r.status as ConnectorStatus } : null;
+    },
   };
 }

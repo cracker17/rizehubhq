@@ -32,7 +32,7 @@ export default async function ({ db, step, val, as, assert }) {
     'connector_set_grants(uuid,text[])', 'connector_update(uuid,text,jsonb)', 'connector_set_status(uuid,text)',
     'connector_delete(uuid)', 'save_auto_approve_rule(jsonb)', 'delete_auto_approve_rule(uuid)',
     'mark_job_applied(uuid,integer)', 'set_job_status(uuid,text,timestamp with time zone,text)',
-    'sales_move_stage(uuid,lead_stage,text,text)',
+    'sales_move_stage(uuid,lead_stage,text,text)', 'storage_set_default(uuid)',
   ];
   // groups B + C: worker / bot only, and trigger functions
   const SERVICE_ONLY = [
@@ -49,6 +49,7 @@ export default async function ({ db, step, val, as, assert }) {
     'rizehub_job_finished(text,text,jsonb)', 'park_task_for_job(uuid,text,jsonb)', 'upsert_job_opportunity(jsonb,uuid)',
     'queue_job_follow_ups()', 'sales_create_daily_batch(date,boolean,integer)', 'sales_decide_batch(uuid,jsonb,text,text,text)',
     'sales_suppress(text,text,text,uuid)', 'sales_client_slug(text)', 'sales_is_suppressed(text)', 'sales_request_open(uuid)',
+    'storage_default_connector()', 'task_record_storage(uuid,jsonb)',
     'touch_updated_at()', 'sales_suppression_permanent()', 'sales_lead_emails_guard()', 'sales_on_approval_decided()',
   ];
 
