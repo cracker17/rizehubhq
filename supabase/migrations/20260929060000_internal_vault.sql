@@ -17,7 +17,7 @@ grant select (is_internal) on clients to authenticated;
 
 -- The internal client holds the tool logins: it can never be archived (archiving revokes every grant),
 -- deleted (would cascade-delete the logins) or turned into / out of a customer.
-create or replace function clients_protect_internal() returns trigger language plpgsql as $$
+create or replace function clients_protect_internal() returns trigger language plpgsql set search_path = public as $$
 begin
   if tg_op = 'DELETE' then
     if old.is_internal then raise exception 'The internal RizeHub client (tool logins) cannot be deleted'; end if;
