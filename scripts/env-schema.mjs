@@ -64,12 +64,12 @@ export const VARS = [
   S({ key: 'NEXT_PUBLIC_SUPABASE_URL', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use https in production'), note: 'empty = DEMO mode (mock data)' }),
   S({ key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: supabaseKey('anon') }),
   // AI
-  S({ key: 'MODEL_PROFILE', group: 'AI', svc: ['worker'], check: (v) => (['free', 'paid', 'hybrid', 'claude', 'openai'].includes(v) ? null : 'must be free | paid | hybrid | claude | openai') }),
+  S({ key: 'MODEL_PROFILE', group: 'AI', svc: ['worker'], check: (v) => (['free', 'paid', 'hybrid', 'claude', 'openai', 'kimi'].includes(v) ? null : 'must be free | paid | hybrid | claude | openai | kimi') }),
   ...['LEAD', 'DEV', 'DESIGN', 'WRITER', 'SALES', 'QA', 'LIGHT'].map((r) => S({ key: `MODEL_ID_${r}`, group: 'AI', svc: ['worker'],
-    check: (v) => (/^(google|groq|openrouter|anthropic|openai):\S+$/.test(v) ? null : 'must be provider:model, e.g. anthropic:claude-sonnet-5 (providers: google, groq, openrouter, anthropic, openai)') })),
+    check: (v) => (/^(google|groq|openrouter|anthropic|openai|moonshot):\S+$/.test(v) ? null : 'must be provider:model, e.g. anthropic:claude-sonnet-5 (providers: google, groq, openrouter, anthropic, openai, moonshot)') })),
   S({ key: 'DAILY_AI_BUDGET_USD', group: 'AI', svc: ['worker', 'dashboard'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0 (0 = no cap)') }),
   S({ key: 'MONTHLY_BUDGET_USD', group: 'AI', svc: ['worker', 'bot'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0') }),
-  ...['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
+  ...['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'MOONSHOT_API_KEY']
     .map((key) => S({ key, group: 'AI', svc: ['worker'], secret: true, check: (v) => (v.length >= 20 && !/\s/.test(v) ? null : 'looks too short / has spaces') })),
   // Worker
   S({ key: 'POLL_INTERVAL_MS', group: 'Worker', svc: ['worker'], check: intIn(250) }),

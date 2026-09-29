@@ -24,6 +24,9 @@ export interface TaskInfo { title: string; agent_id: string; client_id: string |
 
 export type MeterLevel = 'none' | 'ok' | 'warn' | 'over';
 export const FREE_PROVIDERS = ['google', 'groq', 'openrouter'];
+/** Same rule as the worker router (isPaidSpec): paid providers (Anthropic, OpenAI, Moonshot/Kimi) and OpenRouter models without ":free". */
+export const isPaidModel = (provider: string, model: string) =>
+  !FREE_PROVIDERS.includes(provider) || (provider === 'openrouter' && !model.endsWith(':free'));
 
 export interface CostSummary {
   today: string;
@@ -116,7 +119,7 @@ export function summarizeCosts(rows: UsageRow[], o: {
     const m = models.get(key) ?? { provider, usd: 0, runs: 0, tokens: 0 };
     m.usd += usd; m.runs += 1; m.tokens += n(r.tokens_in) + n(r.tokens_out);
     models.set(key, m);
-    if (!FREE_PROVIDERS.includes(provider)) { paidIn += n(r.tokens_in); paidCached += n(r.cached_in); }
+    if (isPaidModel(provider, r.model ?? '')) { paidIn += n(r.tokens_in); paidCached += n(r.cached_in); }
   }
 
   const byUsd = <T extends { usd: number; runs: number }>(a: T, b: T) => b.usd - a.usd || b.runs - a.runs;
@@ -139,7 +142,7 @@ export function summarizeCosts(rows: UsageRow[], o: {
       return { task_id, title: t?.title ?? `Task ${task_id.slice(0, 8)}`, agent_id: t?.agent_id ?? v.agent, client: client ? names[client] ?? null : null, usd: r4(v.usd), runs: v.runs };
     }).sort(byUsd).slice(0, o.topN ?? 8),
     modelMix: [...models].map(([key, v]) => ({
-      model: key.slice(v.provider.length + 1), provider: v.provider, paid: !FREE_PROVIDERS.includes(v.provider),
+      model: key.slice(v.provider.length + 1), provider: v.provider, paid: isPaidModel(v.provider, key.slice(v.provider.length + 1)),
       usd: r4(v.usd), runs: v.runs, tokens: v.tokens, sharePct: rangeUsd ? Math.round((v.usd / rangeUsd) * 1000) / 10 : 0,
     })).sort(byUsd),
   };

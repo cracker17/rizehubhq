@@ -212,7 +212,7 @@ export function formatBudgetAlert(a: Pick<BudgetAlert, 'alert_day' | 'level' | '
     ? `🛑 <b>Daily AI budget reached</b> · ${usd(spent)} of ${usd(budget)} (${esc(a.alert_day)}, Manila)`
     : `⚠️ <b>${a.level}% of the daily AI budget used</b> · ${usd(spent)} of ${usd(budget)} (${esc(a.alert_day)}, Manila)`;
   const body = a.level >= 100
-    ? 'Paid models (Anthropic, OpenAI) stop until midnight Manila time: new work runs on the free models if their keys are set, otherwise it waits. Running work finishes. Raise DAILY_AI_BUDGET_USD to keep paid models on today.'
+    ? 'Paid models (Anthropic, OpenAI, Kimi, paid OpenRouter) stop until midnight Manila time: new work runs on the free models if their keys are set, otherwise it waits. Running work finishes. Raise DAILY_AI_BUDGET_USD to keep paid models on today.'
     : 'Work continues; paid models stop at 100%.';
   return `${head}
 ${body}

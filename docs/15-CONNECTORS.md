@@ -132,12 +132,16 @@ Storage is an HQ function (every deliverable and image gets saved), so it uses t
   tier allows **3 requests/minute**, too low for an agent loop, so top up enough to leave tier 0.
 - Also fix: OpenRouter models without `:free` must be priced as paid (today every OpenRouter call counts as $0).
 - To test during the build: whether Kimi needs its `reasoning_content` sent back on tool-call turns.
+- **Status (2026-09-29): code built on branch `feat/kimi`, not deployed.** `moonshot` provider + prices, Kimi last in every
+  free role, a `kimi` profile (lead/QA `kimi-k3`, rest `kimi-k2.6`), and OpenRouter non-`:free` priced and budget-gated
+  (docs/14 "Which models count as paid"). Router/usage tests cover it. Still to verify in production with a real key:
+  multi-turn tool calls (`reasoning_content`), cached-token reporting, and the forced-outage acceptance below.
 
 ## 8. Build order and acceptance
 
 | Step | What | Done when |
 |---|---|---|
-| M13.1 | Kimi backup + paid-OpenRouter pricing | Router tests; a forced Gemini/Groq outage plans on Kimi and the cost shows on /costs |
+| M13.1 (code done, prod check open) | Kimi backup + paid-OpenRouter pricing | Router tests; a forced Gemini/Groq outage plans on Kimi and the cost shows on /costs |
 | M13.2 ✅ | Connector core: migration, MCP client, Sign in (CIMD / dynamic registration), token paste, test, tool policies, approval + executor, wizard + list | Notion or Linear connected; an Allowed read tool works in a task; an Ask-me tool creates an approval that runs once after approval |
 | M13.3 ✅ | Catalog: Magnific, Higgsfield, ElevenLabs, Supabase, GitHub; own-app form for HubSpot, Meta Ads, Dropbox MCP | Each connects and lists tools; locked rules hold |
 | M13.4 ✅ | Gmail accounts (built first: the COO's inbox tasks were blocked) | Two accounts connected; job-alert search and a draft land in the right account; a send needs approval |

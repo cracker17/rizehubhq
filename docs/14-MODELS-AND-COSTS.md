@@ -4,7 +4,7 @@ RizeHub HQ is **provider-agnostic**. Every agent asks for a *role* ("lead", "spe
 
 ## How it works
 
-- **Vercel AI SDK** (`ai` package, free, open-source) is the agent runtime. The same code talks to Gemini, Groq, OpenRouter, Anthropic (Claude) and OpenAI, and it supports tool calling and multi-step agent loops on all of them.
+- **Vercel AI SDK** (`ai` package, free, open-source) is the agent runtime. The same code talks to Gemini, Groq, OpenRouter, Anthropic (Claude), OpenAI and Moonshot (Kimi), and it supports tool calling and multi-step agent loops on all of them.
 - **Model router** (`apps/worker/src/models/router.ts`) picks the model for each call from the active **profile**, checks the provider's remaining free quota and the budget, and falls back to the next provider when a limit is hit. Provider errors skip only the model that failed (free-tier limits are per model): a daily quota 429 (Gemini free tier is 20 requests/day per model; OpenRouter free accounts about 50/day across all free models), a 404 (retired model) or a 413 (request over the model's per-minute size cap, e.g. Groq free tier 8k tokens/min on a long agent loop) skip it until the next Manila day; a per-minute 429 for 2 minutes; an overloaded model (Gemini 503 "high demand", Anthropic 529, other 5xx after the SDK's retries) for 10 minutes. Speech-to-text (voice input, docs/06) uses the `transcription:` list in `config/models.yaml` (Groq Whisper on the free key). **Free-tier reality (checked 2026-09-29):** those limits carry roughly 5 to 10 agent tasks a day in total; for regular use add a paid provider with MONTHLY_BUDGET_USD / DAILY_AI_BUDGET_USD caps (docs/15 §7).
 - **Usage meter**: every call logs provider, model, tokens in/out, cached tokens and cost into `activity_log`. The dashboard shows spend per agent, per workflow and per client.
 
@@ -17,7 +17,7 @@ Agent (role: specialist) ─► Router ─► profile "free"   → gemini-flash 
 ## Profiles (`config/models.yaml`)
 
 ```yaml
-active_profile: free        # free | hybrid | claude | openai
+active_profile: free        # free | paid | hybrid | claude | openai | kimi
                             # can also be overridden per agent in the Agents page
 
 profiles:
@@ -57,6 +57,38 @@ Exact model IDs change often. Put the current IDs from each provider's docs into
 - Prompt caching: every Anthropic call sends the system prompt as a cached system message (`models/cache.ts` `cachedPrompt`, used by the planner, runner and QA) and the runner adds a rolling breakpoint on the newest message.
 - `DAILY_AI_BUDGET_USD` (0 = no cap; else `settings.daily_budget_usd`): every model run is logged with its cost per task (`tasks.cost_usd`), agent (`activity_log.actor`) and client (`activity_log.client_id`); query them through the `ai_usage` view. At 80% of today's (Asia/Manila) spend the worker records one alert (`budget_alerts`, once per day and level) and the bot sends it to Telegram; at 100% another alert, and **paid providers stop**: new planning, tasks and QA run on the `free` profile when a free provider key is set, otherwise nothing new starts until midnight Manila time. Running work finishes. The dashboard `/costs` page shows the meter and the breakdowns.
 
+## Which models count as paid
+
+The router (`isPaidSpec` in `models/router.ts`) and the price table (`priceFor` in `models/usage.ts`) use one rule:
+
+| Provider | Key | Paid? | Priced at |
+|---|---|---|---|
+| `google` (Gemini) | `GOOGLE_GENERATIVE_AI_API_KEY` | no (free tier) | $0 |
+| `groq` | `GROQ_API_KEY` | no (free tier) | $0 |
+| `openrouter` model ending in `:free` | `OPENROUTER_API_KEY` | no | $0 |
+| `openrouter` model **without** `:free` | `OPENROUTER_API_KEY` | **yes** | the matching `PRICES` entry (vendor prefix dropped: `anthropic/claude-sonnet-5` → Sonnet price), else the fallback $2 / $10 |
+| `anthropic` | `ANTHROPIC_API_KEY` | yes | `PRICES` |
+| `openai` | `OPENAI_API_KEY` | yes | `PRICES` (placeholder tiers) |
+| `moonshot` (Kimi) | `MOONSHOT_API_KEY` | yes | `PRICES` (below) |
+
+Paid models only run when `MONTHLY_BUDGET_USD > 0` and stop for the day at `DAILY_AI_BUDGET_USD`. Before M13.1 every OpenRouter call counted as $0, so a non-`:free` OpenRouter model bypassed both caps; it is now priced and gated like any paid model. The `/costs` model mix marks it paid too.
+
+## Kimi backup (Moonshot, docs/15 §7)
+
+- Provider `moonshot`: OpenAI-compatible chat/completions at `https://api.moonshot.ai/v1`, key `MOONSHOT_API_KEY` (platform.kimi.ai). The router builds it with `@ai-sdk/openai` `createOpenAI({ baseURL }).chat(model)` (chat/completions, not the Responses API).
+- **Free profile**: `moonshot:kimi-k2.6` is the last entry of every role, so it only runs when every Gemini, Groq and OpenRouter-free model is unavailable (quota, 404, overload) **and** `MONTHLY_BUDGET_USD > 0`. With a budget of 0 it is skipped and the task waits, as before.
+- **`kimi` profile** (`MODEL_PROFILE=kimi`): lead and QA on `kimi-k3`, every other role on `kimi-k2.6`.
+- Prices (USD per million tokens, verified 2026-09-29 on platform.kimi.ai):
+
+| Model | Input | Cache read | Output |
+|---|---|---|---|
+| kimi-k3 | $3.00 | $0.30 | $15.00 |
+| kimi-k2.7-code | $0.95 | $0.19 | $4.00 |
+| kimi-k2.6 | $0.95 | $0.16 | $4.00 |
+
+- Moonshot's new-account tier allows 3 requests/minute (too low for agent loops): top up past tier 0 before relying on it. A 429 per-minute limit skips the model for 2 minutes like any other provider.
+- **Verify in production (not covered by tests):** (1) multi-turn tool calls with Kimi. Kimi may return `reasoning_content` alongside tool calls, and Moonshot may expect it sent back on the next turn; the OpenAI chat provider does not echo it. If tool loops fail on the second step, that is the cause. (2) Whether Moonshot reports cached tokens where the OpenAI provider reads them (`prompt_tokens_details.cached_tokens`); if not, cache reads are billed here at the full input price (overstates cost, never understates).
+
 ## Environment keys (only fill what you use)
 
 ```
@@ -65,8 +97,9 @@ GROQ_API_KEY=...                   # Groq (free tier)
 OPENROUTER_API_KEY=...             # OpenRouter (free models as fallback)
 ANTHROPIC_API_KEY=                 # later: Claude
 OPENAI_API_KEY=                    # later: OpenAI
-MODEL_PROFILE=free                 # free | paid | hybrid | claude | openai
-MONTHLY_BUDGET_USD=0               # 0 = free providers only; raise when you switch to paid
+MOONSHOT_API_KEY=                  # optional: Kimi, paid last-resort backup (see "Kimi backup" below)
+MODEL_PROFILE=free                 # free | paid | hybrid | claude | openai | kimi
+MONTHLY_BUDGET_USD=0               # 0 = free models only (no Anthropic/OpenAI/Kimi/paid OpenRouter); raise when you switch to paid
 DAILY_AI_BUDGET_USD=0              # 0 = no daily cap; at 100% paid providers stop for the day
 MODEL_ID_QA=                       # optional per-role override, e.g. openai:gpt-5.5 (also LEAD, DEV, DESIGN, WRITER, SALES, LIGHT)
 ```

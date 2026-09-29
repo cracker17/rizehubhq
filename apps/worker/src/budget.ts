@@ -111,7 +111,7 @@ export class GlobalDailyBudget {
 /** Logged once per day when the cap is hit but free models (free profile keys) keep the team working. */
 export function freeFallbackNote(c: GlobalBudgetCheck): string {
   return `Daily AI budget reached: $${c.spentUsd.toFixed(2)} spent of $${(c.budgetUsd ?? 0).toFixed(2)} today (Asia/Manila ${c.day}). `
-    + 'Paid providers (Anthropic, OpenAI) are stopped until midnight Manila time; new work runs on the free profile models.';
+    + 'Paid providers (Anthropic, OpenAI, Kimi, paid OpenRouter) are stopped until midnight Manila time; new work runs on the free profile models.';
 }
 
 export function globalBudgetNote(c: GlobalBudgetCheck): string {

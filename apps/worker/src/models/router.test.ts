@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseCandidate, hasFreeProviderKey, loadModelsConfig, MODEL_PROFILES, QuotaExhaustedError, roleEnvVar, roleSpecs } from './router';
+import { chooseCandidate, createModel, hasFreeProviderKey, isPaidSpec, loadModelsConfig, MODEL_PROFILES, QuotaExhaustedError, roleEnvVar, roleSpecs } from './router';
 
 const cfg = loadModelsConfig();
 const usage = { requestsToday: {}, spentThisMonthUsd: 0 };
@@ -84,4 +84,79 @@ test('roles missing from an older profile fall back to specialist; unknown profi
   assert.deepEqual(roleSpecs('sales', old, { profile: 'legacy', env: {} }), cfg.profiles.free!.specialist);
   assert.throws(() => roleSpecs('dev', cfg, { profile: 'nope', env: {} }), /Unknown model profile "nope"/);
   for (const p of MODEL_PROFILES) assert.ok(cfg.profiles[p], `profile ${p} exists in config/models.yaml`);
+});
+
+// ---------- Kimi (moonshot) backup + paid OpenRouter (docs/15 §7, M13.1) ----------
+const ALL_ROLES = ['lead', 'specialist', 'dev', 'design', 'writer', 'sales', 'reports', 'qa', 'light'] as const;
+
+test('isPaidSpec: anthropic, openai, moonshot and OpenRouter without :free are paid', () => {
+  assert.equal(isPaidSpec('moonshot', 'kimi-k2.6'), true);
+  assert.equal(isPaidSpec('anthropic', 'claude-sonnet-5'), true);
+  assert.equal(isPaidSpec('openrouter', 'anthropic/claude-sonnet-5'), true);
+  assert.equal(isPaidSpec('openrouter', 'qwen/qwen3.8-27b:free'), false);
+  assert.equal(isPaidSpec('google', 'gemini-3.8-flash'), false);
+  assert.equal(isPaidSpec('groq', 'openai/gpt-oss-120b'), false);
+  assert.equal(hasFreeProviderKey({ MOONSHOT_API_KEY: 'm' }), false, 'Kimi alone is not a free fallback');
+});
+
+test('free profile: moonshot:kimi-k2.6 is the LAST entry of every role', () => {
+  for (const r of ALL_ROLES) {
+    const list = cfg.profiles.free![r]!;
+    assert.equal(list.at(-1), 'moonshot:kimi-k2.6', r);
+    assert.equal(list.filter((s) => s.startsWith('moonshot:')).length, 1, r);
+  }
+});
+
+test('moonshot needs MOONSHOT_API_KEY and a monthly budget > 0', () => {
+  const env = { MOONSHOT_API_KEY: 'm' };
+  assert.deepEqual(chooseCandidate('lead', cfg, { profile: 'free', env, usage, monthlyBudgetUsd: 10 }), { provider: 'moonshot', modelId: 'kimi-k2.6' });
+  assert.throws(() => chooseCandidate('lead', cfg, { profile: 'free', env, usage, monthlyBudgetUsd: 0 }),
+    (e: unknown) => e instanceof QuotaExhaustedError && /moonshot:kimi-k2\.6: monthly budget reached/.test(e.message));
+  assert.throws(() => chooseCandidate('lead', cfg, { profile: 'free', env: {}, usage, monthlyBudgetUsd: 10 }),
+    (e: unknown) => e instanceof QuotaExhaustedError && /moonshot:kimi-k2\.6: no MOONSHOT_API_KEY/.test(e.message));
+  // month's spend used up → skipped like any paid model
+  assert.throws(() => chooseCandidate('lead', cfg, { profile: 'free', env, usage: { requestsToday: {}, spentThisMonthUsd: 10 }, monthlyBudgetUsd: 10 }), QuotaExhaustedError);
+});
+
+test('free profile: Kimi only runs once every free model is unavailable', () => {
+  const env = { GOOGLE_GENERATIVE_AI_API_KEY: 'x', GROQ_API_KEY: 'y', OPENROUTER_API_KEY: 'o', MOONSHOT_API_KEY: 'm' };
+  assert.equal(chooseCandidate('dev', cfg, { profile: 'free', env, usage, monthlyBudgetUsd: 10 }).provider, 'google', 'free models first');
+  const freeSpecs = cfg.profiles.free!.dev!.filter((s) => !s.startsWith('moonshot:'));
+  const outage = { requestsToday: {}, spentThisMonthUsd: 0, blockedModels: new Set(freeSpecs) };
+  assert.deepEqual(chooseCandidate('dev', cfg, { profile: 'free', env, usage: outage, monthlyBudgetUsd: 10 }), { provider: 'moonshot', modelId: 'kimi-k2.6' });
+  // budget 0: Kimi is skipped even in an outage
+  assert.throws(() => chooseCandidate('dev', cfg, { profile: 'free', env, usage: outage, monthlyBudgetUsd: 0 }), QuotaExhaustedError);
+  // daily AI budget reached: paid models stop, Kimi included
+  assert.throws(() => chooseCandidate('dev', cfg, { profile: 'free', env, usage: outage, monthlyBudgetUsd: 10, paidBlocked: true }),
+    (e: unknown) => e instanceof QuotaExhaustedError && /moonshot:kimi-k2\.6: daily AI budget reached/.test(e.message));
+});
+
+test('OpenRouter without :free is paid (budget-gated); :free models stay free', () => {
+  const env = { OPENROUTER_API_KEY: 'o', GROQ_API_KEY: 'g' };
+  const paidOr = 'openrouter:anthropic/claude-sonnet-5';
+  // budget 0: the paid OpenRouter override is skipped, the profile's free models take over
+  assert.equal(chooseCandidate('dev', cfg, { profile: 'free', env, usage, monthlyBudgetUsd: 0, override: paidOr }).provider, 'groq');
+  assert.deepEqual(chooseCandidate('dev', cfg, { profile: 'free', env, usage, monthlyBudgetUsd: 10, override: paidOr }),
+    { provider: 'openrouter', modelId: 'anthropic/claude-sonnet-5' });
+  assert.equal(chooseCandidate('dev', cfg, { profile: 'free', env, usage, monthlyBudgetUsd: 10, override: paidOr, paidBlocked: true }).provider, 'groq',
+    'the daily AI budget stops paid OpenRouter models too');
+  assert.deepEqual(chooseCandidate('dev', cfg, { profile: 'free', env, usage, monthlyBudgetUsd: 0, override: 'openrouter:qwen/qwen3.8-27b:free' }),
+    { provider: 'openrouter', modelId: 'qwen/qwen3.8-27b:free' });
+});
+
+test('kimi profile: lead + QA on kimi-k3, every other role on kimi-k2.6', () => {
+  const env = { MOONSHOT_API_KEY: 'm' };
+  for (const r of ALL_ROLES) {
+    const c = chooseCandidate(r, cfg, { profile: 'kimi', env, usage, monthlyBudgetUsd: 20 });
+    assert.deepEqual(c, { provider: 'moonshot', modelId: r === 'lead' || r === 'qa' ? 'kimi-k3' : 'kimi-k2.6' }, r);
+  }
+  assert.throws(() => chooseCandidate('lead', cfg, { profile: 'kimi', env, usage, monthlyBudgetUsd: 0 }), QuotaExhaustedError);
+  assert.ok(MODEL_PROFILES.includes('kimi'));
+});
+
+test('createModel(moonshot): OpenAI-compatible chat model (chat/completions, not the Responses API)', async () => {
+  const m = await createModel({ provider: 'moonshot', modelId: 'kimi-k2.6' }, { MOONSHOT_API_KEY: 'm' });
+  assert.ok(typeof m === 'object');
+  assert.equal(m.modelId, 'kimi-k2.6');
+  assert.equal(m.provider, 'moonshot.chat');
 });

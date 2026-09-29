@@ -7,21 +7,24 @@
 #      MODEL_ID_QA, MODEL_ID_LIGHT, …), format provider:model, e.g. MODEL_ID_QA=openai:gpt-5.5
 #   3. this file: profiles.<active profile>.<role>, in order (later entries are fallbacks)
 # Roles missing from a profile fall back: design/writer/sales → specialist.
-active_profile: free   # free | paid | hybrid | claude | openai  (env MODEL_PROFILE overrides)
+# Paid models (anthropic, openai, moonshot, and openrouter models WITHOUT ":free") only run when MONTHLY_BUDGET_USD > 0.
+active_profile: free   # free | paid | hybrid | claude | openai | kimi  (env MODEL_PROFILE overrides)
 
 profiles:
   free:
     # Checked 2026-09-29 against HQ's own keys: Gemini free = 20 requests/day PER MODEL; Groq free = 8k tokens/min (too
     # small for long agent prompts, fine for chat); OpenRouter free account = ~50 requests/day across all :free models.
-    lead:       [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
-    specialist: [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
-    dev:        [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:qwen/qwen3.8-27b:free]
-    design:     [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free]
-    writer:     [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
-    sales:      [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free]
-    reports:    [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free]
-    qa:         [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free]
-    light:      [groq:openai/gpt-oss-20b, google:gemini-3.5-flash-lite, groq:qwen/qwen3.8-27b, openrouter:google/gemma-4-31b-it:free, google:gemini-3.8-flash]
+    # moonshot:kimi-k2.6 (paid, MOONSHOT_API_KEY) is the LAST resort of every role (docs/15 §7): it only runs when all the
+    # free models above are unavailable AND MONTHLY_BUDGET_USD > 0; the daily AI budget stops it like any paid model.
+    lead:       [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free, moonshot:kimi-k2.6]
+    specialist: [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free, moonshot:kimi-k2.6]
+    dev:        [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:qwen/qwen3.8-27b:free, moonshot:kimi-k2.6]
+    design:     [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, moonshot:kimi-k2.6]
+    writer:     [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free, moonshot:kimi-k2.6]
+    sales:      [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, openrouter:qwen/qwen3.8-27b:free, moonshot:kimi-k2.6]
+    reports:    [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, moonshot:kimi-k2.6]
+    qa:         [google:gemini-3.8-flash, google:gemini-3.5-flash-lite, groq:openai/gpt-oss-120b, openrouter:nvidia/nemotron-3-super-120b-a12b:free, moonshot:kimi-k2.6]
+    light:      [groq:openai/gpt-oss-20b, google:gemini-3.5-flash-lite, groq:qwen/qwen3.8-27b, openrouter:google/gemma-4-31b-it:free, google:gemini-3.8-flash, moonshot:kimi-k2.6]
   # Paid API keys only (Anthropic Console + OpenAI platform; Claude.ai Pro/Max subscriptions can't power agents).
   # Needs ANTHROPIC_API_KEY, OPENAI_API_KEY and MONTHLY_BUDGET_USD > 0. Anthropic calls use prompt caching.
   # IDs below are the defaults; MODEL_ID_<ROLE> env vars override them. DAILY_AI_BUDGET_USD reached → paid providers stop
@@ -66,6 +69,19 @@ profiles:
     reports:    [openai:gpt-5.4-mini]
     qa:         [openai:gpt-5.5]
     light:      [openai:gpt-5.4-nano]
+  # Kimi (Moonshot, platform.kimi.ai): needs MOONSHOT_API_KEY and MONTHLY_BUDGET_USD > 0. Prices checked 2026-09-29:
+  # kimi-k3 $3 / $15, kimi-k2.6 $0.95 / $4 per million tokens (in / out). New accounts allow only 3 requests/minute:
+  # top up past tier 0 before using this for agent loops.
+  kimi:
+    lead:       [moonshot:kimi-k3]
+    specialist: [moonshot:kimi-k2.6]
+    dev:        [moonshot:kimi-k2.6]
+    design:     [moonshot:kimi-k2.6]
+    writer:     [moonshot:kimi-k2.6]
+    sales:      [moonshot:kimi-k2.6]
+    reports:    [moonshot:kimi-k2.6]
+    qa:         [moonshot:kimi-k3]
+    light:      [moonshot:kimi-k2.6]
 
 # Free-tier guard rails (router): switch provider at 90% of these daily request caps.
 # Speech-to-text for the CEO's voice input (dashboard mic, Telegram voice notes). First usable wins; only providers with
