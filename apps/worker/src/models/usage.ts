@@ -79,12 +79,13 @@ export type PickModel = (role: ModelRole, opts?: { override?: string | null }) =
 
 /**
  * True for "try later / another provider" errors: router has no quota, the provider said 429, or the provider no
- * longer serves this model (404, e.g. a retired Gemini ID). The caller then falls back to the next model in the list.
+ * longer serves this model (404, e.g. a retired Gemini ID), or the request is over its per-minute size cap (413, e.g.
+ * Groq free tier: 8k tokens/min). The caller then falls back to the next model in the list.
  */
 export function isQuotaError(e: unknown, depth = 0): boolean {
   if (!e || depth > 4) return false;
   if (e instanceof QuotaExhaustedError) return true;
-  if (APICallError.isInstance(e) && (e.statusCode === 429 || e.statusCode === 404)) return true;
+  if (APICallError.isInstance(e) && (e.statusCode === 429 || e.statusCode === 404 || e.statusCode === 413)) return true;
   if (RetryError.isInstance(e)) return isQuotaError(e.lastError, depth + 1);
   const cause = (e as { cause?: unknown }).cause;
   return cause ? isQuotaError(cause, depth + 1) : false;

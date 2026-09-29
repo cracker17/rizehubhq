@@ -19,7 +19,7 @@ profiles:
     sales:      [google:gemini-3.8-flash, groq:openai/gpt-oss-120b, openrouter:meta-llama/llama-3.3-70b-instruct:free]
     reports:    [google:gemini-3.8-flash, groq:openai/gpt-oss-120b]
     qa:         [google:gemini-3.8-flash, groq:openai/gpt-oss-120b]
-    light:      [groq:llama-3.1-8b-instant, google:gemini-3.5-flash-lite]
+    light:      [groq:llama-3.1-8b-instant, google:gemini-3.5-flash-lite, google:gemini-3.8-flash, openrouter:meta-llama/llama-3.3-70b-instruct:free]
   # Paid API keys only (Anthropic Console + OpenAI platform; Claude.ai Pro/Max subscriptions can't power agents).
   # Needs ANTHROPIC_API_KEY, OPENAI_API_KEY and MONTHLY_BUDGET_USD > 0. Anthropic calls use prompt caching.
   # IDs below are the defaults; MODEL_ID_<ROLE> env vars override them. DAILY_AI_BUDGET_USD reached → paid providers stop

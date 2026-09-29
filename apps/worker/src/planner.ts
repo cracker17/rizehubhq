@@ -241,6 +241,7 @@ export async function planRequest(req: RequestRow, deps: WorkerDeps): Promise<Pl
       const handoff = enforceDesignHandoff(checked.plan);
       if (handoff.added.length) log(deps, `[coo] design → dev handoff: ${handoff.added.map((a) => `${a.task} waits for ${a.design}`).join(', ')}`);
       const v = { ok: true as const, plan: handoff.plan };
+      if (deps.monthlyBudgetUsd === 0) v.plan = { ...v.plan, estimated_cost_usd: 0 };   // free models only: nothing to pay
 
       await screen('Plan ready for CEO', 100, v.plan.tasks.map((t) => `${t.key} → ${t.agent_id}: ${t.title}`).join('\n'));
       try {

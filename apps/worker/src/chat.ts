@@ -2,7 +2,7 @@
 // Never interrupts the running task; both messages are stored in agent_messages.
 import { generateText } from 'ai';
 import { errMsg, log, usageDetail, type WorkerDeps } from './deps';
-import { costUsd, normalizeUsage } from './models/usage';
+import { costUsd, isQuotaError, normalizeUsage } from './models/usage';
 
 export const MAX_QUESTION_CHARS = 2000;
 
@@ -48,8 +48,20 @@ export async function answerChat(agentId: string, question: string, deps: Worker
   const { system, context, taskId } = await buildChatContext(agentId, deps);
   await deps.db.addAgentMessage(agentId, 'ceo', q, taskId);
 
-  const picked = await deps.pickModel('light');
-  const res = await generateText({ model: picked.model, system, prompt: `# Live state\n${context}\n\n# CEO asks\n${q}` });
+  // A provider out of quota (429) or no longer serving the model (404) → mark it and try the next one in the list.
+  let picked = await deps.pickModel('light');
+  let res: Awaited<ReturnType<typeof generateText>>;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      res = await generateText({ model: picked.model, system, prompt: `# Live state\n${context}\n\n# CEO asks\n${q}` });
+      break;
+    } catch (e) {
+      if (!isQuotaError(e) || attempt >= 3) throw e;
+      log(deps, `[chat] ${picked.provider}:${picked.modelId} unavailable (${errMsg(e).slice(0, 120)}); trying the next model`);
+      deps.onProviderQuota?.(picked.provider);
+      picked = await deps.pickModel('light');
+    }
+  }
   const answer = res.text.trim() || "Sorry, I couldn't put that into words just now. Check my screen in the office for live progress.";
   const cost = picked.recordCall(res.usage, res.providerMetadata);
   const u = normalizeUsage(picked.provider, res.usage, res.providerMetadata);

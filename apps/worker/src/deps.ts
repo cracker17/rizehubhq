@@ -14,6 +14,11 @@ export interface WorkerDeps {
   loadRole: (id: string) => Role;
   agentsDir: string;
   qaThreshold: number;
+  /**
+   * MONTHLY_BUDGET_USD. 0 = paid providers are off (free models only), so a plan's cost estimate is forced to $0:
+   * the model's own guess would otherwise show a made-up dollar figure the CEO can never be charged.
+   */
+  monthlyBudgetUsd?: number;
   /** Called when a provider returns 429 so the picker can fall back. */
   onProviderQuota?: (provider: string) => void;
   log?: (msg: string, extra?: unknown) => void;

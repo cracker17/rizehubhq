@@ -36,5 +36,6 @@ test('isQuotaError: 429 and 404 (retired model) fall back to the next provider; 
   const mk = (statusCode: number) => new APICallError({ message: `HTTP ${statusCode}`, url: 'x', requestBodyValues: {}, statusCode });
   assert.equal(isQuotaError(mk(429)), true);
   assert.equal(isQuotaError(mk(404)), true);
+  assert.equal(isQuotaError(mk(413)), true);
   assert.equal(isQuotaError(mk(400)), false);
 });

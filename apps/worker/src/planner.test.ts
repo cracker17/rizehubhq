@@ -146,3 +146,17 @@ test('planner: Anthropic gets the COO system prompt as a cached system message (
   assert.equal(sys.role, 'system');
   assert.deepEqual(sys.providerOptions?.anthropic, { cacheControl: { type: 'ephemeral' } });
 });
+
+test('free models only (MONTHLY_BUDGET_USD=0): the plan estimate is $0, whatever the model guessed', async () => {
+  const db = new FakeHqDb();
+  db.addRequest({ raw_text: REQUEST });
+  const deps = { ...makeDeps({ db, model: mockModel([jsonResponse(plan({ estimated_cost_usd: 2 }))]) }), monthlyBudgetUsd: 0 };
+  assert.equal((await planNext(deps)).status, 'submitted');
+  assert.equal(db.approvals.find((a) => a.kind === 'plan')?.payload.estimated_cost_usd, 0);
+
+  const db2 = new FakeHqDb();
+  db2.addRequest({ raw_text: REQUEST });
+  const paid = { ...makeDeps({ db: db2, model: mockModel([jsonResponse(plan({ estimated_cost_usd: 2 }))]) }), monthlyBudgetUsd: 50 };
+  await planNext(paid);
+  assert.equal(db2.approvals.find((a) => a.kind === 'plan')?.payload.estimated_cost_usd, 2);
+});
