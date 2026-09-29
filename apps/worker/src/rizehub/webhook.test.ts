@@ -100,7 +100,9 @@ test('end to end over HTTP: mock RizeHub server emits a signed webhook → worke
     assert.ok(res.headers.get('x-ratelimit-limit'));
 
     mock.simulate('client.signed_up', { company: 'Wren Architecture', package: 'webflow-build' });
-    for (let i = 0; i < 50 && ![...db.requests.values()].length; i++) await new Promise((r) => setTimeout(r, 20));
+    // Wait for both: the worker stores the request before the mock sees (and logs) its 200 response.
+    const delivered = () => logs.some((l) => /webhook client\.signed_up → 200/.test(l));
+    for (let i = 0; i < 100 && (![...db.requests.values()].length || !delivered()); i++) await new Promise((r) => setTimeout(r, 20));
     assert.equal([...db.requests.values()][0]?.raw_text.split('\n')[0], 'Onboard Wren Architecture on webflow-build');
     assert.ok(logs.some((l) => /webhook client\.signed_up → 200/.test(l)));
 
