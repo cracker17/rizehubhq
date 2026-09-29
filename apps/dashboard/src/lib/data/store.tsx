@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { getSupabaseBrowser } from '@/lib/supabase/browser';
 import { askAgentAction, createRequestAction, decideApprovalAction, refreshSnapshotAction, type ActionResult } from '@/app/actions';
+import { isStaleDeployError, reloadOnce } from '@/lib/staleDeploy';
 import { StepUpDialog, type StepUpRequest } from '@/components/StepUpDialog';
 import { approvalRisk } from '@/lib/auth/stepUp';
 import { buildIndexes, computeKpis, type Indexes, type Kpis } from './derive';
@@ -101,9 +102,21 @@ export function HqProvider({ session, initial, loadError, children }: {
 
   const refresh = useCallback(async () => {
     if (!live) return;
-    const next = await refreshSnapshotAction();
-    if (next) dispatch({ type: 'replace', snap: next });
+    try {
+      const next = await refreshSnapshotAction();
+      if (next) dispatch({ type: 'replace', snap: next });
+    } catch (e) {
+      // A tab left open across a deploy calls Server Actions the new build doesn't have: load the new version.
+      if (isStaleDeployError(e)) reloadOnce();
+    }
   }, [live]);
+
+  // Same for any other stale Server Action / chunk call made from an event handler (those never reach error.tsx).
+  useEffect(() => {
+    const onRejection = (ev: PromiseRejectionEvent) => { if (isStaleDeployError(ev.reason)) reloadOnce(); };
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => window.removeEventListener('unhandledrejection', onRejection);
+  }, []);
 
   // ---- realtime (LIVE only) ----
   useEffect(() => {

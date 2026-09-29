@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"src/components/office/logic/**/*.test.ts\" \"src/lib/data/**/*.test.ts\" \"src/lib/auth/**/*.test.ts\"",
+    "test": "tsx --test \"src/components/office/logic/**/*.test.ts\" \"src/lib/data/**/*.test.ts\" \"src/lib/auth/**/*.test.ts\" \"src/lib/*.test.ts\"",
     "build:preview": "next build && node preview/build.mjs"
   },
   "dependencies": {
