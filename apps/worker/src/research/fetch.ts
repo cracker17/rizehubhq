@@ -11,7 +11,7 @@ function escAttr(s: string): string {
 
 /** Wraps untrusted text so it can't close or forge the wrapper. */
 export function wrapUntrusted(source: string, body: string, tag = 'fetched_content'): string {
-  const safe = body.replace(/<\s*(\/?)\s*(fetched_content|search_results|figma_content)\b/gi, '<$1_$2');
+  const safe = body.replace(/<\s*(\/?)\s*(fetched_content|search_results|figma_content|calendar_events)\b/gi, '<$1_$2');
   return `<${tag} source="${escAttr(source)}">\n${safe}\n</${tag}>\n${UNTRUSTED_NOTE}`;
 }
 

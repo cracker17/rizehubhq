@@ -10,6 +10,7 @@ import { createServiceClient } from '../db';
 import { loadKeyring, open, seal, type Keyring } from '../vault/crypto';
 import { connectorContext, createSupabaseConnectorStore, type ConnectorStore } from '../connectors/store';
 import { isGmailAddress, normalizeAppPassword, testGmailLogin } from '../connectors/gmail';
+import { checkIcalUrl, DEFAULT_CALENDAR_TZ, IcalError, icalHost, sharedIcalCache, validTimeZone, type IcalCache } from '../connectors/ical';
 
 const AGENT = /^[a-z0-9-]{1,64}$/;
 const AddGmail = z.object({
@@ -19,6 +20,12 @@ const AddGmail = z.object({
   agents: z.array(z.string().regex(AGENT)).max(10).default([]),
   mode: z.enum(['read', 'read_draft', 'read_draft_send']).default('read'),
 });
+const AddIcal = z.object({
+  url: z.string().max(2000),
+  name: z.string().max(120).optional(),
+  agents: z.array(z.string().regex(AGENT)).max(10).default(['coo']),
+  timezone: z.string().max(64).optional(),
+});
 const Replace = z.object({ id: z.string().uuid(), appPassword: z.string().max(64) });
 const Test = z.object({ id: z.string().uuid() });
 
@@ -26,6 +33,8 @@ export interface ConnectorRouteDeps {
   store: () => ConnectorStore;
   keyring: () => Keyring | null;
   test?: typeof testGmailLogin;
+  /** iCal feeds (Google Calendar secret address): fetch + parse, cached per connector. */
+  ical?: () => IcalCache;
 }
 
 function parse<S extends z.ZodTypeAny>(schema: S, raw: Buffer): z.output<S> | string {
@@ -37,6 +46,7 @@ function parse<S extends z.ZodTypeAny>(schema: S, raw: Buffer): z.output<S> | st
 
 export function createConnectorRoutes(d: ConnectorRouteDeps): Route[] {
   const test = d.test ?? testGmailLogin;
+  const icalCache = d.ical ?? sharedIcalCache;
   const noKey: [number, unknown] = [503, { error: 'The worker cannot encrypt secrets: VAULT_MASTER_KEY is not set.' }];
   return [
     {
@@ -66,6 +76,38 @@ export function createConnectorRoutes(d: ConnectorRouteDeps): Route[] {
       },
     },
     {
+      // Google Calendar (read-only) via its "Secret address in iCal format". The address is the credential: it is test-
+      // fetched, then sealed; the url column stays null so the browser never sees it. Errors never repeat it.
+      method: 'POST', path: '/connectors/ical/add', auth: 'secret',
+      handle: async (_req, raw) => {
+        const b = parse(AddIcal, raw);
+        if (typeof b === 'string') return [400, { error: /url/i.test(b) ? 'Paste the calendar address.' : b }];
+        const url = checkIcalUrl(b.url);
+        if (typeof url !== 'string') return [400, { error: url.error }];
+        const kr = d.keyring();
+        if (!kr) return noKey;
+        const id = randomUUID();
+        let cal;
+        try { cal = await icalCache().refresh(id, url); } catch (e) {
+          return [400, { error: e instanceof IcalError ? e.message : 'The calendar could not be read.' }];
+        }
+        const host = icalHost(url);
+        const name = b.name?.trim() || cal.name || (host === 'calendar.google.com' ? 'Google Calendar' : 'Calendar');
+        try {
+          await d.store().insert({
+            id, kind: 'ical', name, accountEmail: null, url: null, authType: 'none',
+            settings: { timezone: validTimeZone(b.timezone) ?? DEFAULT_CALENDAR_TZ, host, calendar_name: cal.name },
+            sealed: seal(url, kr, connectorContext(id)), grants: b.agents,
+            catalogKey: host === 'calendar.google.com' ? 'google_calendar' : 'ical',
+          });
+        } catch {
+          icalCache().drop(id);
+          return [409, { error: 'Could not save the calendar.' }];
+        }
+        return [200, { id, name, events: cal.eventCount }];
+      },
+    },
+    {
       method: 'POST', path: '/connectors/gmail/replace', auth: 'secret',
       handle: async (_req, raw) => {
         const b = parse(Replace, raw);
@@ -91,6 +133,19 @@ export function createConnectorRoutes(d: ConnectorRouteDeps): Route[] {
         if (!kr) return noKey;
         const c = await d.store().get(b.id);
         if (!c) return [404, { error: 'Unknown connector.' }];
+        if (c.kind === 'ical' && c.sealed) {
+          let url: string;
+          try { url = open(c.sealed, kr, connectorContext(c.id)); } catch { return [200, { ok: false, error: 'The stored calendar address could not be decrypted. Remove the calendar and add it again.' }]; }
+          try {
+            const cal = await icalCache().refresh(c.id, url);
+            await d.store().mark(c.id, 'active', null).catch(() => undefined);
+            return [200, { ok: true, message: `Read the calendar${cal.name ? ` "${cal.name}"` : ''}: ${cal.eventCount} event(s) in the feed.` }];
+          } catch (e) {
+            const m = e instanceof IcalError ? e.message : 'The calendar could not be read.';
+            await d.store().mark(c.id, e instanceof IcalError && e.reauth ? 'needs_reauth' : 'error', m).catch(() => undefined);
+            return [200, { ok: false, error: m }];
+          }
+        }
         if (c.kind !== 'gmail' || !c.account_email || !c.sealed) return [400, { error: 'Testing this kind of connector is not supported yet.' }];
         let pass: string;
         try { pass = open(c.sealed, kr, connectorContext(c.id)); } catch { return [200, { ok: false, error: 'The stored App Password could not be decrypted. Replace it.' }]; }

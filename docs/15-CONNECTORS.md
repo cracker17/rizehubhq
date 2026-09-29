@@ -1,13 +1,15 @@
 # 15 · Connectors, Gmail accounts, storage and the Kimi backup model (M13 plan)
 
-Status: **M13.2 + M13.3 MCP apps and M13.4 Gmail accounts built 2026-09-29** (migration `20260929020000_connectors.sql`, Admin → Connectors); the rest planned. Research sources are listed at the end; every vendor detail was checked on
+Status: **M13.2 + M13.3 MCP apps and M13.4 Gmail accounts built 2026-09-29** (migration `20260929020000_connectors.sql`, Admin → Connectors);
+**Calendars (read-only, secret iCal address, §5b) built 2026-09-29 on branch `feat/calendar-ical`, not deployed** (migration
+`20260929090000_calendar_ical.sql`); the rest planned. Research sources are listed at the end; every vendor detail was checked on
 2026-09-29 against the vendor's own docs or live OAuth discovery files.
 
 ## Goal
 
 From **Admin → Connectors** the CEO connects outside services in a short wizard, decides tool by tool what agents may
 do, and picks which agents get each connection. Nothing that changes the outside world runs without the CEO's approval
-(CLAUDE.md rule 4). Same page: Gmail accounts (App Password), and the storage where agents save images and deliverables
+(CLAUDE.md rule 4). Same page: Gmail accounts (App Password), Calendars (secret iCal address, read-only), and the storage where agents save images and deliverables
 (Google Drive or Dropbox). Separately, Kimi becomes a paid backup model.
 
 ## 1. What connects, and how
@@ -62,7 +64,7 @@ Connecting, switching a tool to **Allowed**, and adding agents ask for the 2FA c
 ## 4. Architecture
 
 **Database** (new migration `20260929020000_connectors.sql`; never edit applied ones):
-- `connectors`: id, kind (`mcp` | `gmail`), catalog_key, name, url, auth_type (`oauth` | `bearer` | `header` | `app_password`
+- `connectors`: id, kind (`mcp` | `gmail` | `ical`; `storage` from M13.5), catalog_key, name, url, auth_type (`oauth` | `bearer` | `header` | `app_password`
   | `none`), auth_header, account_email, oauth_meta (issuer, client_id, scopes, expires_at; non-secret), status
   (`active` | `needs_reauth` | `error` | `disabled`), last_checked_at, last_used_at, last_error,
   **secret_cipher, secret_iv, key_version** (worker only).
@@ -109,6 +111,42 @@ tokens expire every 7 days for unreviewed apps, and permanent access needs a pai
   OnlineJobs/Indeed/LinkedIn **alert emails** in the granted accounts, scores the jobs and drafts applications; the CEO
   opens the listing and applies. Agents never log in to job sites (brain/playbooks/job-hunt.md).
 
+## 5b. Calendars (Google Calendar, read-only, secret iCal address)
+
+Why: the COO kept asking the CEO for "today's meetings" because `calendar_read` was a placeholder. App Passwords don't
+cover Calendar, and Google's Calendar OAuth for personal accounts expires weekly unless the app is verified. Every Google
+calendar has a read-only **Secret address in iCal format** instead (Calendar settings → the calendar → *Integrate
+calendar*), which never expires until the CEO resets it.
+
+- **Connect** (Admin → Connectors → *Calendars* → *Add a calendar*): the dialog walks through Google Calendar on a
+  computer → Settings → pick the calendar → Integrate calendar → copy *Secret address in iCal format*. The CEO pastes it
+  (password field), optionally names it and ticks agents (default COO); 2FA code when enrolled. Dashboard action
+  `addCalendarAction` → worker `POST /connectors/ical/add` (`x-hq-secret`): the address must be https (`webcal://` is
+  rewritten), have no login in it, end in `.ics` (the *public* `…/public/basic.ics` address is refused), then it is
+  test-fetched and must parse as a VCALENDAR. Only then it is sealed (`seal(url, keyring, 'connector:<id>')`) and stored
+  with `connector_insert` as kind `ical`, auth_type `none`, `url` null, settings `{timezone: 'Asia/Manila', host,
+  calendar_name}`, catalog key `google_calendar` (or `ical` for other hosts).
+- **The address is a credential** (docs/09): anyone with it reads the calendar. It is never in a readable column, a log,
+  a tool result or an error message. Revoke by clicking **Reset** next to it in Google Calendar.
+- **Fetching** (`apps/worker/src/connectors/ical.ts`): research SSRF guard on every hop (`safeFetch`: public hosts only,
+  ≤3 redirects, must end on https), 20 s timeout, 5 MB cap. HTTP 401/403/404/410 = the address was reset → status
+  `needs_reauth` ("Address stopped working"). Parsed feeds are cached per connector for 5 minutes (one process-wide cache
+  shared by the tool and the Test button; Test always re-fetches).
+- **Parsing**: `node-ical` 0.27 (bundles `rrule-temporal`): recurring events expanded with RRULE, EXDATE and
+  RECURRENCE-ID overrides, VTIMEZONE/IANA zones and DST; cancelled events and cancelled instances are dropped. All-day
+  events stay on their calendar date whatever the worker's own clock zone. Each event: start/end (ISO with the Manila
+  offset, or the date for all-day), title, location, meeting link (Google Meet from `X-GOOGLE-CONFERENCE`, or Meet / Zoom /
+  Teams / Webex found in location or description), organizer, guests with their answer, tentative, recurring.
+- **Tool** `calendar_read` (`apps/worker/src/tools/calendar.ts`, listed before `researchTools` so it replaces the old
+  placeholder): input `{from?, to?, account?}`; default = today in Asia/Manila; `YYYY-MM-DD` means whole days (`to`
+  inclusive), date-times without an offset are read in Manila; at most 62 days and 100 events per calendar. Reads every
+  active calendar granted to the agent (or the named one) and returns a compact list wrapped as outside data
+  (`<calendar_events>`). No calendar granted → a message telling the agent the CEO connects one in Admin → Connectors →
+  Calendars and **not** to ask the CEO to type the calendar.
+- **Manage**: Test (re-fetch), Agents (`connector_set_grants`, 2FA for added agents), Turn off/on, Remove — the existing
+  connector RPCs. No new SQL functions: the migration only widens `connectors.kind` to `gmail | mcp | storage | ical`.
+- **Not verified yet**: a real Google secret address (tests use a Google-shaped fixture feed).
+
 ## 6. Storage: Google Drive and Dropbox
 
 Storage is an HQ function (every deliverable and image gets saved), so it uses the plain APIs rather than MCP:
@@ -145,6 +183,7 @@ Storage is an HQ function (every deliverable and image gets saved), so it uses t
 | M13.2 ✅ | Connector core: migration, MCP client, Sign in (CIMD / dynamic registration), token paste, test, tool policies, approval + executor, wizard + list | Notion or Linear connected; an Allowed read tool works in a task; an Ask-me tool creates an approval that runs once after approval |
 | M13.3 ✅ | Catalog: Magnific, Higgsfield, ElevenLabs, Supabase, GitHub; own-app form for HubSpot, Meta Ads, Dropbox MCP | Each connects and lists tools; locked rules hold |
 | M13.4 ✅ | Gmail accounts (built first: the COO's inbox tasks were blocked) | Two accounts connected; job-alert search and a draft land in the right account; a send needs approval |
+| M13.4b (code done, branch `feat/calendar-ical`) | Calendars: Google Calendar read-only via the secret iCal address, `calendar_read` | A real secret address connects; "what meetings today?" is answered from the calendar without asking the CEO |
 | M13.5 | Storage: Drive + Dropbox, default picker, `save_file`, deliverable auto-save | A QA-passed deliverable appears in the default storage folder |
 | then | API & AI panel, Tool logins (agreed earlier) | |
 
@@ -155,6 +194,8 @@ Each step: new migration only, tests, docs, and a heads-up before deploying (an 
 - **Kimi**: a Moonshot account (platform.kimi.ai), a top-up, an API key into `.env` (the API & AI panel later), and
   budget caps.
 - **Gmail**: 2-Step Verification + one App Password per account.
+- **Calendar**: copy each calendar's *Secret address in iCal format* (Google Calendar on a computer → Settings → the
+  calendar → Integrate calendar) into Admin → Connectors → Calendars.
 - **GitHub**: a fine-grained personal access token (repos HQ may touch; read-only first).
 - **HubSpot / Meta Ads / Dropbox / Google Drive**: create the vendor app (guided in the wizard), redirect URL
   `https://hq.rizehub.ph/api/connectors/callback`.
