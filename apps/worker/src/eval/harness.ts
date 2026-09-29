@@ -51,7 +51,7 @@ export interface EvalResult {
   firstScore: number | null;
   attempts: AttemptResult[];
   expected?: 'pass' | 'fail';
-  /** provider:model per model role the task used (e.g. writer → google:gemini-2.5-flash, qa → …). */
+  /** provider:model per model role the task used (e.g. writer → google:gemini-3.8-flash, qa → …). */
   models: Record<string, string>;
   costUsd: number;
   /** Approvals the run created (questions, external actions): recorded only, never executed. */
