@@ -242,6 +242,19 @@ test('writes refuse secrets and duplicates; brain_create_project fills the templ
   assert.equal(g(clone, 'status', '--porcelain'), '');
 });
 
+test('dashboard writes (/write/memory, /write/project) need the internal secret and commit as the CEO', async () => {
+  assert.equal((await api('POST', '/write/memory', { body: { project: 'demo', decisions: ['x'] }, secret: null })).status, 401);
+  const bad = await api('POST', '/write/memory', { body: { project: 'nope-nothing' , decisions: ['x'] } });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /no project matches/);
+  const ok = await api('POST', '/write/memory', { body: { project: 'demo', next_steps: ['[x] Build the UI', 'Wire agents'] } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  g(pc, 'fetch', '-q');
+  assert.match(originFile('projects/demo/memory.md'), /## Open next steps\n- \[x\] Build the UI\n- Wire agents/);
+  const ev = await store.exec(`select actor from brain_events where action = 'saved' order by id desc limit 1`);
+  assert.equal(ev[0]!.actor, 'julev');
+});
+
 test('refresh tokens rotate; replaying an old one revokes the connection; revoke ends it', async () => {
   const r1 = await api('POST', '/oauth/token', { form: { grant_type: 'refresh_token', client_id: clientId, refresh_token: refresh } });
   assert.equal(r1.status, 200);
