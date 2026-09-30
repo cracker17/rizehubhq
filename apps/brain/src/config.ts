@@ -24,6 +24,10 @@ export interface BrainConfig {
   openaiKey: string;
   /** provider:model, e.g. openai:text-embedding-3-small */
   embedModel: string;
+  /** extra https hosts OAuth clients may redirect to, besides claude.ai / claude.com and loopback (comma-separated) */
+  oauthRedirectHosts: string[];
+  /** IANA zone for dates written into the vault (session file names, "updated:", decisions) */
+  timeZone: string;
 }
 
 export const DEFAULT_EMBED_MODEL = 'openai:text-embedding-3-small';
@@ -44,6 +48,11 @@ const int = (v: string | undefined, def: number, min: number, max: number) => {
   return Number.isFinite(n) && n >= min && n <= max ? n : def;
 };
 
+const validZone = (z: string | undefined) => {
+  if (!z) return null;
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: z }); return z; } catch { return null; }
+};
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): BrainConfig {
   const modelsFile = env.MODELS_FILE || path.resolve(process.cwd(), '../../config/models.yaml');
   return {
@@ -60,5 +69,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BrainConfig {
     supabaseServiceKey: env.SUPABASE_SERVICE_ROLE_KEY ?? '',
     openaiKey: env.BRAIN_OPENAI_API_KEY ?? '',
     embedModel: env.BRAIN_EMBED_MODEL || embedModelFromFile(modelsFile) || DEFAULT_EMBED_MODEL,
+    oauthRedirectHosts: (env.BRAIN_OAUTH_REDIRECT_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase())
+      .filter((h) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h)),
+    timeZone: validZone(env.BRAIN_TIMEZONE) ?? 'Asia/Manila',
   };
 }

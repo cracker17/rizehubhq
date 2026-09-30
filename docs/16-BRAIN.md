@@ -13,8 +13,8 @@ searchable index in Supabase that is rebuildable from git at any time. The full 
 | # | What | Status |
 |---|---|---|
 | M14.1 | VPS mirror + brain service + indexer (keyword + pgvector) + read-only Brain API + GitHub webhook | built |
-| M14.2 | Brain MCP connector at `https://hq.rizehub.ph/mcp/brain` (OAuth via HQ login + 2FA), write path (commit + push) | next |
-| M14.3 | Brain UI v1 at `/brain` (Core, Ctrl+K, project view, New Project wizard, activity) | |
+| M14.2 | Brain MCP connector at `https://hq.rizehub.ph/mcp/brain` (OAuth via HQ login + 2FA), write path (commit + push) | built |
+| M14.3 | Brain UI v1 at `/brain` (Core, Ctrl+K, project view, New Project wizard, activity, Devices & accounts) | next |
 | M14.4 | Agents on the brain (scoped tokens, auto-load per client, proposals, digest), fold `brain/` in | |
 | M14.5 | Polish: graph, Ask the Brain, diff/revert, PWA, voice; nightly R2 backup | |
 
@@ -61,6 +61,43 @@ Every function returns one scalar/jsonb value so supabase-js `rpc()` and the loc
 > silently return nothing. Functions that touch vectors are `language sql` (`brain_replace_chunks`, `brain_set_embeddings`,
 > `brain_search`). Real Postgres is fine either way.
 
+## Connector (M14.2)
+
+`https://hq.rizehub.ph/mcp/brain`: MCP over Streamable HTTP (stateless, JSON only; `apps/brain/src/mcp/server.ts`). The
+dashboard is the public door (`apps/dashboard/src/lib/brainConnector.ts`); hq-brain holds the OAuth state because it
+has the service key, so the dashboard stays keyless.
+
+| Public URL (dashboard) | Does |
+|---|---|
+| `/.well-known/oauth-protected-resource[/mcp/brain]` | RFC 9728: resource + authorization server (served by the dashboard) |
+| `/.well-known/oauth-authorization-server` | RFC 8414 metadata: S256 only, public clients only (`none`) |
+| `/oauth/register` → brain | RFC 7591. Redirect URIs: claude.ai / claude.com (+ `BRAIN_OAUTH_REDIRECT_HOSTS`, https) and loopback http (any port, RFC 8252). 30/hour, 200 total; never-used registrations expire after a day |
+| `/oauth/authorize` | consent page: client + redirect checked first (never redirects on failure), then HQ session, **2FA required**, CEO only; "Also allow saving" = `brain:write` |
+| `/oauth/token` → brain | `authorization_code` (PKCE required, one-time code, 5 min; a replayed code revokes its tokens) and `refresh_token` (rotating; a replayed refresh token revokes the whole connection) |
+| `/oauth/revoke` → brain | RFC 7009; revokes the connection (family) |
+| `/mcp/brain` → brain `/mcp` | Bearer access token (1 h). 401 carries `WWW-Authenticate: Bearer resource_metadata=…` |
+
+Tokens (`hqb_at_…`, `hqb_rt_…`) are 32 random bytes; only sha256 hashes are stored (`brain_oauth_clients`,
+`brain_oauth_codes`, `brain_tokens`, migration `20260930020000_brain_oauth.sql`). A token stops working as soon as its
+user leaves `ceo_users`. The CEO lists/revokes connections with `brain_connections()` / `brain_revoke_connection()` (M14.3 UI).
+
+**Tools.** `brain:read`: `brain_list_projects` (= /projects), `brain_load_project` (= /load: profile + memory.md + newest
+sessions), `brain_search` (= /recall), `brain_get_document`, `brain_recent_activity`, `brain_get_setup_kit` (setup guide,
+skill, command files, scheduled-task prompts). `brain:write`: `brain_save_session` (= /save: session file + LOG.md line +
+memory.md decisions/next steps/status/facts), `brain_update_memory`, `brain_create_project` (= /new-project). Every call
+is a `tool_call` event (tool name + ok, never arguments).
+
+**Write path** (`apps/brain/src/write/*`, `service.write`): same lock as sync → pull → run the edit (a pure function of the
+tree) → refuse on the secret patterns (inputs and whole files) → commit as `HQ Brain <brain@hq.rizehub.ph>` → push with
+the deploy key → index now → `saved` event. Push rejected (the PC pushed first) → reset to the new origin and re-run the
+edit, up to 3 times, so the VPS never merges. Dates use `BRAIN_TIMEZONE` (default Asia/Manila).
+
+**Add it in Claude.** claude.ai (Pro/Max): Settings › Connectors › Add custom connector › the URL above. Team/Enterprise
+plans: an owner adds it under the organization's connector settings, then each member connects. Claude Code:
+`claude mcp add --transport http hq-brain https://hq.rizehub.ph/mcp/brain`, then `/mcp` to sign in.
+
+**Deploy (once):** apply `20260930020000_brain_oauth.sql` before pushing to `main`. Nothing else: no new secrets.
+
 ## Brain API (internal, header `x-brain-secret`)
 
 | Route | Returns |
@@ -74,6 +111,8 @@ Every function returns one scalar/jsonb value so supabase-js `rpc()` and the loc
 | `GET /activity?n=50` | newest events |
 | `POST /reindex[?full=1]` | pull + index now (`full=1` drops the index first) |
 | `POST /hooks/github` | GitHub webhook (own HMAC check), reached through the dashboard's `/api/brain/github` |
+| `POST /oauth/register` `/oauth/code` `/oauth/token` `/oauth/revoke`, `GET /oauth/client` | connector OAuth (above); `/oauth/code` is the dashboard's consent page only |
+| `POST /mcp` | the MCP server; the caller's `Authorization` header is passed through |
 
 ## Env (`.env` → `.env.brain` via `scripts/split-env.mjs`)
 

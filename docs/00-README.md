@@ -25,7 +25,7 @@ Read in order. Each file is self-contained enough to hand to a developer — or 
 | `12-RIZEHUB-INTEGRATION.md` | How HQ connects to RizeHub on the same VPS: the Agent API RizeHub exposes, keys, webhooks, testing |
 | `14-MODELS-AND-COSTS.md` | Free AI setup now (Gemini, Groq, OpenRouter), switching to Claude or OpenAI later, and monthly cost estimates |
 | `15-CONNECTORS.md` | M13 plan: MCP connector wizard (catalog, sign-in, per-tool permissions), Gmail accounts, Drive/Dropbox storage, Kimi backup model |
-| `16-BRAIN.md` | M14 HQ Brain: vault mirror on the VPS, Supabase index (keyword + pgvector), Brain API, webhook; MCP connector + `/brain` UI next |
+| `16-BRAIN.md` | M14 HQ Brain: vault mirror on the VPS, Supabase index (keyword + pgvector), Brain API, webhook; MCP connector (OAuth, read + write); `/brain` UI next |
 | `13-WORKFLOWS.md` | Playbooks: find leads (Lead Finder), find jobs + draft applications, onboard clients (account + workspace), monthly reports, proposals |
 | `CLAUDE.md` | Drop into the repo root so Claude Code follows this spec while building |
 
