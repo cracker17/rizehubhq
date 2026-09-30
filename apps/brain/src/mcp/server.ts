@@ -37,7 +37,8 @@ const PROJECT = { type: 'string', description: 'Project slug, name or alias (e.g
 interface ToolDef {
   name: string; title: string; description: string; scope: 'brain:read' | 'brain:write';
   inputSchema: Record<string, unknown>; annotations: Record<string, boolean>;
-  run: (d: McpDeps, args: Record<string, unknown>, caller: Caller) => Promise<string>;
+  /** text for Claude, plus the project it touched (recorded on the tool_call event: the /brain page lights it up) */
+  run: (d: McpDeps, args: Record<string, unknown>, caller: Caller) => Promise<string | { text: string; project: string | null }>;
 }
 
 const READ = { readOnlyHint: true, openWorldHint: false };
@@ -130,8 +131,8 @@ export const TOOLS: ToolDef[] = [
       const project = a.project ? await resolveSlug(d, a.project) : null;
       const r = await search(d, { q, project, kinds: a.include_transcripts === true ? ['all'] : [], k: Number(a.limit) || 8 });
       if (!r.results.length) return `Nothing found for "${q}"${project ? ` in ${project}` : ''}.`;
-      return cap([`Search "${q}" (semantic ${r.semantic}):`, ...r.results.map((h, i) =>
-        `${i + 1}. ${h.path}${h.heading ? ` › ${h.heading}` : ''} (${h.kind}${h.doc_date ? `, ${h.doc_date}` : ''})\n${h.text.trim()}`)].join('\n\n'));
+      return { project, text: cap([`Search "${q}" (semantic ${r.semantic}):`, ...r.results.map((h, i) =>
+        `${i + 1}. ${h.path}${h.heading ? ` › ${h.heading}` : ''} (${h.kind}${h.doc_date ? `, ${h.doc_date}` : ''})\n${h.text.trim()}`)].join('\n\n')) };
     },
   },
   {
@@ -197,7 +198,7 @@ export const TOOLS: ToolDef[] = [
     },
     async run(d, a, caller) {
       const r = await d.service.write(saveSessionOp(a as unknown as SessionInput), actorOf(caller));
-      return `Saved to ${r.project}: ${r.detail?.file ?? r.paths[0]} (commit ${r.sha.slice(0, 7)}). Files: ${r.paths.join(', ')}.`;
+      return { project: r.project, text: `Saved to ${r.project}: ${r.detail?.file ?? r.paths[0]} (commit ${r.sha.slice(0, 7)}). Files: ${r.paths.join(', ')}.` };
     },
   },
   {
@@ -215,7 +216,7 @@ export const TOOLS: ToolDef[] = [
     },
     async run(d, a, caller) {
       const r = await d.service.write(updateMemoryOp(String(a.project ?? ''), a), actorOf(caller));
-      return `Updated ${r.paths[0]}: ${r.summary.replace(/^memory: /, '')} (commit ${r.sha.slice(0, 7)}).`;
+      return { project: r.project, text: `Updated ${r.paths[0]}: ${r.summary.replace(/^memory: /, '')} (commit ${r.sha.slice(0, 7)}).` };
     },
   },
   {
@@ -233,7 +234,7 @@ export const TOOLS: ToolDef[] = [
     },
     async run(d, a, caller) {
       const r = await d.service.write(createProjectOp(a as unknown as NewProject), actorOf(caller));
-      return `Created ${r.detail?.slug ?? r.project} (commit ${r.sha.slice(0, 7)}). It is the active project now: brain_save_session writes there.`;
+      return { project: r.project, text: `Created ${r.detail?.slug ?? r.project} (commit ${r.sha.slice(0, 7)}). It is the active project now: brain_save_session writes there.` };
     },
   },
 ];
@@ -254,17 +255,20 @@ async function callTool(d: McpDeps, caller: Caller, params: unknown) {
   const args = (p.arguments && typeof p.arguments === 'object' && !Array.isArray(p.arguments) ? p.arguments : {}) as Record<string, unknown>;
   const started = Date.now();
   let ok = false;
+  let project: string | null = null;
   try {
-    const text = await tool.run(d, args, caller);
+    const out = await tool.run(d, args, caller);
     ok = true;
-    return textResult(text);
+    if (typeof out === 'string') return textResult(out);
+    project = out.project;
+    return textResult(out.text);
   } catch (e) {
     const msg = (e as Error).message;
     if (!(e instanceof WriteError)) d.log(`mcp ${tool.name} failed: ${msg}`);
     return textResult(e instanceof WriteError ? msg : `Error: ${msg.slice(0, 500)}`, true);
   } finally {
     await d.store.rpc('brain_log_event', {
-      p_actor: actorOf(caller), p_action: 'tool_call', p_project: null, p_path: null, p_summary: tool.name,
+      p_actor: actorOf(caller), p_action: 'tool_call', p_project: project, p_path: null, p_summary: tool.name,
       p_meta: { tool: tool.name, ok, ms: Date.now() - started, client_id: caller.clientId },
     }).catch(() => {});
   }

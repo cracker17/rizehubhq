@@ -9,7 +9,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, ExternalLink, FileText, Plus, Search, Tr
 import { btn, inputCls } from '@/components/clients/ui';
 import { useHq } from '@/lib/data/store';
 import { addDecisionAction, saveNextStepsAction } from '@/app/brain-actions';
-import { PLATFORM_COLOR, PLATFORM_LABEL, platformOf, type BrainBundle, type BrainEvent } from '@/lib/brainView';
+import { PLATFORM_COLOR, PLATFORM_LABEL, feedEvents, platformOf, type BrainBundle, type BrainEvent } from '@/lib/brainView';
 import { Markdown } from './Markdown';
 import { ActivityList } from './BrainHome';
 import { CommandPalette, docHref, usePaletteShortcut } from './CommandPalette';
@@ -39,7 +39,7 @@ export function ProjectView({ bundle, events: initialEvents, demo, error }: { bu
   const p = bundle.project;
   const platform = platformOf(p);
   const chips = linkChips(p.links);
-  const projectEvents = events.filter((e) => e.project_slug === p.slug && e.action !== 'tool_call');
+  const projectEvents = feedEvents(events.filter((e) => e.project_slug === p.slug), 80);
 
   return (
     <div className="flex flex-col gap-4 lg:gap-5">

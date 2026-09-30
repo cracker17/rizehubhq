@@ -24,12 +24,19 @@ export const demoHealth = (): BrainHealth => ({
   last_pull_at: iso(3), last_index_at: iso(3), last_webhook_at: iso(3), projects: demoProjects.length, documents: 81, chunks: 3071, embedded: 3071,
 });
 
-let nextId = 100;
+let nextId = 1000;
 export const demoEvents = (): BrainEvent[] => [
   { id: 9, ts: iso(2), actor: 'claude:Claude Code (hq-brain)', action: 'saved', project_slug: 'hq-brain', path: 'projects/hq-brain/sessions/LOG.md', summary: 'session saved: Built the connector' },
   { id: 8, ts: iso(3), actor: 'github:cracker17', action: 'pulled', project_slug: null, path: null, summary: '9fba090 → f8ac6d9' },
   { id: 7, ts: iso(40), actor: 'julev', action: 'connected', project_slug: null, path: null, summary: 'approved Claude Code (hq-brain) (brain:read, brain:write)' },
   { id: 6, ts: iso(90), actor: 'github:cracker17', action: 'doc_changed', project_slug: 'iponista', path: 'projects/iponista/memory.md', summary: '' },
+  { id: 20, ts: iso(1), actor: 'claude:Claude Code (hq-brain)', action: 'tool_call', project_slug: 'hq-brain', path: null, summary: 'brain_load_project' },
+  { id: 19, ts: iso(4), actor: 'claude:Claude Code (hq-brain)', action: 'tool_call', project_slug: 'hq-brain', path: null, summary: 'brain_search' },
+  { id: 18, ts: iso(35), actor: 'julev', action: 'saved', project_slug: 'iponista', path: 'projects/iponista/memory.md', summary: 'memory: next steps' },
+  { id: 17, ts: iso(70), actor: 'github:cracker17', action: 'doc_changed', project_slug: 'iponista', path: 'projects/iponista/sessions/LOG.md', summary: '' },
+  { id: 16, ts: iso(200), actor: 'github:cracker17', action: 'doc_added', project_slug: 'boardhub', path: 'projects/boardhub/sessions/2026-09-30-billing.md', summary: '' },
+  { id: 15, ts: iso(260), actor: 'agent:coo', action: 'saved', project_slug: 'rizehub-hq', path: 'projects/rizehub-hq/memory.md', summary: 'memory: 1 decision' },
+  { id: 14, ts: iso(600), actor: 'github:cracker17', action: 'doc_changed', project_slug: 'powerg-solar', path: 'projects/powerg-solar/memory.md', summary: '' },
   { id: 5, ts: iso(300), actor: 'brain-service', action: 'blocked_secret', project_slug: 'rizehub', path: 'projects/rizehub/sessions/2026-07-19-code-2c5624d0.md', summary: '' },
 ];
 
@@ -37,7 +44,9 @@ export const demoEvents = (): BrainEvent[] => [
 export function demoPulse(projects: BrainProject[]): BrainEvent {
   const p = projects[Math.floor(Math.random() * projects.length)]!;
   const actors = ['claude:Claude', 'github:cracker17', 'julev', 'agent:coo'];
-  return { id: nextId++, ts: new Date().toISOString(), actor: actors[Math.floor(Math.random() * actors.length)]!, action: 'saved', project_slug: p.slug, path: `projects/${p.slug}/memory.md`, summary: 'memory: 1 decision' };
+  const actor = actors[Math.floor(Math.random() * actors.length)]!;
+  const tool = actor.startsWith('claude:') && Math.random() < 0.6;
+  return { id: nextId++, ts: new Date().toISOString(), actor, action: tool ? 'tool_call' : 'saved', project_slug: p.slug, path: tool ? null : `projects/${p.slug}/memory.md`, summary: tool ? 'brain_load_project' : 'memory: 1 decision' };
 }
 
 export const demoConnections = (): BrainConnection[] => [

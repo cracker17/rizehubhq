@@ -198,6 +198,10 @@ test('brain_save_session: session file + LOG.md + memory.md committed and pushed
   assert.match(toolText(await mcp('tools/call', { name: 'brain_search', arguments: { query: 'Tokens last one hour' } })), /memory.md/);
   const ev = await store.exec(`select actor, action from brain_events where action = 'saved' order by id desc limit 1`);
   assert.equal(ev[0]!.actor, 'claude:Claude');
+  // Tool calls name the project they touched (the /brain page lights that region up); never the arguments.
+  const tc = await store.exec(`select project_slug, summary, meta from brain_events where action = 'tool_call' and summary = 'brain_save_session' order by id desc limit 1`);
+  assert.equal(tc[0]!.project_slug, 'demo');
+  assert.ok(!JSON.stringify(tc[0]!.meta).includes('Tokens last one hour'));
 });
 
 test('a push that loses the race to the PC is redone on the new tree (both changes kept, no merge)', async () => {
