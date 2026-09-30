@@ -4,11 +4,11 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
-import type { BrainBundle, BrainConnection, BrainEvent, BrainHealth, BrainProject } from '@/lib/brainView';
-import { demoBundle, demoConnections, demoEvents, demoHealth, demoProjects } from './brainDemo';
+import type { BrainBundle, BrainConnection, BrainEvent, BrainHealth, BrainProject, BrainProposal } from '@/lib/brainView';
+import { demoBundle, demoConnections, demoEvents, demoHealth, demoProjects, demoProposals } from './brainDemo';
 
 export interface Loaded<T> { data: T; error?: string }
-export interface BrainHome { health: BrainHealth | null; projects: BrainProject[]; events: BrainEvent[]; connections: BrainConnection[]; demo: boolean }
+export interface BrainHome { health: BrainHealth | null; projects: BrainProject[]; events: BrainEvent[]; connections: BrainConnection[]; proposals: BrainProposal[]; demo: boolean }
 
 async function liveDb(): Promise<SupabaseClient | null> {
   if (!supabaseEnv()) return null;
@@ -23,17 +23,18 @@ async function rpc<T>(db: SupabaseClient, fn: string, args?: Record<string, unkn
 
 export async function loadBrainHome(): Promise<Loaded<BrainHome>> {
   const db = await liveDb();
-  if (!db) return { data: { health: demoHealth(), projects: demoProjects, events: demoEvents(), connections: demoConnections(), demo: true } };
+  if (!db) return { data: { health: demoHealth(), projects: demoProjects, events: demoEvents(), connections: demoConnections(), proposals: demoProposals(), demo: true } };
   try {
-    const [health, projects, events, connections] = await Promise.all([
+    const [health, projects, events, connections, proposals] = await Promise.all([
       rpc<BrainHealth>(db, 'brain_health'),
       rpc<BrainProject[]>(db, 'brain_list_projects'),
       rpc<BrainEvent[]>(db, 'brain_recent_events', { p_limit: 400 }),
       rpc<BrainConnection[]>(db, 'brain_connections').catch(() => []), // before migration 20260930020000
+      rpc<BrainProposal[]>(db, 'brain_list_proposals', { p_limit: 30 }).catch(() => []), // before migration 20260930040000
     ]);
-    return { data: { health, projects: projects ?? [], events: events ?? [], connections: connections ?? [], demo: false } };
+    return { data: { health, projects: projects ?? [], events: events ?? [], connections: connections ?? [], proposals: proposals ?? [], demo: false } };
   } catch (e) {
-    return { data: { health: null, projects: [], events: [], connections: [], demo: false }, error: e instanceof Error ? e.message : 'Could not load the brain' };
+    return { data: { health: null, projects: [], events: [], connections: [], proposals: [], demo: false }, error: e instanceof Error ? e.message : 'Could not load the brain' };
   }
 }
 

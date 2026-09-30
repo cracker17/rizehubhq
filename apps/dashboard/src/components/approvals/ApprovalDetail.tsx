@@ -180,6 +180,7 @@ function ActionDetail({ ap, onPickOption }: { ap: ApprovalRow; onPickOption?: (o
   const p = asAction(ap);
   const exec = actionExecution(ap);
   const isQuestion = p.type === 'question';
+  const brain = p.type === 'brain_proposal' ? (ap.payload ?? {}) as { project?: string; project_name?: string; kind?: string; section?: string | null } : null;
   const Icon = isQuestion ? HelpCircle : AlertTriangle;
   const text = p.question ?? p.action ?? p.reason ?? ap.summary ?? ap.title;
   const high = approvalRisk(ap) === 'high';
@@ -203,7 +204,16 @@ function ActionDetail({ ap, onPickOption }: { ap: ApprovalRow; onPickOption?: (o
           {exec.spec && <p className="mt-2.5 whitespace-pre-wrap break-words rounded-[10px] border border-[var(--color-line)] p-3 text-sm leading-relaxed">{exec.spec}</p>}
         </section>
       )}
-      <Section title={isQuestion ? 'Question' : p.type === 'qa_escalation' ? 'QA escalation' : p.type === 'qa_stuck' ? 'QA can\'t review this' : p.type === 'task_failed' ? 'Agent is stuck' : 'Action to approve'}>
+      {brain && (
+        <section className="item p-4" style={{ borderColor: 'color-mix(in oklab, #5eead4 45%, transparent)' }} aria-label="HQ Brain proposal">
+          <p className="text-sm font-semibold text-[#99f6e4]">Proposed memory for {brain.project_name ?? brain.project}</p>
+          <p className="mt-1 text-[13px] text-[var(--color-muted)]">
+            A {String(brain.kind ?? 'note').replace('_', ' ')}{brain.section ? ` in ${brain.section}` : ''}. Approve and the brain writes it into the project&apos;s memory
+            (one vault commit you can undo). Reject and nothing is saved. Either way the agent keeps working.
+          </p>
+        </section>
+      )}
+      <Section title={brain ? 'Memory to save' : isQuestion ? 'Question' : p.type === 'qa_escalation' ? 'QA escalation' : p.type === 'qa_stuck' ? 'QA can\'t review this' : p.type === 'task_failed' ? 'Agent is stuck' : 'Action to approve'}>
         <div className="flex items-start gap-3">
           <Icon size={20} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden />
           <p className="text-[15px] leading-relaxed">{text}</p>

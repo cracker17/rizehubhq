@@ -155,6 +155,16 @@ export interface DigestData {
   approvals: DigestLine[];
   clients: ClientLine[];
   standups: number;
+  /** HQ Brain (M14.4): memory changes today and agent proposals. Absent when the brain has no data. */
+  brain?: BrainDigest;
+}
+
+export interface BrainDigest {
+  saves: number;
+  projects: { slug: string; name: string; changes: number }[];
+  proposals_pending: number;
+  proposals_applied: number;
+  proposals_failed: number;
 }
 
 const KIND_LABEL: Record<string, string> = { plan: 'Plan', deliverable: 'Deliverable', external_action: 'Action' };
@@ -177,7 +187,7 @@ export function templateHeadline(d: Omit<DigestData, 'headline'>): string {
   return `${parts.join(', ')}; ${usd(d.spend_usd)} spent today.`;
 }
 
-export function buildDigest(f: DayFacts, standups = 0): DigestData {
+export function buildDigest(f: DayFacts, standups = 0, brain: BrainDigest | null = null): DigestData {
   const base: Omit<DigestData, 'headline'> = {
     counts: {
       done: f.done.length, in_progress: f.in_progress.length, blocked: f.blocked.length,
@@ -191,6 +201,7 @@ export function buildDigest(f: DayFacts, standups = 0): DigestData {
     approvals: f.approvals_waiting.map((a) => ({ title: a.title, agent_id: a.agent_id, client: null, note: KIND_LABEL[a.kind] ?? a.kind })),
     clients: clientLines(f),
     standups,
+    ...(brain && (brain.saves || brain.proposals_pending || brain.proposals_applied || brain.proposals_failed) ? { brain } : {}),
   };
   return { headline: templateHeadline(base), ...base };
 }
@@ -213,8 +224,17 @@ export function digestMarkdown(date: string, d: DigestData, names: Map<string, s
     list('In progress', d.in_progress, names, 'Nothing in progress'),
     list('Blocked / needs you', d.blocked, names, 'Nothing blocked'),
     list('Approvals waiting', d.approvals, names, 'Inbox zero'),
+    ...(d.brain ? [brainMd(d.brain)] : []),
     `## Clients\n${d.clients.length ? d.clients.map((c) => `- **${c.name}**: ${c.done} done, ${c.in_progress} in progress${c.blocked ? `, ${c.blocked} blocked` : ''}, ${usd(c.spend_usd)}`).join('\n') : '- No client work today'}`,
   ].join('\n\n');
+}
+
+export function brainMd(b: BrainDigest): string {
+  const lines = [`- ${b.saves} memory change${b.saves === 1 ? '' : 's'} today${b.projects.length ? `: ${b.projects.map((p) => `${p.name} (${p.changes})`).join(', ')}` : ''}`];
+  if (b.proposals_applied) lines.push(`- ${b.proposals_applied} agent proposal${b.proposals_applied === 1 ? '' : 's'} saved`);
+  if (b.proposals_pending) lines.push(`- ${b.proposals_pending} agent proposal${b.proposals_pending === 1 ? '' : 's'} waiting for you (Approvals)`);
+  if (b.proposals_failed) lines.push(`- ${b.proposals_failed} approved proposal${b.proposals_failed === 1 ? '' : 's'} could not be saved (see /brain)`);
+  return `## Brain\n${lines.join('\n')}`;
 }
 
 // ---------- morning brief ----------

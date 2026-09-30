@@ -17,6 +17,7 @@ import { createBrainService, type BrainService } from './service';
 import { createHttpServer } from './http';
 import type { VaultOp } from './write/vault';
 import { saveSessionOp } from './write/vault';
+import { applyApprovedProposals } from './proposals';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-brain-conn-'));
 const bare = path.join(tmp, 'github.git');
@@ -257,6 +258,33 @@ test('dashboard writes (/write/memory, /write/project) need the internal secret 
   assert.match(originFile('projects/demo/memory.md'), /## Open next steps\n- \[x\] Build the UI\n- Wire agents/);
   const ev = await store.exec(`select actor from brain_events where action = 'saved' order by id desc limit 1`);
   assert.equal(ev[0]!.actor, 'julev');
+});
+
+test('approved agent proposals are written to the vault as the agent; duplicates count as done; bad ones fail', async () => {
+  const add = (kind: string, text: string, project = 'demo', section: string | null = null) => store.exec(
+    `insert into brain_proposals (agent_id, project_slug, kind, section, text, status, decided_at) values ('coo', $1, $2, $3, $4, 'approved', now()) returning id`,
+    [project, kind, section, text]).then((r) => r[0]!.id as string);
+  const a = await add('decision', 'Preorders close Thursday noon');
+  const b = await add('next_step', 'Add the pickup map');
+  const c = await add('fact', 'Staging: https://staging.example.com', 'demo', 'Links');
+  const dup = await add('decision', 'Preorders close Thursday noon');
+  const bad = await add('lesson', 'Never ship on Friday', 'no-such-project');
+  const n = await applyApprovedProposals({ store, service, log: (m) => logs.push(m) });
+  assert.equal(n, 3);
+  const st = Object.fromEntries((await store.exec(`select id, status, error from brain_proposals`)).map((r) => [r.id, r]));
+  assert.equal(st[a]!.status, 'applied');
+  assert.equal(st[dup]!.status, 'applied', 'already in the memory: nothing left to do');
+  assert.equal(st[bad]!.status, 'failed');
+  assert.match(String(st[bad]!.error), /no project matches/);
+  g(pc, 'fetch', '-q');
+  const mem = originFile('projects/demo/memory.md');
+  assert.equal((mem.match(/Preorders close Thursday noon/g) ?? []).length, 1);
+  assert.match(mem, /## Open next steps[\s\S]*- Add the pickup map/);
+  assert.match(mem, /## Links[\s\S]*- Staging: https:\/\/staging\.example\.com/);
+  void b; void c;
+  const ev = await store.exec(`select actor from brain_events where action = 'saved' order by id desc limit 1`);
+  assert.equal(ev[0]!.actor, 'agent:coo');
+  assert.equal(await applyApprovedProposals({ store, service, log: () => {} }), 0, 'nothing left');
 });
 
 test('refresh tokens rotate; replaying an old one revokes the connection; revoke ends it', async () => {

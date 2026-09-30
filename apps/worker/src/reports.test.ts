@@ -80,3 +80,14 @@ test('weekly: tasks by department, daily QA trend over 7 days, bottlenecks', () 
   assert.ok(w.bottlenecks.some((b) => b.includes('QA first-pass rate is low (60%)')));
   assert.ok(w.bottlenecks.some((b) => b.startsWith('1 task is blocked')));
 });
+
+test('digest: a Brain section only when the brain has news', async () => {
+  const { buildDigest, digestMarkdown, emptyFacts } = await import('./reports');
+  const f = emptyFacts('2026-09-30');
+  assert.equal(buildDigest(f, 0, null).brain, undefined);
+  assert.equal(buildDigest(f, 0, { saves: 0, projects: [], proposals_pending: 0, proposals_applied: 0, proposals_failed: 0 }).brain, undefined);
+  const d = buildDigest(f, 0, { saves: 3, projects: [{ slug: 'hq-brain', name: 'HQ Brain', changes: 2 }], proposals_pending: 1, proposals_applied: 2, proposals_failed: 0 });
+  const md = digestMarkdown('2026-09-30', d, new Map());
+  assert.match(md, /## Brain\n- 3 memory changes today: HQ Brain \(2\)\n- 2 agent proposals saved\n- 1 agent proposal waiting for you/);
+  assert.ok(md.indexOf('## Brain') < md.indexOf('## Clients'));
+});

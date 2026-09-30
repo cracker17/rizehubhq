@@ -16,6 +16,11 @@ export interface BrainConnection {
   family_id: string; client_id: string | null; client_name: string | null; redirect_uris: string[] | null; subject: string;
   scopes: string[]; approved_at: string; last_used_at: string | null; expires_at: string;
 }
+export interface BrainProposal {
+  id: string; created_at: string; agent_id: string; agent_name: string | null; task_id: string | null; approval_id: string | null;
+  project_slug: string; project_name: string | null; kind: string; section: string | null; text: string;
+  status: 'pending' | 'approved' | 'rejected' | 'applying' | 'applied' | 'failed'; ceo_note: string | null; error: string | null;
+}
 export interface BrainDoc { path: string; title: string; kind?: string; doc_date: string | null; body?: string }
 export interface BrainBundle {
   project: BrainProject & { links?: Array<{ label?: string; url?: string } | string> };

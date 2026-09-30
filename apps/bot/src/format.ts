@@ -73,6 +73,11 @@ function actionBody(ap: BotApproval, names: Names): string[] {
     case 'qa_stuck':
       return [`🧪 <b>QA CAN'T REVIEW</b> · ${esc(ap.title.replace(/^QA can't review:\s*/, ''))} (${who})`, esc(p.reason ?? ap.summary ?? ''),
         'Approve = try QA again · Reject = cancel the task'];
+    case 'brain_proposal': {
+      const b = ap.payload as { kind?: string; project?: string; project_name?: string; text?: string };
+      return [`🧠 <b>BRAIN</b> · ${esc(String(b.kind ?? 'note').replace('_', ' '))} for ${esc(b.project_name ?? b.project ?? '?')} (${who})`,
+        esc(b.text ?? ap.summary ?? ''), 'Approve = save to the project memory · Reject = drop it'];
+    }
     case 'planning_failed':
       return [`🧭 <b>COO COULDN'T PLAN THIS</b>`, esc(p.reason ?? ap.summary ?? '')];
     default: {
@@ -147,6 +152,9 @@ export function formatReport(r: BotReport, names: Names, dashboardUrl: string): 
       section('🚧 Blocked / needs you', d.blocked, names, 6),
       d.counts.approvals_waiting ? `📥 ${d.counts.approvals_waiting} approval${d.counts.approvals_waiting === 1 ? '' : 's'} waiting · /approvals` : '📥 Inbox zero',
       `🧪 ${qa} · 💸 Spend ${usd(d.spend_usd)}`,
+      d.brain ? `🧠 <b>Brain</b> · ${d.brain.saves} memory change${d.brain.saves === 1 ? '' : 's'}${d.brain.projects?.length ? ` (${(d.brain.projects as { name: string }[]).slice(0, 4).map((p) => esc(p.name)).join(', ')})` : ''}`
+        + `${d.brain.proposals_applied ? ` · ${d.brain.proposals_applied} proposal${d.brain.proposals_applied === 1 ? '' : 's'} saved` : ''}`
+        + `${d.brain.proposals_pending ? ` · ${d.brain.proposals_pending} waiting for you` : ''}` : '',
       d.clients?.length ? `👥 <b>Clients</b>\n${(d.clients as { name: string; done: number; in_progress: number; spend_usd: number }[]).slice(0, 8)
         .map((c) => `• ${esc(c.name)}: ${c.done} done, ${c.in_progress} in progress, ${usd(c.spend_usd)}`).join('\n')}` : '',
     ];

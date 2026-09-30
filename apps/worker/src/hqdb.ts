@@ -2,7 +2,7 @@
 // (supabase/migrations/*workflow_engine.sql + *worker_helpers.sql); reads are small selects.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStatus, Plan, QaVerdict, RequestStatus, TaskStatus } from '@rizehubhq/shared';
-import type { DayFacts } from './reports';
+import type { BrainDigest, DayFacts } from './reports';
 import { manilaMonthStartIso } from './budget';
 
 export interface RequestRow {
@@ -172,6 +172,8 @@ export interface HqDb {
   recordBudgetAlert(day: string, level: number, spentUsd: number, budgetUsd: number): Promise<boolean>;
   // reports + settings (M7)
   reportFacts(from: string, days: number): Promise<DayFacts>;
+  /** HQ Brain facts for the digest (brain_digest_facts); null when the brain tables are missing. Optional in fakes. */
+  brainDigest?(sinceIso: string): Promise<BrainDigest | null>;
   /** Returns the new id, or null when that (author, date, kind) already exists and overwrite is false. */
   saveReport(r: ReportInput, overwrite?: boolean): Promise<string | null>;
   existingReports(sinceDate: string): Promise<ReportKeyRow[]>;
@@ -289,6 +291,7 @@ export function createSupabaseHqDb(sb: SupabaseClient): HqDb {
     })),
 
     reportFacts: (from, days) => rpc<DayFacts>('report_facts', { p_from: from, p_days: days }),
+    brainDigest: (sinceIso) => rpc<BrainDigest>('brain_digest_facts', { p_since: sinceIso }).catch(() => null),
     saveReport: async (r, overwrite = false) => (await rpc<string | null>('save_report', {
       p_agent: r.agentId, p_date: r.date, p_kind: r.kind, p_done: r.done ?? [], p_next: r.next ?? [], p_blockers: r.blockers ?? [],
       p_body: r.bodyMd, p_cost: r.costUsd, p_data: r.data ?? {}, p_overwrite: overwrite,

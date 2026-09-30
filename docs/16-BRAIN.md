@@ -14,8 +14,8 @@ searchable index in Supabase that is rebuildable from git at any time. The full 
 |---|---|---|
 | M14.1 | VPS mirror + brain service + indexer (keyword + pgvector) + read-only Brain API + GitHub webhook | built |
 | M14.2 | Brain MCP connector at `https://hq.rizehub.ph/mcp/brain` (OAuth via HQ login + 2FA), write path (commit + push) | live |
-| M14.3 | Brain UI v1 at `/brain` (Core, Ctrl+K, project view, New Project wizard, activity, Devices & accounts) | built |
-| M14.4 | Agents on the brain (scoped tokens, auto-load per client, proposals, digest), fold `brain/` in | |
+| M14.3 | Brain UI v1 at `/brain` (Core, Ctrl+K, project view, New Project wizard, activity, Devices & accounts) | live |
+| M14.4 | Agents on the brain (per-role scope, auto-load per client, proposals, digest); folding `brain/` in stays open | built |
 | M14.5 | Polish: graph, Ask the Brain, diff/revert, PWA, voice; nightly R2 backup | |
 
 ## Architecture (M14.1)
@@ -124,6 +124,29 @@ brain service (`app/brain-actions.ts` → `/search`, `/write/project`, `/write/m
 - **Live**: Supabase realtime on `brain_events` + `brain_projects` (migration `20260930030000_brain_realtime.sql`);
   without it (or on error) the page refreshes every 15 s. DEMO mode: fixtures + a fake save every 6.5 s.
 - Markdown is rendered by a small safe parser (`parseMarkdown`, React elements only, http(s)/mailto links only).
+
+## Agents on the brain (M14.4)
+
+The worker never talks to hq-brain: agents read the index and file proposals through **service-only SQL functions**
+(`supabase/migrations/20260930040000_brain_agents.sql`) that enforce the scope, so a prompt-injected agent cannot widen it.
+
+- **Access** (`brain_agent_access`, plan §5 defaults): COO reads every project and proposes decisions / next steps /
+  facts; web-dev, designer, writer read only their task's project and propose session notes; QA (acting on the task
+  it reviews) proposes lessons; sales reads its project and proposes lead notes + facts. Agents never see
+  `profile/` or raw transcripts. A task id must belong to the agent (QA: a task in review).
+- **Client → project**: `clients.brain_project_slug`, else the same slug, else a project whose name/alias is the client.
+- **Auto-load**: `buildRunPrompt` (all runtimes) and the COO's planning prompt get a "Project memory" block
+  (memory.md, open next steps, recent decisions, newest session; 7 k chars) marked as context, not instructions.
+- **Tools** (`apps/worker/src/tools/memory.ts`; the old `brain_read` / `brain_search` still read the repo `brain/`):
+  `memory_search`, `memory_read`, `memory_propose`. Proposals are secret-scanned in the worker and again by hq-brain.
+- **Proposals** become a normal approval (`external_action`, `payload.type = 'brain_proposal'`): not high-risk (Telegram
+  can approve), never pauses the task, never marks the agent "waiting"; max 10 pending per task. A trigger copies the
+  CEO's decision to `brain_proposals`; hq-brain claims approved ones every 20 s (`apps/brain/src/proposals.ts`) and
+  writes them as a commit by `agent:<id>` (decision → Decisions log, next step → Open next steps, fact → its section,
+  lesson → Lessons, lead note → Leads, session note → a session file). Already there = done; errors = `failed`.
+- **UI / digest**: Approvals + Telegram render them (🧠 BRAIN); `/brain` has an Agent proposals card; the daily digest
+  has a Brain section (`brain_digest_facts`: memory changes, proposals saved / waiting / failed).
+- Semantic search for agents is keyword-only for now (the worker has no brain embeddings key).
 
 ## Brain API (internal, header `x-brain-secret`)
 

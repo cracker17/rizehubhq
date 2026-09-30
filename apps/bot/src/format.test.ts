@@ -39,6 +39,11 @@ test('questions, failures and escalations get their own headers', () => {
   assert.match(formatApproval(approval({ kind: 'external_action', title: 'Stuck: Build section', payload: { type: 'task_failed', reason: 'No theme access' } }), names),
     /⚠️ <b>TASK FAILED<\/b> · Build section \(Content Writer\)\nNo theme access/);
   assert.match(formatApproval(approval({ kind: 'external_action', payload: { type: 'qa_escalation' }, title: 'QA keeps failing: Ads' }), names), /🔁 <b>QA KEEPS FAILING<\/b> · Ads/);
+  const brain = formatApproval(approval({ kind: 'external_action', agent_id: 'coo', payload: { type: 'brain_proposal', kind: 'next_step', project: 'spicy-voyage', project_name: 'Spicy <Voyage>', text: 'Add the pickup map' } }), names);
+  assert.match(brain, /🧠 <b>BRAIN<\/b> · next step for Spicy &lt;Voyage&gt;/);
+  assert.match(brain, /Add the pickup map/);
+  assert.match(brain, /Approve = save to the project memory/);
+  assert.doesNotMatch(brain, /Manual step/);
 });
 
 test('decided message: "✅ Approved by you 14:02" in Manila time, with the note for changes', () => {

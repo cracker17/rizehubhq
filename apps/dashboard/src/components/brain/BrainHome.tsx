@@ -14,6 +14,7 @@ import { BrainCore } from './BrainCore';
 import { CommandPalette, docHref, usePaletteShortcut } from './CommandPalette';
 import { NewProjectDialog } from './NewProjectDialog';
 import { DevicesPanel } from './DevicesPanel';
+import { ProposalsPanel } from './ProposalsPanel';
 import { useBrainLive, type LiveState } from './useBrainLive';
 
 const SOURCE_COLOR = { claude: '#f0abfc', pc: '#60a5fa', agent: '#fbbf24', julev: '#5eead4', service: '#a09cc9' } as const;
@@ -154,6 +155,11 @@ export function BrainHome({ data, error }: { data: HomeData; error?: string }) {
           <ActivityList events={feed} fill />
         </section>
       </div>
+
+      <section aria-labelledby="brain-proposals" className="card p-4 sm:p-5">
+        <h2 id="brain-proposals" className="mb-3 font-semibold">Agent proposals</h2>
+        <ProposalsPanel proposals={data.proposals} />
+      </section>
 
       <section ref={devicesRef} id="devices" aria-labelledby="brain-devices" className="card scroll-mt-4 p-4 sm:p-5">
         <h2 id="brain-devices" className="mb-3 font-semibold">Devices &amp; accounts</h2>

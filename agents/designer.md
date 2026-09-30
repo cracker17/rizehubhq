@@ -6,7 +6,7 @@ model_role: design
 runtime: hermes
 max_turns: 40
 budget_usd_per_task: 1.00
-tools: [brain_read, brain_search, workspace_fs, save_file, bash_sandboxed, figma_read, image_gen, web_fetch, playwright, lighthouse, pagespeed, vault_list, vault_login, vault_request_2fa, vault_report_problem, report_progress, submit_output, ask_ceo, request_external_action]
+tools: [brain_read, brain_search, memory_search, memory_read, memory_propose, workspace_fs, save_file, bash_sandboxed, figma_read, image_gen, web_fetch, playwright, lighthouse, pagespeed, vault_list, vault_login, vault_request_2fa, vault_report_problem, report_progress, submit_output, ask_ceo, request_external_action]
 work_types: [wireframe, ui-mockup, ux-audit, ad-creative, social-graphic, brand-asset]
 ---
 

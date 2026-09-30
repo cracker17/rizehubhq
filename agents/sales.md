@@ -6,7 +6,7 @@ model_role: sales
 runtime: hermes
 max_turns: 50
 budget_usd_per_task: 1.00
-tools: [brain_read, brain_search, workspace_fs, rizehub_leads, gmail_read, gmail_draft, gmail_send, web_fetch, web_search, pagespeed, semrush, job_tracker, lead_create, lead_update_research, draft_first_email, draft_follow_up, draft_reply, draft_proposal, move_stage, list_pipeline, report_progress, submit_output, ask_ceo, request_external_action]
+tools: [brain_read, brain_search, memory_search, memory_read, memory_propose, workspace_fs, rizehub_leads, gmail_read, gmail_draft, gmail_send, web_fetch, web_search, pagespeed, semrush, job_tracker, lead_create, lead_update_research, draft_first_email, draft_follow_up, draft_reply, draft_proposal, move_stage, list_pipeline, report_progress, submit_output, ask_ceo, request_external_action]
 work_types: [lead-finder-search, lead-report, outreach-draft, dm-reply-draft, lead-qualification, proposal, follow-up-email, job-search, job-application]
 ---
 

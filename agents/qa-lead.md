@@ -6,7 +6,7 @@ model_role: qa
 runtime: worker
 max_turns: 50
 budget_usd_per_task: 1.00
-tools: [brain_read, brain_search, workspace_fs, bash_sandboxed, playwright, lighthouse, pagespeed, link_checker, web_fetch, semrush, figma_read, rizehub_readonly, vault_list, vault_login, report_progress, ask_ceo, qa_submit_verdict]
+tools: [brain_read, brain_search, memory_search, memory_read, memory_propose, workspace_fs, bash_sandboxed, playwright, lighthouse, pagespeed, link_checker, web_fetch, semrush, figma_read, rizehub_readonly, vault_list, vault_login, report_progress, ask_ceo, qa_submit_verdict]
 work_types: []
 ---
 

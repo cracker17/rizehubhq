@@ -4,6 +4,7 @@ import type { Store } from './store/types';
 import type { Embedder } from './index/embed';
 import { createBrainService } from './service';
 import { createHttpServer } from './http';
+import { applyApprovedProposals } from './proposals';
 
 export const log = (msg: string) => console.log(`[brain] ${new Date().toISOString()} ${msg}`);
 
@@ -23,8 +24,16 @@ export async function start(config: BrainConfig, store: Store, embedder: Embedde
   service.trigger({ reason: 'boot' });
   const poll = setInterval(() => service.trigger({ reason: 'poll' }), config.pollSeconds * 1000);
   poll.unref();
+  // Approved agent proposals (M14.4): checked every 20 s; runs one batch at a time.
+  let applying = false;
+  const proposals = setInterval(() => {
+    if (applying) return;
+    applying = true;
+    void applyApprovedProposals({ store, service, log }).finally(() => { applying = false; });
+  }, 20_000);
+  proposals.unref();
   const stop = (sig: string) => { log(`${sig}: shutting down`); clearInterval(poll); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); };
-  process.once('SIGTERM', () => stop('SIGTERM'));
+  process.once('SIGTERM', () => { clearInterval(proposals); stop('SIGTERM'); });
   process.once('SIGINT', () => stop('SIGINT'));
   return { server, service };
 }

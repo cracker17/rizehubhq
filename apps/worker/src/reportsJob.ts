@@ -132,7 +132,10 @@ export async function runReportJob(job: ReportJob, deps: WorkerDeps, existing: {
 
   if (job.kind === 'daily_digest') {
     standups = await writeStandups(job.date, facts, deps, phraser, existing.standupAgents ?? new Set());
-    const digest = buildDigest(facts, standups);
+    // The digest day starts at midnight Manila (facts.from is the report date).
+    const since = /^\d{4}-\d{2}-\d{2}$/.test(facts.from) ? `${facts.from}T00:00:00+08:00` : facts.from;
+    const brain = deps.db.brainDigest ? await deps.db.brainDigest(since).catch(() => null) : null;
+    const digest = buildDigest(facts, standups, brain);
     digest.headline = await phraser.headline('daily digest', digest.headline, { counts: digest.counts, qa: digest.qa, spend_usd: digest.spend_usd });
     reportId = await deps.db.saveReport({
       agentId: 'coo', date: job.date, kind: 'daily_digest',

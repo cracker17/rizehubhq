@@ -1,5 +1,5 @@
 // DEMO-mode data for /brain (no Supabase): a small, plausible vault so the page renders and animates locally.
-import type { BrainBundle, BrainConnection, BrainEvent, BrainHealth, BrainProject } from '@/lib/brainView';
+import type { BrainBundle, BrainConnection, BrainEvent, BrainHealth, BrainProject, BrainProposal } from '@/lib/brainView';
 
 const day = (n: number) => new Date(Date.now() - n * 86400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 const iso = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -51,6 +51,12 @@ export function demoPulse(projects: BrainProject[]): BrainEvent {
 
 export const demoConnections = (): BrainConnection[] => [
   { family_id: '00000000-0000-4000-8000-000000000001', client_id: 'hqbc_demo', client_name: 'Claude Code (hq-brain)', redirect_uris: ['http://localhost:33418/callback'], subject: 'ceo', scopes: ['brain:read', 'brain:write'], approved_at: iso(40), last_used_at: iso(2), expires_at: iso(-86400) },
+];
+
+export const demoProposals = (): BrainProposal[] => [
+  { id: 'dp1', created_at: iso(12), agent_id: 'coo', agent_name: 'COO', task_id: null, approval_id: 'da1', project_slug: 'spicy-voyage', project_name: 'Spicy Voyage', kind: 'decision', section: null, text: 'Preorders close every Thursday at noon Manila time.', status: 'pending', ceo_note: null, error: null },
+  { id: 'dp2', created_at: iso(95), agent_id: 'writer', agent_name: 'Content Writer', task_id: null, approval_id: 'da2', project_slug: 'iponista', project_name: 'Iponista', kind: 'session_note', section: null, text: 'Wrote 3 hero variants for the household book launch', status: 'applied', ceo_note: null, error: null },
+  { id: 'dp3', created_at: iso(300), agent_id: 'qa-lead', agent_name: 'QA Lead', task_id: null, approval_id: 'da3', project_slug: 'boardhub', project_name: 'BoardHub PH', kind: 'lesson', section: null, text: 'The service worker cache hides fresh deploys: check the server first.', status: 'rejected', ceo_note: 'already in memory', error: null },
 ];
 
 export function demoBundle(slug: string): BrainBundle | null {

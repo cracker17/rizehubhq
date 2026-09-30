@@ -15,6 +15,7 @@ import { config } from './config';
 import { runHermesTask, type HermesRunOptions } from './hermes/runner';
 import { runClaudeTask, type ClaudeRunOptions } from './claude/runner';
 import { taskHandoffContext, type UpstreamOptions } from './handoff';
+import { taskMemorySection } from './tools/memory';
 
 /** Where not-yet-built tools arrive (docs/11-ROADMAP.md). */
 export const TOOL_MILESTONES: Record<string, string> = {
@@ -131,11 +132,12 @@ export function buildTaskPrompt(task: TaskRow, client: ClientRow | null, deps: P
  * outputs of the tasks this one depends on (the Graphic Designer's design spec + asset links/files first, copied into
  * the task workspace under upstream/<id>/) and the role's extra brain context. A task without dependencies (and a
  * role without extra brain context) gets exactly buildTaskPrompt(). Never throws on handoff problems.
+ * In between: the task client's project memory from the HQ Brain (tools/memory.ts), when there is one.
  */
 export async function buildRunPrompt(
   task: TaskRow, client: ClientRow | null, deps: Pick<WorkerDeps, 'brain' | 'db'>, opts: UpstreamOptions = {},
 ): Promise<string> {
-  return buildTaskPrompt(task, client, deps) + await taskHandoffContext({ db: deps.db, brain: deps.brain }, task, opts);
+  return buildTaskPrompt(task, client, deps) + await taskMemorySection(task) + await taskHandoffContext({ db: deps.db, brain: deps.brain }, task, opts);
 }
 
 export interface ToolContext { task: TaskRow; role: Role; deps: WorkerDeps; state: RunState }

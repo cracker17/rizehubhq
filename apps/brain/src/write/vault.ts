@@ -73,6 +73,7 @@ function memoryPath(dir: string, slug: string): string {
 export interface MemoryUpdate {
   decisions?: unknown;         // new "- YYYY-MM-DD: …" lines in ## Decisions log
   next_steps?: unknown;        // replaces ## Open next steps (the current list, done items removed)
+  add_next_steps?: unknown;    // bullets added to ## Open next steps (agent proposals)
   status?: unknown;            // replaces ## Status
   facts?: unknown;             // [{section, lines[]}]: bullets added to a section (Links, Contacts, Overview…)
 }
@@ -99,6 +100,11 @@ function applyMemory(md: string, u: MemoryUpdate, today: string): { md: string; 
       if (r.added) changes.push(`${r.added} fact${r.added > 1 ? 's' : ''} in ${section}`);
     }
   }
+  if (u.add_next_steps !== undefined) {
+    const r = appendToSection(md, 'Open next steps', list('add_next_steps', u.add_next_steps, 10));
+    md = r.md;
+    if (r.added) changes.push(`${r.added} next step${r.added > 1 ? 's' : ''}`);
+  }
   if (u.next_steps !== undefined) {
     const s = list('next_steps', u.next_steps, 30);
     md = setSection(md, 'Open next steps', s.length ? s : ['(none)']);
@@ -112,7 +118,7 @@ export function updateMemoryOp(project: string, u: MemoryUpdate): VaultOp {
     const slug = resolveProject(dir, project);
     const p = memoryPath(dir, slug);
     const { md, changes } = applyMemory(readFile(dir, p)!, u, today);
-    if (!changes.length) throw new WriteError('nothing to change: give decisions, next_steps, status or facts');
+    if (!changes.length) throw new WriteError('nothing to change: give decisions, next_steps, status or facts (or it is already there)');
     writeFile(dir, p, setFrontmatter(md, 'updated', today));
     const summary = `memory: ${changes.join(', ')}`;
     return { paths: [p], project: slug, summary, message: `brain: update ${slug} memory (${changes.join(', ')})` };

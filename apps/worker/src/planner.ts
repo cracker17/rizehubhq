@@ -6,6 +6,7 @@ import type { ClientRow, RequestRow } from './hqdb';
 import { errMsg, log, manilaToday, readRoster, readRosterText, usageDetail, type WorkerDeps } from './deps';
 import { addUsage, isQuotaError, normalizeUsage, type PickedModel, type TokenUsage } from './models/usage';
 import { cachedPrompt } from './models/cache';
+import { memoryPromptSection } from './tools/memory';
 import { HANDOFF_DESIGN_WORK_TYPES } from './handoff';
 
 const PLAYBOOK_RULES: [string, RegExp][] = [
@@ -126,6 +127,11 @@ export async function buildPlanPrompt(req: RequestRow, deps: WorkerDeps): Promis
       const text = deps.brain.tryRead(`clients/${slug}/${f}`, 8000);
       if (text) clientParts.push(`## brain/clients/${slug}/${f}\n${text}`);
     }
+  }
+  // The client's project memory from the HQ Brain (the CEO's own notes: decisions, next steps, stack, links).
+  if (client) {
+    const mem = (await memoryPromptSection('coo', null, client.id, undefined, 6000)).trim();
+    if (mem) clientParts.push(mem);
   }
   if (!clientParts.length) clientParts.push('No client identified and no client brain files found. If the work is for a client, ask in questions_for_ceo instead of guessing.');
 
