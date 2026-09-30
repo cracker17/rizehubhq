@@ -12,7 +12,8 @@ function env(name: string) {
 
 // /auth/confirm turns an emailed reset link into a session (then the normal gate applies to /reset-password).
 // /oauth/client-metadata.json identifies HQ to MCP apps (public, no secrets).
-const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth'];
+// /api/brain/github is GitHub's push webhook for the memory vault: the brain service verifies its HMAC signature.
+const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github'];
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');

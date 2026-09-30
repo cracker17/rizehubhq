@@ -7,6 +7,7 @@
     "dev:dashboard": "pnpm --filter dashboard dev",
     "dev:worker": "pnpm --filter worker dev",
     "dev:bot": "pnpm --filter bot dev",
+    "dev:brain": "pnpm --filter brain dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "db:types": "supabase gen types typescript --local > packages/shared/src/db.types.ts",

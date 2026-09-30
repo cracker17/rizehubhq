@@ -15,7 +15,7 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH="${BRANCH:-main}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 KEEP_TAGS="${KEEP_TAGS:-3}"
-SERVICES=(dashboard worker bot)
+SERVICES=(dashboard worker bot brain)
 HEALTH_ONLY=false
 FORCE=false
 for a in "$@"; do
@@ -40,7 +40,7 @@ cd "$APP_DIR"
 dc() { docker compose "$@"; }
 
 # ---------- health ----------
-# dashboard + worker: Docker HEALTHCHECK must report healthy. bot: running and not restart-looping.
+# dashboard + worker + brain: Docker HEALTHCHECK must report healthy. bot: running and not restart-looping.
 wait_healthy() {
   local deadline=$(( $(date +%s) + HEALTH_TIMEOUT )) svc cid state health pending
   local bot_restarts=""
@@ -83,7 +83,7 @@ prepare_env() {
   node_run ro scripts/check-env.mjs --file .env --production >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env ".env check failed"
   # Each container gets only its own variables (the dashboard never sees the service-role or vault key).
   node_run rw scripts/split-env.mjs --in .env >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env "splitting .env failed"
-  chmod 600 .env.dashboard .env.bot .env.worker
+  chmod 600 .env.dashboard .env.bot .env.worker .env.brain
   node_run ro scripts/check-env.mjs --split --production --file .env >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env "per-service env files failed the check"
   bash "${APP_DIR}/deploy/fix-perms.sh" || log "warning: deploy/fix-perms.sh failed (brain/ or workspaces ownership); continuing"
 }

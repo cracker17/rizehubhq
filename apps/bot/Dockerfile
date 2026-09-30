@@ -12,6 +12,7 @@ COPY package.json ./
 COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/worker/package.json apps/worker/
 COPY apps/bot/package.json apps/bot/
+COPY apps/brain/package.json apps/brain/
 COPY packages/shared/package.json packages/shared/
 # Dev deps kept: the bot runs TypeScript through tsx.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \

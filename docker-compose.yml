@@ -3,6 +3,8 @@
 #   worker    → no public port; reachable as http://hq-worker:4000 from the dashboard (default network)
 #               and from RizeHub (shared external network `rizehub-internal`, webhooks → /hooks/rizehub)
 #   bot       → Telegram long polling, no inbound port
+#   brain     → no public port; http://hq-brain:4100 for the dashboard only (default network). Mirrors the memory vault
+#               repo (deploy key in ./secrets/brain) and indexes it into Supabase (docs/16-BRAIN.md)
 # Before the first `up`: `docker network create rizehub-internal` (deploy/setup-vps.sh does it), a filled master .env,
 # then `node scripts/split-env.mjs` → .env.dashboard / .env.bot / .env.worker (each container gets ONLY its own
 # variables: the dashboard never sees the service-role or vault key) and `pnpm check:env -- --split --production`.
@@ -48,6 +50,7 @@ services:
     env_file: .env.dashboard                   # NEXT_PUBLIC_SUPABASE_*, HQ_WORKER_URL, HQ_INTERNAL_SECRET, DASHBOARD_URL only
     environment:
       HQ_WORKER_URL: http://hq-worker:4000     # overrides the localhost value used in dev
+      BRAIN_URL: http://hq-brain:4100          # brain API (and the GitHub webhook passthrough /api/brain/github)
       AGENTS_DIR: /app/agents
       HOSTNAME: 0.0.0.0
       PORT: "3000"
@@ -102,6 +105,31 @@ services:
   # ---------- Hermes Agent runtime (opt-in: docker compose --profile hermes up -d; deploy/hermes/README.md) ----------
   # One container per agent, own HERMES_HOME volume, API server only (no messaging platforms), no published ports,
   # no Docker socket (local terminal backend), read-only root. Only the worker reaches them (network `hermes`).
+  brain:
+    image: rizehubhq-brain:latest
+    build: { context: ., dockerfile: apps/brain/Dockerfile }
+    container_name: hq-brain                   # stable DNS name for the dashboard (BRAIN_URL)
+    env_file: .env.brain                       # Supabase service key + BRAIN_* only: never the worker's keys, never agents'
+    environment:
+      MODELS_FILE: /app/config/models.yaml
+      BRAIN_VAULT_DIR: /data/vault
+      BRAIN_HTTP_PORT: "4100"
+      BRAIN_DEPLOY_KEY_PATH: /run/secrets/brain/brain_deploy_key
+      BRAIN_KNOWN_HOSTS_PATH: /run/secrets/brain/known_hosts
+    expose: ["4100"]                           # default network only (not rizehub-internal, not hermes): agents can't reach it
+    volumes:
+      - brain-vault:/data                      # the vault clone (rebuildable from GitHub at any time)
+      - ./config:/app/config:ro
+      - ./secrets/brain:/run/secrets/brain:ro  # deploy key + pinned GitHub host keys (deploy/brain-setup.sh); gitignored
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 512m
+    logging: *logging
+
   hermes-web-dev:
     <<: *hermes
     container_name: hermes-web-dev
@@ -140,6 +168,7 @@ services:
 
 volumes:
   workspaces:
+  brain-vault:
   hermes-web-dev-home:
   hermes-web-dev-work:
   hermes-designer-home:

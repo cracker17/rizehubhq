@@ -22,6 +22,7 @@ COPY package.json ./
 COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/worker/package.json apps/worker/
 COPY apps/bot/package.json apps/bot/
+COPY apps/brain/package.json apps/brain/
 COPY packages/shared/package.json packages/shared/
 # Worker + its workspace deps only. Dev deps are kept on purpose: the worker runs TypeScript through tsx.
 # @anthropic-ai/claude-agent-sdk (Claude runtime, docs/05) ships Claude Code as a native binary in a per-platform optional

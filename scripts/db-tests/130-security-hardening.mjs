@@ -33,6 +33,9 @@ export default async function ({ db, step, val, as, assert }) {
     'connector_delete(uuid)', 'save_auto_approve_rule(jsonb)', 'delete_auto_approve_rule(uuid)',
     'mark_job_applied(uuid,integer)', 'set_job_status(uuid,text,timestamp with time zone,text)',
     'sales_move_stage(uuid,lead_stage,text,text)', 'storage_set_default(uuid)',
+    // HQ Brain (20260930010000_brain_index.sql)
+    'brain_health()', 'brain_list_projects()', 'brain_project_bundle(text,integer)', 'brain_get_document(text)',
+    'brain_search(text,text,text,jsonb,integer)', 'brain_recent_events(integer)',
   ];
   // groups B + C: worker / bot only, and trigger functions
   const SERVICE_ONLY = [
@@ -51,6 +54,11 @@ export default async function ({ db, step, val, as, assert }) {
     'sales_suppress(text,text,text,uuid)', 'sales_client_slug(text)', 'sales_is_suppressed(text)', 'sales_request_open(uuid)',
     'storage_default_connector()', 'task_record_storage(uuid,jsonb)',
     'touch_updated_at()', 'sales_suppression_permanent()', 'sales_lead_emails_guard()', 'sales_on_approval_decided()',
+    // HQ Brain: only the brain service writes the index
+    'brain_sync_projects(jsonb)', 'brain_document_manifest()', 'brain_replace_chunks(uuid,jsonb)', 'brain_upsert_document(jsonb,jsonb,jsonb,jsonb)',
+    'brain_delete_documents(jsonb)', 'brain_refresh_projects()', 'brain_chunks_missing_embedding(integer)',
+    'brain_set_embeddings(jsonb)', 'brain_clear_embeddings()', 'brain_reset_index()',
+    'brain_log_event(text,text,text,text,text,jsonb)', 'brain_set_sync_state(jsonb)',
   ];
 
   await step('hardening: every public (non-extension) function has a fixed search_path', async () => {

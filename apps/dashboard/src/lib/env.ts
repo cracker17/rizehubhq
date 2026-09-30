@@ -22,3 +22,15 @@ export function workerEnv(): { url: string; secret: string } | null {
   const secret = readEnv('HQ_INTERNAL_SECRET');
   return url && secret ? { url: url.replace(/\/+$/, ''), secret } : null;
 }
+
+/** Brain service internal API (server-only; docs/16-BRAIN.md). */
+export function brainEnv(): { url: string; secret: string } | null {
+  const url = readEnv('BRAIN_URL');
+  const secret = readEnv('BRAIN_INTERNAL_SECRET');
+  return url && secret ? { url: url.replace(/\/+$/, ''), secret } : null;
+}
+
+/** Brain service base URL alone: enough to pass the GitHub webhook through (the brain checks GitHub's signature). */
+export function brainUrl(): string | null {
+  return readEnv('BRAIN_URL')?.replace(/\/+$/, '') ?? null;
+}

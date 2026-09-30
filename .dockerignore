@@ -19,3 +19,4 @@ deploy
 docs
 *.log
 .DS_Store
+secrets

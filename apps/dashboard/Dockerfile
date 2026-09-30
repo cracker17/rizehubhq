@@ -18,6 +18,7 @@ COPY package.json ./
 COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/worker/package.json apps/worker/
 COPY apps/bot/package.json apps/bot/
+COPY apps/brain/package.json apps/brain/
 COPY packages/shared/package.json packages/shared/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --offline --frozen-lockfile --filter "dashboard..."

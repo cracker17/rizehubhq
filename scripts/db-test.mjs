@@ -1,15 +1,17 @@
 // Validates migrations + seed + the whole workflow engine + security rules in an in-memory Postgres (PGlite).
 // Run from repo root: pnpm db:test
 import { PGlite } from '@electric-sql/pglite';
+import { vector } from '@electric-sql/pglite/vector';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 
-const db = new PGlite();
+const db = new PGlite({ extensions: { vector } }); // vector = pgvector (HQ Brain index, 20260930010000)
 const stub = `
 create role authenticated nologin; create role anon nologin; create role service_role nologin bypassrls;
 create schema auth;
+create schema extensions;
 create table auth.users (id uuid primary key default gen_random_uuid(), email text);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
 create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims', true),''),'{}')::jsonb $$;

@@ -22,3 +22,9 @@ scripts/office/__pycache__/
 /.autodeploy-off
 /.autodeploy-failed
 /.autodeploy.lock
+
+# Brain deploy key + pinned host keys (deploy/brain-setup.sh). Never commit.
+secrets/*
+!secrets/brain/
+secrets/brain/*
+!secrets/brain/.gitkeep

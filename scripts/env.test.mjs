@@ -29,6 +29,19 @@ test('split: dashboard never gets the service-role or vault key; bot gets Telegr
   assert.equal(w.get('WEIRD'), 'a b # c', 'values survive the round trip');
 });
 
+test('split: the brain gets Supabase + BRAIN_*; the worker (agent code) never gets the brain secrets', () => {
+  const brainVars = [`BRAIN_INTERNAL_SECRET=${'i'.repeat(64)}`, `BRAIN_WEBHOOK_SECRET=${'h'.repeat(64)}`, `BRAIN_OPENAI_API_KEY=sk-${'o'.repeat(40)}`,
+    'BRAIN_REPO_URL=git@github.com:cracker17/claude-memory-vault.git', 'BRAIN_POLL_SECONDS=300'];
+  const parts = splitEnv(parseEnv([MASTER, ...brainVars].join('\n')));
+  const keys = (t) => [...parseEnv(t).keys()].sort();
+  assert.deepEqual(keys(parts.brain), ['BRAIN_INTERNAL_SECRET', 'BRAIN_OPENAI_API_KEY', 'BRAIN_POLL_SECONDS', 'BRAIN_REPO_URL', 'BRAIN_WEBHOOK_SECRET',
+    'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_URL', 'TZ']);
+  for (const k of ['BRAIN_INTERNAL_SECRET', 'BRAIN_WEBHOOK_SECRET', 'BRAIN_OPENAI_API_KEY', 'BRAIN_REPO_URL']) assert.ok(!parseEnv(parts.worker).has(k), `worker: ${k}`);
+  assert.ok(parseEnv(parts.dashboard).has('BRAIN_INTERNAL_SECRET'), 'dashboard calls the brain API');
+  for (const k of ['BRAIN_WEBHOOK_SECRET', 'BRAIN_OPENAI_API_KEY']) assert.ok(!parseEnv(parts.dashboard).has(k), `dashboard: ${k}`);
+  for (const k of ['BRAIN_INTERNAL_SECRET', 'BRAIN_WEBHOOK_SECRET']) assert.ok(!parseEnv(parts.bot).has(k), `bot: ${k}`);
+});
+
 test('check-env: a dashboard file with SUPABASE_SERVICE_ROLE_KEY or VAULT_MASTER_KEY fails; the split files pass', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rzh-env-'));
   fs.writeFileSync(path.join(dir, '.env'), MASTER);

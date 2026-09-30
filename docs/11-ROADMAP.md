@@ -97,6 +97,10 @@ Each milestone ends with something you can **see working locally**. Don't start 
 - Admin → API & AI (docs/14 "Dashboard settings"): provider keys stored sealed in `provider_keys` (allowlist only, bootstrap secrets refused), model profile / monthly + daily budget / per-role models in `settings` `ai_*` rows (dashboard value wins over `.env`; raising a budget needs a fresh 2FA code), worker reloads every 60 s and on `/settings/reload`; acceptance: `scripts/db-tests/180-provider-keys.mjs` + worker `settings/runtime.test.ts`, `routes/settings.test.ts`. Still to verify live: each provider's test endpoint with a real key.
 - Secrets manager, TOTP, auto-approve rules for low-risk plans, split QA into QA-Dev / QA-Content, cost dashboards per client, voice-note commands (✅ Telegram voice notes → transcribed → handled like typed text, docs/08 "Voice notes"), Admin → Tool logins (internal vault: the agency's own Semrush/Canva/hosting logins, granted per agent, usable in any task; docs/09 "Internal vault"; acceptance: a granted agent lists and uses a tool login in a task without a client, an ungranted one is refused, the internal client can't be archived: `scripts/db-tests/150-internal-vault.mjs`), split QA into QA-Dev / QA-Content, cost dashboards per client, voice-note commands, client-facing status pages.
 
+## M14 · HQ Brain (docs/16-BRAIN.md)
+- M14.1 ✅ built: `apps/brain` (container `hq-brain`) mirrors `cracker17/claude-memory-vault` with a deploy key, indexes it into `brain_*` tables (keyword + pgvector, incremental, secret-scanned), internal Brain API, GitHub webhook via `/api/brain/github`. Acceptance: `pnpm --filter brain test` (end-to-end against a temp git repo), `scripts/db-tests/200-brain.mjs`, a local run against the real vault, then on the VPS a vault edit on the PC shows up in `brain_events` within a minute of the push.
+- M14.2 Brain MCP connector (`/mcp/brain`, OAuth via HQ login + 2FA) + write path · M14.3 `/brain` UI · M14.4 agents on the brain · M14.5 polish + nightly R2 backup.
+
 ---
 
 ## Open decisions (answer before/while building)

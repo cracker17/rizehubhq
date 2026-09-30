@@ -27,6 +27,17 @@ if [[ -d "${APP_DIR}/brain" ]]; then
   log "brain/ owned by ${OWNER_UID}:${OWNER_GID}"
 fi
 
+# Brain deploy key + pinned host keys (deploy/brain-setup.sh): read-only for the brain container's user (node, uid 1000);
+# the directory stays the app user's (0711) so brain-setup.sh can replace known_hosts.
+BRAIN_SECRETS="${APP_DIR}/secrets/brain"
+BRAIN_UID="${BRAIN_UID:-1000}"
+if [[ -f "${BRAIN_SECRETS}/brain_deploy_key" ]]; then
+  chmod 711 "$BRAIN_SECRETS"
+  # shellcheck disable=SC2016 # $1 is expanded by the container's sh, not here
+  docker run --rm -v "${BRAIN_SECRETS}:/s" "$IMAGE" sh -c     'chown "$1:$1" /s/brain_deploy_key && chmod 0400 /s/brain_deploy_key && if [ -f /s/known_hosts ]; then chown "$1:$1" /s/known_hosts && chmod 0444 /s/known_hosts; fi'     sh "$BRAIN_UID"
+  log "secrets/brain: deploy key readable by uid ${BRAIN_UID} only"
+fi
+
 if docker volume inspect "$VOLUME" >/dev/null 2>&1; then
   # shellcheck disable=SC2016 # $1/$2 are expanded by the container's sh, not here
   docker run --rm -v "${VOLUME}:/ws" "$IMAGE" sh -c \

@@ -177,7 +177,7 @@ if ! node_run ro scripts/check-env.mjs --file .env --production; then
 fi
 say "Per-service env files (.env.dashboard / .env.bot / .env.worker)"
 node_run rw scripts/split-env.mjs --in .env
-for f in .env.dashboard .env.bot .env.worker; do chown "$HQ_USER:$HQ_USER" "${APP_DIR}/${f}"; chmod 600 "${APP_DIR}/${f}"; done
+for f in .env.dashboard .env.bot .env.worker .env.brain; do chown "$HQ_USER:$HQ_USER" "${APP_DIR}/${f}"; chmod 600 "${APP_DIR}/${f}"; done
 # Hard stop: a server secret in the dashboard file (service-role key, vault key) must never be deployed.
 node_run ro scripts/check-env.mjs --split --production --file .env || die "per-service env files failed the check (see ✗ above)"
 

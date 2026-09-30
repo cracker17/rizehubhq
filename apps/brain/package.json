@@ -1,0 +1,25 @@
+{
+  "name": "brain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/dev.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.0",
+    "@supabase/supabase-js": "^2.57.0",
+    "ai": "^5.0.0",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.7.2"
+  }
+}

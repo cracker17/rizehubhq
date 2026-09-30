@@ -23,7 +23,7 @@ import { BY_KEY, SERVICE_FILES, belongsTo } from './env-schema.mjs';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DOMAIN = 'hq.rizehub.ph';
 export const DASHBOARD_UPSTREAM = '127.0.0.1:3100';
-const APP_SERVICES = ['dashboard', 'worker', 'bot'];
+const APP_SERVICES = ['dashboard', 'worker', 'bot', 'brain'];
 /** Set by Docker/Node/Next/tooling, not app configuration: never expected in env-schema.mjs. */
 const PLATFORM_VARS = new Set(['NODE_ENV', 'PORT', 'HOSTNAME', 'PATH', 'HOME', 'CI', 'PNPM_HOME', 'COREPACK_HOME', 'NEXT_TELEMETRY_DISABLED', 'TZ', 'DEBIAN_FRONTEND']);
 

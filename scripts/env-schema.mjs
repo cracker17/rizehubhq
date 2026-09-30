@@ -2,14 +2,17 @@
 // service reads it, and which per-service env file it belongs to in production (docker-compose.yml env_file).
 // Zero dependencies.
 
-export const SERVICES = ['dashboard', 'worker', 'bot', 'ops'];
+export const SERVICES = ['dashboard', 'worker', 'bot', 'brain', 'ops'];
 /** Production env files (docker-compose.yml). ops variables stay only in the master .env (deploy/backup.sh). */
-export const SERVICE_FILES = { dashboard: '.env.dashboard', bot: '.env.bot', worker: '.env.worker' };
+export const SERVICE_FILES = { dashboard: '.env.dashboard', bot: '.env.bot', worker: '.env.worker', brain: '.env.brain' };
 /** Never allowed in a file, whatever the value (even empty): these would put a server secret in that container. */
 export const FORBIDDEN_IN = {
-  dashboard: ['SUPABASE_SERVICE_ROLE_KEY', 'VAULT_MASTER_KEY', 'VAULT_PREVIOUS_KEYS', 'SUPABASE_DB_URL', 'TELEGRAM_BOT_TOKEN'],
-  bot: ['VAULT_MASTER_KEY', 'VAULT_PREVIOUS_KEYS', 'SUPABASE_DB_URL', 'HQ_INTERNAL_SECRET'],
-  worker: ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'],
+  dashboard: ['SUPABASE_SERVICE_ROLE_KEY', 'VAULT_MASTER_KEY', 'VAULT_PREVIOUS_KEYS', 'SUPABASE_DB_URL', 'TELEGRAM_BOT_TOKEN',
+              'BRAIN_WEBHOOK_SECRET', 'BRAIN_OPENAI_API_KEY'],
+  bot: ['VAULT_MASTER_KEY', 'VAULT_PREVIOUS_KEYS', 'SUPABASE_DB_URL', 'HQ_INTERNAL_SECRET', 'BRAIN_INTERNAL_SECRET', 'BRAIN_WEBHOOK_SECRET', 'BRAIN_OPENAI_API_KEY'],
+  // The worker runs agent code: it never gets the brain's secrets (docs/16-BRAIN.md "Isolation").
+  worker: ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'BRAIN_INTERNAL_SECRET', 'BRAIN_WEBHOOK_SECRET', 'BRAIN_OPENAI_API_KEY'],
+  brain: ['VAULT_MASTER_KEY', 'VAULT_PREVIOUS_KEYS', 'SUPABASE_DB_URL', 'TELEGRAM_BOT_TOKEN', 'HQ_INTERNAL_SECRET', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'],
 };
 
 // ---------- .env parser (same rules as docker compose: KEY=VALUE, quotes, " #" comments on unquoted values) ----------
@@ -61,8 +64,8 @@ export const CLAUDE_AGENTS = { coo: 'COO', 'web-dev': 'WEB_DEV', designer: 'DESI
 const S = (o) => o;
 export const VARS = [
   // Supabase
-  S({ key: 'SUPABASE_URL', group: 'Supabase', svc: ['worker', 'bot'], req: ['worker', 'bot'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use the https://<ref>.supabase.co URL in production') }),
-  S({ key: 'SUPABASE_SERVICE_ROLE_KEY', group: 'Supabase', svc: ['worker', 'bot'], req: ['worker', 'bot'], secret: true, check: supabaseKey('service') }),
+  S({ key: 'SUPABASE_URL', group: 'Supabase', svc: ['worker', 'bot', 'brain'], req: ['worker', 'bot', 'brain'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use the https://<ref>.supabase.co URL in production') }),
+  S({ key: 'SUPABASE_SERVICE_ROLE_KEY', group: 'Supabase', svc: ['worker', 'bot', 'brain'], req: ['worker', 'bot', 'brain'], secret: true, check: supabaseKey('service') }),
   S({ key: 'NEXT_PUBLIC_SUPABASE_URL', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use https in production'), note: 'empty = DEMO mode (mock data)' }),
   S({ key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: supabaseKey('anon') }),
   // AI
@@ -80,14 +83,14 @@ export const VARS = [
   S({ key: 'MAX_COST_PER_TASK_USD', group: 'Worker', svc: ['worker'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0 (USD)') }),
   S({ key: 'REPORTS_CHECK_MS', group: 'Worker', svc: ['worker'], check: intIn(1000) }),
   S({ key: 'QA_THRESHOLD', group: 'Worker', svc: ['worker'], check: intIn(0, 100) }),
-  S({ key: 'TZ', group: 'Worker', svc: ['worker', 'bot'], check: (v) => { try { new Intl.DateTimeFormat('en', { timeZone: v }); return null; } catch { return 'unknown IANA time zone (e.g. Asia/Manila)'; } } }),
+  S({ key: 'TZ', group: 'Worker', svc: ['worker', 'bot', 'brain'], check: (v) => { try { new Intl.DateTimeFormat('en', { timeZone: v }); return null; } catch { return 'unknown IANA time zone (e.g. Asia/Manila)'; } } }),
   S({ key: 'WORKER_HTTP_PORT', group: 'Worker', svc: ['worker'], check: intIn(1, 65535) }),
   S({ key: 'HQ_INTERNAL_SECRET', group: 'Worker', svc: ['dashboard', 'worker'], req: ['worker*prod', 'dashboard*prod'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32') }),
   S({ key: 'HQ_WORKER_URL', group: 'Worker', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL'), note: 'docker-compose.yml overrides it with http://hq-worker:4000' }),
   S({ key: 'PLAYWRIGHT_CHROMIUM_PATH', group: 'Worker', svc: ['worker'] }),
   ...['AGENT_UID', 'AGENT_GID'].map((key) => S({ key, group: 'Worker', svc: ['worker'], check: intIn(1, 2147483647), note: 'set by the worker image (1001): agent commands run as this uid' })),
   ...['AGENTS_DIR', 'BRAIN_DIR', 'WORKSPACES_DIR', 'MODELS_FILE']
-    .map((key) => S({ key, group: 'Worker', svc: key === 'AGENTS_DIR' ? ['dashboard', 'worker'] : ['worker'], emptyIsBad: true, note: 'set by the Docker images' })),
+    .map((key) => S({ key, group: 'Worker', svc: key === 'AGENTS_DIR' ? ['dashboard', 'worker'] : key === 'MODELS_FILE' ? ['worker', 'brain'] : ['worker'], emptyIsBad: true, note: 'set by the Docker images' })),
   // Research & QA tools (all optional: tools report "not connected" without them)
   ...['TAVILY_API_KEY', 'BRAVE_SEARCH_API_KEY', 'SERPER_API_KEY', 'PAGESPEED_API_KEY', 'SEMRUSH_API_KEY', 'FIGMA_TOKEN', 'MEDIA_PROVIDER_KEY', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REFRESH_TOKEN']
     .map((key) => S({ key, group: 'Research & QA', svc: ['worker'], secret: true, check: (v) => (/\s/.test(v) ? 'has spaces' : null) })),
@@ -169,6 +172,19 @@ export const VARS = [
   S({ key: 'CLAUDE_HQ_MCP_URL', group: 'Claude runtime', svc: ['worker'], check: (v) => (isUrl(v) ? null : 'must be a URL, e.g. http://127.0.0.1:4000/mcp') }),
   ...['', ...Object.values(CLAUDE_AGENTS).map((s) => `_${s}`)].map((s) => S({ key: `CLAUDE_MODEL${s}`, group: 'Claude runtime', svc: ['worker'],
     check: (v) => (/^(anthropic:)?claude-[\w.-]+$/.test(v) ? null : 'must be an Anthropic model id like claude-sonnet-5') })),
+  // HQ Brain (docs/16-BRAIN.md): container hq-brain; the dashboard only gets the URL + internal secret
+  S({ key: 'BRAIN_URL', group: 'Brain', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL'), note: 'docker-compose.yml overrides it with http://hq-brain:4100' }),
+  S({ key: 'BRAIN_INTERNAL_SECRET', group: 'Brain', svc: ['dashboard', 'brain'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32') }),
+  S({ key: 'BRAIN_WEBHOOK_SECRET', group: 'Brain', svc: ['brain'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32'), note: 'the GitHub webhook secret of the vault repo' }),
+  S({ key: 'BRAIN_REPO_URL', group: 'Brain', svc: ['brain'], check: (v) => (/^(git@[\w.-]+:[\w./-]+\.git|https:\/\/\S+|\/\S+)$/.test(v) ? null : 'must be git@github.com:<owner>/<repo>.git (deploy key) or an https URL') }),
+  S({ key: 'BRAIN_REPO_BRANCH', group: 'Brain', svc: ['brain'], check: (v) => (/^[\w./-]+$/.test(v) ? null : 'must be a branch name') }),
+  S({ key: 'BRAIN_VAULT_DIR', group: 'Brain', svc: ['brain'], emptyIsBad: true, note: 'set by the brain image (/data/vault)' }),
+  S({ key: 'BRAIN_DEPLOY_KEY_PATH', group: 'Brain', svc: ['brain'], note: 'set by docker-compose.yml (mounted from secrets/brain_deploy_key)' }),
+  S({ key: 'BRAIN_KNOWN_HOSTS_PATH', group: 'Brain', svc: ['brain'], note: 'set by docker-compose.yml (secrets/brain_known_hosts)' }),
+  S({ key: 'BRAIN_HTTP_PORT', group: 'Brain', svc: ['brain'], check: intIn(1, 65535) }),
+  S({ key: 'BRAIN_POLL_SECONDS', group: 'Brain', svc: ['brain'], check: intIn(30, 86_400) }),
+  S({ key: 'BRAIN_OPENAI_API_KEY', group: 'Brain', svc: ['brain'], secret: true, check: (v) => (/^sk-/.test(v) && !/\s/.test(v) ? null : 'must be an OpenAI key (sk-…)'), note: 'embeddings only; empty = keyword-only search' }),
+  S({ key: 'BRAIN_EMBED_MODEL', group: 'Brain', svc: ['brain'], check: (v) => (/^openai:[\w.-]+$/.test(v) ? null : 'must be openai:<model>'), note: 'default: config/models.yaml embeddings' }),
   // Telegram
   S({ key: 'TELEGRAM_BOT_TOKEN', group: 'Telegram', svc: ['bot'], req: ['bot'], secret: true, check: (v) => (/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(v) ? null : 'does not look like a BotFather token (123456:ABC…)') }),
   S({ key: 'TELEGRAM_ALLOWED_USER_IDS', group: 'Telegram', svc: ['bot'], req: ['bot'], check: telegramIds }),

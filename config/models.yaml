@@ -88,6 +88,11 @@ profiles:
 # an AI SDK transcription model (groq, openai). Checked 2026-09-29: HQ's Groq key has both Whisper models.
 transcription: [groq:whisper-large-v3-turbo, groq:whisper-large-v3]
 
+# Embeddings for the HQ Brain index (apps/brain, docs/16-BRAIN.md): provider:model, first entry wins. The index column is
+# vector(1536), so the model must return 1536 dimensions. Needs BRAIN_OPENAI_API_KEY (brain container only). Changing the
+# model re-embeds everything on the next sync (a few cents for the whole vault). env BRAIN_EMBED_MODEL overrides.
+embeddings: [openai:text-embedding-3-small]
+
 daily_request_caps:
   google: 40       # 20 per model per day on the free tier (2 models); a daily 429 also skips just that model
   groq: 1000
