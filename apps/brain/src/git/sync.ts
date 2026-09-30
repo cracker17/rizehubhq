@@ -1,5 +1,6 @@
-// The VPS copy of the vault: clone once, then fast-forward to origin/<branch>. M1 never writes to the clone, so a
-// fast-forward always works; if history was rewritten upstream the clone is reset to origin (logged by the caller).
+// The VPS copy of the vault: clone once, then fast-forward to origin/<branch>. Connector writes (commitAndPush) commit
+// and push in the same serialised run, so between runs the clone never holds local work: a fast-forward always works, and
+// if history was rewritten upstream the clone is reset to origin (logged by the caller).
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -84,4 +85,37 @@ export async function changedFiles(o: GitOptions, from: string, to: string): Pro
 /** Author of the newest commit (event actor for PC pushes: the vault's sync commits as the PC's git user). */
 export async function lastAuthor(o: GitOptions): Promise<string> {
   return git(o, ['log', '-1', '--format=%an']).catch(() => '');
+}
+
+export const BRAIN_GIT_AUTHOR = { name: 'HQ Brain', email: 'brain@hq.rizehub.ph' };
+
+/** Throw away anything uncommitted or unpushed: the clone goes back to exactly origin/<branch>. */
+export async function resetToOrigin(o: GitOptions): Promise<void> {
+  await git(o, ['reset', '--hard', '--quiet', `origin/${o.branch}`]);
+  await git(o, ['clean', '-fdq']);
+}
+
+export type PushOutcome = { ok: true; sha: string } | { ok: false; rejected: boolean; error: string };
+
+/**
+ * Commit the given paths and push. A rejected push (the PC pushed first) is reported, not retried: the caller resets
+ * to the new origin and re-runs its edit on the fresh tree, so the vault never needs a merge.
+ */
+export async function commitAndPush(o: GitOptions, paths: string[], message: string, actor: string): Promise<PushOutcome> {
+  await git(o, ['add', '--', ...paths]);
+  const staged = await git(o, ['diff', '--cached', '--name-only']);
+  if (!staged) return { ok: true, sha: await head(o) };
+  await git(o, [
+    '-c', `user.name=${BRAIN_GIT_AUTHOR.name}`, '-c', `user.email=${BRAIN_GIT_AUTHOR.email}`, '-c', 'commit.gpgsign=false',
+    'commit', '-q', '-m', message, '-m', `Written through the Brain connector by ${actor}.`,
+  ]);
+  try {
+    await git(o, ['push', '-q', 'origin', `HEAD:refs/heads/${o.branch}`]);
+  } catch (e) {
+    const error = (e as Error).message;
+    return { ok: false, rejected: /rejected|non-fast-forward|fetch first|stale info|integrate the remote changes/i.test(error), error };
+  }
+  const sha = await head(o);
+  await git(o, ['update-ref', `refs/remotes/origin/${o.branch}`, sha]);
+  return { ok: true, sha };
 }

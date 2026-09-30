@@ -12,11 +12,12 @@ export async function start(config: BrainConfig, store: Store, embedder: Embedde
     repoUrl: config.repoUrl, branch: config.branch, dir: config.vaultDir,
     deployKeyPath: config.deployKeyPath, knownHostsPath: config.knownHostsPath,
   };
-  const service = createBrainService({ store, embedder, git, log });
+  const service = createBrainService({ store, embedder, git, log, timeZone: config.timeZone });
   log(`vault ${config.repoUrl || '(no BRAIN_REPO_URL)'} @ ${config.branch} → ${config.vaultDir}; embeddings ${embedder ? embedder.model : 'OFF (keyword only)'}`);
   // Serve right away (health shows "running"); the first sync clones/pulls and indexes in the background.
   const server = createHttpServer({
     store, embedder, service, internalSecret: config.internalSecret, webhookSecret: config.webhookSecret, branch: config.branch, log,
+    vaultDir: config.vaultDir, redirectHosts: config.oauthRedirectHosts,
   });
   server.listen(config.httpPort, () => log(`API on :${config.httpPort}`));
   service.trigger({ reason: 'boot' });

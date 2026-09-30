@@ -113,7 +113,7 @@ test('rewritten upstream history → the clone resets to origin', async () => {
 
 test('HTTP API: secret required; health, projects, search, documents; GitHub webhook', async () => {
   const server = createHttpServer({
-    store, embedder: fakeEmbedder(), service, internalSecret: 's3cret-internal', webhookSecret: 'hook-secret', branch: 'main', log: () => {},
+    store, embedder: fakeEmbedder(), service, internalSecret: 's3cret-internal', webhookSecret: 'hook-secret', branch: 'main', log: () => {}, vaultDir: clone, redirectHosts: [],
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

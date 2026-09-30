@@ -5,11 +5,13 @@ import http from 'node:http';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Store } from './store/types';
 import type { Embedder } from './index/embed';
-import { toPgVector } from './index/embed';
 import type { BrainService } from './service';
+import { search } from './queries';
+import { clientCheck, issueCode, register, revoke, token, type OAuthDeps } from './oauth/server';
+import { handleMcpPost, MCP_MAX_BODY } from './mcp/server';
 
 export const MAX_BODY_BYTES = 1024 * 1024;
-export const DEFAULT_SEARCH_KINDS = ['memory', 'session', 'session_log', 'project_doc', 'profile', 'scheduled_task', 'prompt', 'command', 'readme', 'other'];
+export { DEFAULT_SEARCH_KINDS } from './queries';
 
 export function secretMatches(given: string | undefined, expected: string): boolean {
   if (!expected || !given) return false;
@@ -33,6 +35,10 @@ export interface ApiDeps {
   webhookSecret: string;
   branch: string;
   log: (msg: string) => void;
+  /** the vault clone (setup kit files) */
+  vaultDir: string;
+  /** extra https redirect hosts for OAuth clients (BRAIN_OAUTH_REDIRECT_HOSTS) */
+  redirectHosts: readonly string[];
 }
 
 type Result = [number, unknown];
@@ -71,9 +77,40 @@ async function githubHook(d: ApiDeps, req: http.IncomingMessage, raw: Buffer): P
   return [202, { ok: true, queued: true }];
 }
 
-async function route(d: ApiDeps, req: http.IncomingMessage, url: URL): Promise<Result> {
+/** Form (application/x-www-form-urlencoded, the OAuth default) or JSON body → flat fields. */
+export function parseFields(req: http.IncomingMessage, raw: Buffer): Record<string, unknown> {
+  const type = (header(req, 'content-type') ?? '').toLowerCase();
+  const text = raw.toString('utf8');
+  if (type.includes('application/json')) {
+    const v = JSON.parse(text || '{}') as unknown;
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  }
+  return Object.fromEntries(new URLSearchParams(text));
+}
+
+async function route(d: ApiDeps, req: http.IncomingMessage, url: URL, res: http.ServerResponse): Promise<Result | null> {
   const q = url.searchParams;
   const p = url.pathname.replace(/\/+$/, '') || '/';
+  const oauth: OAuthDeps = { store: d.store, redirectHosts: d.redirectHosts, log: d.log };
+  if (req.method === 'POST' && p.startsWith('/oauth/')) {
+    let fields: Record<string, unknown>;
+    try { fields = parseFields(req, await readRaw(req, 64 * 1024)); } catch (e) {
+      if (/too large/.test((e as Error).message)) throw e;
+      return [400, { error: 'invalid_request', error_description: 'body is not valid JSON or form data' }];
+    }
+    if (p === '/oauth/register') return register(oauth, fields);
+    if (p === '/oauth/code') return issueCode(oauth, fields);
+    if (p === '/oauth/token') return token(oauth, fields);
+    if (p === '/oauth/revoke') return revoke(oauth, fields);
+  }
+  if (req.method === 'GET' && p === '/oauth/client') return clientCheck(oauth, q.get('client_id'), q.get('redirect_uri'));
+  if (p === '/mcp') {
+    if (req.method !== 'POST') return [405, { error: 'no server-initiated stream; POST JSON-RPC to /mcp' }];
+    const r = await handleMcpPost({ store: d.store, embedder: d.embedder, service: d.service, vaultDir: d.vaultDir, log: d.log },
+      header(req, 'authorization'), await readRaw(req, MCP_MAX_BODY + 1));
+    if (r.status === 202) { res.writeHead(202, { 'cache-control': 'no-store' }); res.end(); return null; }
+    return [r.status, r.body];
+  }
   if (req.method === 'GET' && p === '/health') {
     const db = await d.store.rpc<Record<string, unknown>>('brain_health');
     const s = d.service.status();
@@ -98,20 +135,8 @@ async function route(d: ApiDeps, req: http.IncomingMessage, url: URL): Promise<R
   if (req.method === 'GET' && p === '/search') {
     const text = (q.get('q') ?? '').trim().slice(0, 500);
     if (!text) return [400, { error: 'q is required' }];
-    let embedding: string | null = null;
-    let semantic: string = d.embedder ? 'on' : 'off: no embeddings key';
-    if (d.embedder) {
-      try { embedding = toPgVector((await d.embedder.embed([text]))[0]); } catch (e) { semantic = `off: ${(e as Error).message.slice(0, 120)}`; }
-    }
-    // Raw Claude Code transcripts are indexed but left out unless asked for (?kind=transcript or ?kind=all): they are
-    // long and noisy next to the curated memory, sessions and docs.
-    const asked = (q.get('kind') ?? '').split(',').map((k) => k.trim()).filter((k) => /^[a-z_]{1,20}$/.test(k));
-    const kinds = asked.includes('all') ? [] : asked.length ? asked : DEFAULT_SEARCH_KINDS;
-    const results = await d.store.rpc('brain_search', {
-      p_query: text, p_embedding: embedding, p_project: q.get('project') || null, p_kinds: kinds.length ? kinds : null,
-      p_limit: clampInt(q.get('k'), 10, 1, 50),
-    });
-    return [200, { query: text, semantic, results }];
+    const kinds = (q.get('kind') ?? '').split(',').map((k) => k.trim()).filter(Boolean);
+    return [200, await search(d, { q: text, project: q.get('project'), kinds, k: clampInt(q.get('k'), 10, 1, 50) })];
   }
   if (req.method === 'GET' && p === '/activity') return [200, { events: await d.store.rpc('brain_recent_events', { p_limit: clampInt(q.get('n'), 50, 1, 500) }) }];
   if (req.method === 'POST' && p === '/reindex') {
@@ -135,7 +160,9 @@ export function createHttpServer(d: ApiDeps): http.Server {
       if (req.method === 'GET' && url.pathname === '/livez') return send([200, { ok: true }]);
       if (!d.internalSecret) return send([503, { error: 'BRAIN_INTERNAL_SECRET is not configured' }]);
       if (!secretMatches(header(req, 'x-brain-secret'), d.internalSecret)) return send([401, { error: 'unauthorized' }]);
-      return send(await route(d, req, url));
+      const r = await route(d, req, url, res);
+      if (r) send(r);
+      return;
     } catch (e) {
       const msg = (e as Error).message;
       if (!/too large/.test(msg)) d.log(`http ${req.method} ${req.url}: ${msg}`);

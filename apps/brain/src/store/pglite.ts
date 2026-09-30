@@ -23,7 +23,10 @@ grant usage on schema public to authenticated, anon, service_role;
 
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 
-export async function createPgliteStore(migrationsDir: string): Promise<Store> {
+/** Tests only: run raw SQL (seed a CEO row, inspect tables). */
+export type PgliteStore = Store & { exec(sql: string, params?: unknown[]): Promise<Array<Record<string, unknown>>> };
+
+export async function createPgliteStore(migrationsDir: string): Promise<PgliteStore> {
   const db = new PGlite({ extensions: { vector } });
   await db.exec(SHIM);
   for (const f of fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()) {
@@ -45,6 +48,7 @@ export async function createPgliteStore(migrationsDir: string): Promise<Store> {
         throw new Error(`${fn}: ${(e as Error).message}`);
       }
     },
+    async exec(sql, params = []) { return (await db.query<Record<string, unknown>>(sql, params)).rows; },
     close: () => db.close(),
   };
 }

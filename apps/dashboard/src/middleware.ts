@@ -13,7 +13,10 @@ function env(name: string) {
 // /auth/confirm turns an emailed reset link into a session (then the normal gate applies to /reset-password).
 // /oauth/client-metadata.json identifies HQ to MCP apps (public, no secrets).
 // /api/brain/github is GitHub's push webhook for the memory vault: the brain service verifies its HMAC signature.
-const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github'];
+// /oauth/* and /.well-known/oauth-* + /mcp/brain are the Brain MCP connector (lib/brainConnector.ts): discovery
+// documents, OAuth endpoints and the MCP endpoint (the brain checks the access token); /oauth/authorize gates itself
+// (HQ sign-in + 2FA, CEO only).
+const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain'];
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');

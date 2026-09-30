@@ -99,7 +99,8 @@ Each milestone ends with something you can **see working locally**. Don't start 
 
 ## M14 · HQ Brain (docs/16-BRAIN.md)
 - M14.1 ✅ built: `apps/brain` (container `hq-brain`) mirrors `cracker17/claude-memory-vault` with a deploy key, indexes it into `brain_*` tables (keyword + pgvector, incremental, secret-scanned), internal Brain API, GitHub webhook via `/api/brain/github`. Acceptance: `pnpm --filter brain test` (end-to-end against a temp git repo), `scripts/db-tests/200-brain.mjs`, a local run against the real vault, then on the VPS a vault edit on the PC shows up in `brain_events` within a minute of the push.
-- M14.2 Brain MCP connector (`/mcp/brain`, OAuth via HQ login + 2FA) + write path · M14.3 `/brain` UI · M14.4 agents on the brain · M14.5 polish + nightly R2 backup.
+- M14.2 ✅ built: Brain MCP connector at `/mcp/brain` (OAuth 2.1: dynamic registration, PKCE S256, consent at `/oauth/authorize` after HQ sign-in + 2FA, CEO only; rotating refresh tokens with replay detection), 9 tools (6 read, 3 write), write path = edit on a fresh pull → secret scan → commit + push as "HQ Brain" → re-index (a lost push race re-runs the edit on the new tree). Acceptance: `apps/brain/src/connector.test.ts`, `scripts/db-tests/210-brain-oauth.mjs`, then add the connector in Claude and run /load + /save from the phone.
+- Next: M14.3 `/brain` UI · M14.4 agents on the brain · M14.5 polish + nightly R2 backup.
 
 ---
 
