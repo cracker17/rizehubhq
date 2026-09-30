@@ -70,7 +70,7 @@ export function CommandPalette({ open, onClose, projects, onNewProject, onDevice
 
   if (!open) return null;
   return (
-    <div className="glass-scrim fixed inset-0 z-50 flex items-start justify-center p-3 pt-[10vh] sm:p-4 sm:pt-[12vh]" onClick={onClose}>
+    <div className="glass-scrim fixed inset-0 z-[90] flex items-start justify-center p-3 pt-[10vh] sm:p-4 sm:pt-[12vh]" onClick={onClose}>
       <div role="dialog" aria-modal aria-label="Search the brain" onClick={(e) => e.stopPropagation()}
         className="glass w-full max-w-2xl overflow-hidden rounded-[20px] shadow-[0_0_80px_-20px_rgba(94,234,212,0.35)]">
         <div className="flex items-center gap-3 border-b border-[var(--color-line)] px-4">

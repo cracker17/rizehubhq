@@ -149,6 +149,8 @@ export function describeEvent(e: BrainEvent): string {
     case 'doc_changed': return `Updated ${e.path ?? ''}`.trim();
     case 'doc_removed': return `Removed ${e.path ?? ''}`.trim();
     case 'blocked_secret': return `Kept out (looks like a secret): ${e.path ?? ''}`.trim();
+    case 'blocked_size': return `Skipped, too big to index: ${e.path ?? ''}${/\((.+)\)/.exec(e.summary)?.[1] ? ` (${/\((.+)\)/.exec(e.summary)![1]})` : ''}`.trim();
+    case 'tool_call': return `${who} used ${e.summary.replace(/^brain_/, '').replace(/_/g, ' ')}`;
     case 'connected': return `Connected: ${e.summary.replace(/^approved /, '')}`;
     case 'revoked': return 'Connector access revoked';
     case 'error': return `Sync error: ${e.summary}`;
@@ -157,6 +159,26 @@ export function describeEvent(e: BrainEvent): string {
 }
 
 export const isFeedEvent = (e: BrainEvent) => e.action !== 'tool_call';
+
+/**
+ * The activity feed: no tool-call audit rows, and the "kept out" / "too big" notices (re-logged on every index run)
+ * only once per file. Newest first.
+ */
+export function feedEvents(events: BrainEvent[], max = 60): BrainEvent[] {
+  const seen = new Set<string>();
+  const out: BrainEvent[] = [];
+  for (const e of [...events].sort((a, b) => b.id - a.id)) {
+    if (!isFeedEvent(e)) continue;
+    if (e.action === 'blocked_secret' || e.action === 'blocked_size') {
+      const k = `${e.action}:${e.path}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+    }
+    out.push(e);
+    if (out.length >= max) break;
+  }
+  return out;
+}
 
 /** Events that should pulse a project node. */
 export const pulses = (e: BrainEvent) => !!e.project_slug && ['saved', 'doc_added', 'doc_changed', 'connected'].includes(e.action);

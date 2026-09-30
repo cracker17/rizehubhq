@@ -105,10 +105,15 @@ plans: an owner adds it under the organization's connector settings, then each m
 `brain_project_bundle`, `brain_get_document`), so the dashboard still has no service key. Search and writes go to the
 brain service (`app/brain-actions.ts` → `/search`, `/write/project`, `/write/memory`, attributed to `julev`).
 
-- **Core** (`components/brain/BrainCore.tsx`): 2D canvas with a 3D projection (no WebGL library): a turning point sphere,
-  projects orbiting as nodes (size = file count, glow = recency, colour = platform guessed from name/aliases/status,
-  `lib/brainView.ts`). New events fire a pulse from their source (Claude left, PC right, agents top, you bottom) to the
-  project node. Reduced motion = one still frame; paused off screen / tab hidden. Keyboard users use the project list.
+- **Core** (`components/brain/BrainCore.tsx`, model in `lib/brainNeural.ts`): a brain of ~900 neurons (two folded
+  hemispheres with the midline gap, cerebellum, stem, inner network) and their synapses on a 2D canvas with a 3D
+  projection, rim-lit. Each project is a region on the cortex, lit by its **activity heat** from the event log
+  (saves, doc changes, connects, and the connector's tool calls, which now name their project; 3 h half-life):
+  idle violet → warm teal → white-hot, pulsing ring = active in the last 10 min. Signals travel along synapses at a
+  rate that follows overall activity, mostly from hot regions; a new event arrives as a light from its source and
+  sets off a cascade. Drag to turn, + / − / pinch / Ctrl+wheel to zoom, **F** or the button for full screen
+  (portalled to `<body>` + Fullscreen API; in full screen the wheel zooms and a click opens a region's panel).
+  Labels: focus, live, then hottest, never overlapping. Reduced motion: no drift, no ambient signals.
 - **HUD**: projects, files, saves in 7 days, % embedded; sync lights PC (last webhook) · GitHub (last pull) · VPS (index).
 - **Ctrl+K** (`CommandPalette.tsx`): instant project match, actions (New project, Devices), vault search from 3 chars.
 - **Project** `/brain/[slug]`: status + link chips; tabs Memory · Decisions (timeline + add) · Next steps (checklist:

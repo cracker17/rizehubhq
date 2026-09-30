@@ -28,7 +28,7 @@ export async function loadBrainHome(): Promise<Loaded<BrainHome>> {
     const [health, projects, events, connections] = await Promise.all([
       rpc<BrainHealth>(db, 'brain_health'),
       rpc<BrainProject[]>(db, 'brain_list_projects'),
-      rpc<BrainEvent[]>(db, 'brain_recent_events', { p_limit: 150 }),
+      rpc<BrainEvent[]>(db, 'brain_recent_events', { p_limit: 400 }),
       rpc<BrainConnection[]>(db, 'brain_connections').catch(() => []), // before migration 20260930020000
     ]);
     return { data: { health, projects: projects ?? [], events: events ?? [], connections: connections ?? [], demo: false } };

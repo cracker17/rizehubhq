@@ -24,7 +24,7 @@ export function useBrainLive(initial: BrainEvent[], projects: BrainProject[], de
     setEvents((cur) => {
       const byId = new Map<number, BrainEvent>();
       for (const e of [...initial, ...cur]) byId.set(e.id, e);
-      return [...byId.values()].sort((a, b) => b.id - a.id).slice(0, 200);
+      return [...byId.values()].sort((a, b) => b.id - a.id).slice(0, 400);
     });
   }, [initial]);
 
@@ -45,8 +45,8 @@ export function useBrainLive(initial: BrainEvent[], projects: BrainProject[], de
     const channel = sb.channel('hq-brain')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'brain_events' }, (p) => {
         const e = p.new as BrainEvent;
-        if (e.action === 'tool_call') return;
-        setEvents((cur) => (cur.some((x) => x.id === e.id) ? cur : [e, ...cur].slice(0, 200)));
+        // Tool calls stay in (they light up the project Claude is working on); the feed hides them.
+        setEvents((cur) => (cur.some((x) => x.id === e.id) ? cur : [e, ...cur].slice(0, 400)));
         if (['saved', 'indexed', 'pulled', 'revoked', 'connected'].includes(e.action)) softRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'brain_projects' }, softRefresh);
