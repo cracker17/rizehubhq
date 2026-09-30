@@ -1,15 +1,16 @@
 import {
   Building2, CheckCircle2, ListTodo, Inbox, FileBarChart, ShieldCheck, Target, Briefcase,
-  Users, Bot, Plug, CircleDollarSign, LockKeyhole, Cable, KeyRound, Sparkles, ListChecks, type LucideIcon,
+  Users, Bot, Plug, CircleDollarSign, LockKeyhole, Cable, KeyRound, Sparkles, ListChecks, BrainCircuit, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: LucideIcon; milestone?: string; description?: string }
 export interface NavGroup { id: string; label: string; items: NavItem[]; admin?: boolean }
 
-/** Always visible at the top of the sidebar (the CEO's two daily stops). */
+/** Always visible at the top of the sidebar (the CEO's daily stops). */
 export const PINNED_NAV: NavItem[] = [
   { href: '/', label: 'Office', icon: Building2 },
   { href: '/approvals', label: 'Approvals', icon: CheckCircle2, milestone: 'M5' },
+  { href: '/brain', label: 'Brain', icon: BrainCircuit, milestone: 'M14' },
 ];
 
 /**

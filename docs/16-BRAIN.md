@@ -13,8 +13,8 @@ searchable index in Supabase that is rebuildable from git at any time. The full 
 | # | What | Status |
 |---|---|---|
 | M14.1 | VPS mirror + brain service + indexer (keyword + pgvector) + read-only Brain API + GitHub webhook | built |
-| M14.2 | Brain MCP connector at `https://hq.rizehub.ph/mcp/brain` (OAuth via HQ login + 2FA), write path (commit + push) | built |
-| M14.3 | Brain UI v1 at `/brain` (Core, Ctrl+K, project view, New Project wizard, activity, Devices & accounts) | next |
+| M14.2 | Brain MCP connector at `https://hq.rizehub.ph/mcp/brain` (OAuth via HQ login + 2FA), write path (commit + push) | live |
+| M14.3 | Brain UI v1 at `/brain` (Core, Ctrl+K, project view, New Project wizard, activity, Devices & accounts) | built |
 | M14.4 | Agents on the brain (scoped tokens, auto-load per client, proposals, digest), fold `brain/` in | |
 | M14.5 | Polish: graph, Ask the Brain, diff/revert, PWA, voice; nightly R2 backup | |
 
@@ -98,6 +98,28 @@ plans: an owner adds it under the organization's connector settings, then each m
 
 **Deploy (once):** apply `20260930020000_brain_oauth.sql` before pushing to `main`. Nothing else: no new secrets.
 
+## UI (M14.3)
+
+`/brain` (pinned in the sidebar; on phones under More). Reads use the CEO's own session against the CEO API
+(`lib/data/brain.ts`: `brain_health`, `brain_list_projects`, `brain_recent_events`, `brain_connections`,
+`brain_project_bundle`, `brain_get_document`), so the dashboard still has no service key. Search and writes go to the
+brain service (`app/brain-actions.ts` → `/search`, `/write/project`, `/write/memory`, attributed to `julev`).
+
+- **Core** (`components/brain/BrainCore.tsx`): 2D canvas with a 3D projection (no WebGL library): a turning point sphere,
+  projects orbiting as nodes (size = file count, glow = recency, colour = platform guessed from name/aliases/status,
+  `lib/brainView.ts`). New events fire a pulse from their source (Claude left, PC right, agents top, you bottom) to the
+  project node. Reduced motion = one still frame; paused off screen / tab hidden. Keyboard users use the project list.
+- **HUD**: projects, files, saves in 7 days, % embedded; sync lights PC (last webhook) · GitHub (last pull) · VPS (index).
+- **Ctrl+K** (`CommandPalette.tsx`): instant project match, actions (New project, Devices), vault search from 3 chars.
+- **Project** `/brain/[slug]`: status + link chips; tabs Memory · Decisions (timeline + add) · Next steps (checklist:
+  tick, edit, reorder, remove → one commit) · Sessions · Files · Activity. **File** `/brain/doc?path=`.
+- **New Project wizard**: name (duplicate check) → details → keywords (suggested from name + domains) → preview → create.
+- **Devices & accounts**: live connector connections with revoke, the new-device steps (Claude Code command, connector
+  URL, Team-plan note), last PC push.
+- **Live**: Supabase realtime on `brain_events` + `brain_projects` (migration `20260930030000_brain_realtime.sql`);
+  without it (or on error) the page refreshes every 15 s. DEMO mode: fixtures + a fake save every 6.5 s.
+- Markdown is rendered by a small safe parser (`parseMarkdown`, React elements only, http(s)/mailto links only).
+
 ## Brain API (internal, header `x-brain-secret`)
 
 | Route | Returns |
@@ -113,6 +135,7 @@ plans: an owner adds it under the organization's connector settings, then each m
 | `POST /hooks/github` | GitHub webhook (own HMAC check), reached through the dashboard's `/api/brain/github` |
 | `POST /oauth/register` `/oauth/code` `/oauth/token` `/oauth/revoke`, `GET /oauth/client` | connector OAuth (above); `/oauth/code` is the dashboard's consent page only |
 | `POST /mcp` | the MCP server; the caller's `Authorization` header is passed through |
+| `POST /write/project`, `POST /write/memory` | the `/brain` UI's own edits (New Project wizard, next steps, decisions), actor `julev` |
 
 ## Env (`.env` → `.env.brain` via `scripts/split-env.mjs`)
 

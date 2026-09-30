@@ -9,6 +9,7 @@ import type { BrainService } from './service';
 import { search } from './queries';
 import { clientCheck, issueCode, register, revoke, token, type OAuthDeps } from './oauth/server';
 import { handleMcpPost, MCP_MAX_BODY } from './mcp/server';
+import { createProjectOp, updateMemoryOp, WriteError, type NewProject } from './write/vault';
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 export { DEFAULT_SEARCH_KINDS } from './queries';
@@ -139,6 +140,19 @@ async function route(d: ApiDeps, req: http.IncomingMessage, url: URL, res: http.
     return [200, await search(d, { q: text, project: q.get('project'), kinds, k: clampInt(q.get('k'), 10, 1, 50) })];
   }
   if (req.method === 'GET' && p === '/activity') return [200, { events: await d.store.rpc('brain_recent_events', { p_limit: clampInt(q.get('n'), 50, 1, 500) }) }];
+  // Dashboard writes (M14.3 /brain UI): the CEO's own edits, attributed to "julev". Same write path as the connector.
+  if (req.method === 'POST' && (p === '/write/project' || p === '/write/memory')) {
+    let b: Record<string, unknown>;
+    try { b = JSON.parse((await readRaw(req, 64 * 1024)).toString('utf8') || '{}'); } catch { return [400, { error: 'invalid JSON' }]; }
+    try {
+      const op = p === '/write/project' ? createProjectOp(b as unknown as NewProject) : updateMemoryOp(String(b.project ?? ''), b);
+      const r = await d.service.write(op, 'julev');
+      return [200, { ok: true, project: r.project, paths: r.paths, summary: r.summary, sha: r.sha }];
+    } catch (e) {
+      if (e instanceof WriteError) return [400, { error: e.message }];
+      throw e;
+    }
+  }
   if (req.method === 'POST' && p === '/reindex') {
     const report = await d.service.sync({ reason: 'reindex', actor: 'brain-service', full: q.get('full') === '1' });
     return [200, { ok: true, report }];

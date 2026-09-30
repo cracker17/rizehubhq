@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
-import { NAV_GROUPS } from '@/lib/nav';
+import { NAV_GROUPS, PINNED_NAV } from '@/lib/nav';
 
 export const metadata = { title: 'Admin · RizeHub HQ' };
 
@@ -10,7 +10,7 @@ const IN_BOTTOM_BAR = ['/', '/approvals', '/requests', '/reports'];
 
 export default function Page() {
   const admin = NAV_GROUPS.filter((g) => g.admin);
-  const others = NAV_GROUPS.filter((g) => !g.admin)
+  const others = [{ id: 'pinned', label: 'Pinned', items: PINNED_NAV }, ...NAV_GROUPS.filter((g) => !g.admin)]
     .map((g) => ({ ...g, items: g.items.filter((i) => !IN_BOTTOM_BAR.includes(i.href)) }))
     .filter((g) => g.items.length);
   return (
