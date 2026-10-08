@@ -61,3 +61,40 @@ test('errors never contain the key (Semrush 200-with-ERROR text, echoed keys, ne
   assert.deepEqual(await createKeyTester(fakeFetch(() => new Response('')).f)('SUPABASE_SERVICE_ROLE_KEY', KEY), { ok: false, error: 'Unknown key name.' });
   assert.equal(redact('a abcd b', 'abcd'), 'a [key] b');
 });
+
+test('Anthropic: a multi-workspace key gets the workspace header, and a clear message when none is set', async () => {
+  const WS = 'wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ';
+  const { f, calls } = fakeFetch(() => new Response('{"data":[]}', { status: 200 }));
+  const env = (n: string) => ({ ANTHROPIC_WORKSPACE_ID: WS } as Record<string, string>)[n];
+  assert.equal((await createKeyTester(f, 1000, env)('ANTHROPIC_API_KEY', KEY)).ok, true);
+  assert.equal((calls[0]!.init.headers as Record<string, string>)['anthropic-workspace-id'], WS);
+
+  const noWs = (await createKeyTester(fakeFetch(() => new Response('{}')).f, 1000, () => undefined)('ANTHROPIC_API_KEY', KEY));
+  assert.equal(noWs.ok, true);
+
+  const unscoped = '{"type":"error","error":{"type":"invalid_request_error","message":"This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header."}}';
+  const t = await createKeyTester(fakeFetch(() => new Response(unscoped, { status: 400 })).f, 1000, () => undefined)('ANTHROPIC_API_KEY', KEY);
+  assert.equal(t.ok, false);
+  assert.match((t as { error: string }).error, /Anthropic workspace/);
+});
+
+test('Anthropic workspace ID: format-checked, tested with the key in use, which never appears in a message', async () => {
+  const WS = 'wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ';
+  const bad = await createKeyTester(fakeFetch(() => new Response('{}')).f, 1000, () => KEY)('ANTHROPIC_WORKSPACE_ID', 'default');
+  assert.equal(bad.ok, false);
+
+  const noKey = await createKeyTester(fakeFetch(() => new Response('{}')).f, 1000, () => undefined)('ANTHROPIC_WORKSPACE_ID', WS);
+  assert.equal(noKey.ok, null);
+
+  const { f, calls } = fakeFetch(() => new Response('{"data":[]}', { status: 200 }));
+  const ok = await createKeyTester(f, 1000, (n) => (n === 'ANTHROPIC_API_KEY' ? KEY : undefined))('ANTHROPIC_WORKSPACE_ID', WS);
+  assert.equal(ok.ok, true);
+  const h = calls[0]!.init.headers as Record<string, string>;
+  assert.equal(h['x-api-key'], KEY);
+  assert.equal(h['anthropic-workspace-id'], WS);
+
+  const denied = await createKeyTester(fakeFetch(() => new Response(`no access for ${KEY}`, { status: 403 })).f, 1000, () => KEY)('ANTHROPIC_WORKSPACE_ID', WS);
+  assert.equal(denied.ok, false);
+  const msg = (denied as { error: string }).error;
+  assert.ok(msg.includes(WS) && !msg.includes(KEY), msg);
+});

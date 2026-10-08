@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { HookCallback, Options, SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import { anthropicWorkspaceHeaders } from '@rizehubhq/shared';
 import type { TaskRow } from '../hqdb';
 import type { Role } from '../roles';
 import { errMsg, log, usageDetail, type WorkerDeps } from '../deps';
@@ -74,6 +75,9 @@ const PASS_ENV = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'HTTPS_PROXY', 'HTTP_PROXY', '
 export function claudeProcessEnv(apiKey: string, home: string, env: Env): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of PASS_ENV) { const v = env[k]; if (v !== undefined && v !== '') out[k] = v; }
+  // A multi-workspace key must name its workspace on every request (Claude Code sends ANTHROPIC_CUSTOM_HEADERS).
+  const ws = anthropicWorkspaceHeaders(env.ANTHROPIC_WORKSPACE_ID)['anthropic-workspace-id'];
+  if (ws) out.ANTHROPIC_CUSTOM_HEADERS = `anthropic-workspace-id: ${ws}`;
   return {
     ...out, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: home, ANTHROPIC_API_KEY: apiKey,
     CLAUDE_AGENT_SDK_CLIENT_APP: 'rizehub-hq-worker/1.0', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1',

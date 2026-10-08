@@ -152,29 +152,31 @@ function KeyDialog({ k, onClose, run }: { k: ApiKeyView | null; onClose: () => v
   const [test, setTest] = useState(true);
   if (!k) return null;
   const testable = k.name !== 'PAGESPEED_API_KEY';
+  const noun = k.plain ? 'ID' : 'key';
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const v = value;
     setValue('');
     onClose();
-    run('Save key', `Store a new ${k.label} key.`, (totp) => setProviderKeyAction({ name: k.name, value: v, test: testable && test, totp }), `${k.label} key saved.`);
+    run(`Save ${noun}`, `Store a new ${k.label} ${noun}.`, (totp) => setProviderKeyAction({ name: k.name, value: v, test: testable && test, totp }), `${k.label} ${noun} saved.`);
   };
   return (
-    <Dialog open onClose={onClose} title={`${k.state === 'dashboard' ? 'Replace' : 'Add'} ${k.label} key`}>
+    <Dialog open onClose={onClose} title={`${k.state === 'dashboard' ? 'Replace' : 'Add'} ${k.label} ${noun}`}>
       <form onSubmit={submit} className="flex flex-col gap-3.5" autoComplete="off">
         <p className="text-sm text-[var(--color-muted)]">
           {k.hint}{' '}
-          <a className="text-white underline underline-offset-4" href={k.docs} target="_blank" rel="noreferrer">Get a key<ExternalLink size={12} className="ml-1 inline" aria-hidden /></a>
+          <a className="text-white underline underline-offset-4" href={k.docs} target="_blank" rel="noreferrer">{k.plain ? 'Find it' : 'Get a key'}<ExternalLink size={12} className="ml-1 inline" aria-hidden /></a>
         </p>
-        <Field label={k.name} hint="Encrypted on the server. You'll only see its last 4 characters here.">
-          <input className={`${inputCls} font-mono`} type="password" autoComplete="new-password" value={value} onChange={(e) => setValue(e.target.value)}
-            required autoFocus data-1p-ignore data-lpignore="true" spellCheck={false} />
+        <Field label={k.name} hint={k.plain ? 'Stored on the server; you\'ll see its last 4 characters here.' : 'Encrypted on the server. You\'ll only see its last 4 characters here.'}>
+          <input className={`${inputCls} font-mono`} type={k.plain ? 'text' : 'password'} autoComplete={k.plain ? 'off' : 'new-password'} value={value} onChange={(e) => setValue(e.target.value)}
+            required autoFocus data-1p-ignore data-lpignore="true" spellCheck={false} autoCapitalize="off" autoCorrect="off"
+            placeholder={k.plain ? 'wrkspc_…' : undefined} />
         </Field>
         {testable
           ? (
             <label className="flex items-start gap-2.5 text-sm text-[var(--color-muted)]">
               <input type="checkbox" className="mt-0.5 accent-[var(--color-primary)]" checked={test} onChange={(e) => setTest(e.target.checked)} />
-              <span>Test it with {k.label} before saving (a key that fails is not saved).</span>
+              <span>Test it with {k.label} before saving (a {noun} that fails is not saved).</span>
             </label>
           )
           : <p className="text-xs text-[var(--color-dim)]">This key can&apos;t be tested cheaply: it is checked the first time an agent uses it.</p>}
@@ -229,7 +231,7 @@ function KeysCard({ page, run, onEdit }: { page: ApiPage; run: Run; onEdit: (k: 
                 {k.last_test_ok === false && k.last_error && <p className="text-sm text-[#ff8a8d]">{k.last_error}</p>}
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className={btn.small} onClick={() => onEdit(k)}>
-                    {k.state === 'dashboard' || k.state === 'dashboard_unreadable' ? <><KeyRound size={14} aria-hidden /> Replace</> : <><Plus size={14} aria-hidden /> Add key</>}
+                    {k.state === 'dashboard' || k.state === 'dashboard_unreadable' ? <><KeyRound size={14} aria-hidden /> Replace</> : <><Plus size={14} aria-hidden /> {k.plain ? 'Add ID' : 'Add key'}</>}
                   </button>
                   {k.state !== 'missing' && (
                     <button type="button" className={btn.small} onClick={() => void test(k)} disabled={busy === k.name}>
@@ -238,8 +240,9 @@ function KeysCard({ page, run, onEdit }: { page: ApiPage; run: Run; onEdit: (k: 
                   )}
                   {(k.state === 'dashboard' || k.state === 'dashboard_unreadable') && (
                     <button type="button" className={btn.danger} onClick={() => {
-                      if (!window.confirm(`Remove the ${k.label} key stored here? Agents fall back to the .env value, if the server has one.`)) return;
-                      run('Remove key', `Remove the ${k.label} key.`, (totp) => removeProviderKeyAction({ name: k.name, totp }), 'Key removed.');
+                      const noun = k.plain ? 'ID' : 'key';
+                      if (!window.confirm(`Remove the ${k.label} ${noun} stored here? Agents fall back to the .env value, if the server has one.`)) return;
+                      run(`Remove ${noun}`, `Remove the ${k.label} ${noun}.`, (totp) => removeProviderKeyAction({ name: k.name, totp }), `${k.plain ? 'ID' : 'Key'} removed.`);
                     }}><Trash2 size={14} aria-hidden /> Remove</button>
                   )}
                 </div>

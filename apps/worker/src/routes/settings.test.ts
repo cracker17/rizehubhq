@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import { parseDashboardAi, providerKeyContext } from '@rizehubhq/shared';
+import { parseDashboardAi, PROVIDER_KEY_NAMES, providerKeyContext } from '@rizehubhq/shared';
 import { createHttpServer } from '../http';
 import { loadKeyring, open } from '../vault/crypto';
 import { FakeProviderKeyStore } from '../settings/store';
@@ -126,7 +126,7 @@ test('/settings/reload and /settings/status: names and sources only, never value
     assert.equal(ctx.reloads, 1);
     const s = await call('/settings/status', {});
     const keys = s.body.keys as { name: string; source: string }[];
-    assert.equal(keys.length, 12);
+    assert.equal(keys.length, PROVIDER_KEY_NAMES.length);
     assert.deepEqual(keys.find((k) => k.name === 'GROQ_API_KEY'), { name: 'GROQ_API_KEY', source: 'dashboard' });
     assert.deepEqual(keys.find((k) => k.name === 'TAVILY_API_KEY'), { name: 'TAVILY_API_KEY', source: 'env' });
     assert.deepEqual(keys.find((k) => k.name === 'FIGMA_TOKEN'), { name: 'FIGMA_TOKEN', source: 'missing' });

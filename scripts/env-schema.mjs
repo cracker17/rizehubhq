@@ -76,6 +76,7 @@ export const VARS = [
   S({ key: 'MONTHLY_BUDGET_USD', group: 'AI', svc: ['worker', 'bot'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0') }),
   ...['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'MOONSHOT_API_KEY']
     .map((key) => S({ key, group: 'AI', svc: ['worker'], secret: true, check: (v) => (v.length >= 20 && !/\s/.test(v) ? null : 'looks too short / has spaces') })),
+  S({ key: 'ANTHROPIC_WORKSPACE_ID', group: 'AI', svc: ['worker'], check: (v) => (/^wrkspc_[A-Za-z0-9]{8,64}$/.test(v) ? null : 'must look like wrkspc_01Jw… (only for a multi-workspace Anthropic key)') }),
   // Worker
   S({ key: 'POLL_INTERVAL_MS', group: 'Worker', svc: ['worker'], check: intIn(250) }),
   S({ key: 'MAX_PARALLEL_TASKS', group: 'Worker', svc: ['worker'], check: intIn(1, 16) }),

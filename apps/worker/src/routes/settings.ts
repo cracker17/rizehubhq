@@ -4,7 +4,7 @@
 // optionally tested live, sealed with the vault keyring and stored; it is never logged or returned (only its last 4).
 import { z } from 'zod';
 import {
-  BOOTSTRAP_SECRET, isProviderKeyName, PROVIDER_KEY_NAMES, PROVIDER_KEY_VALUE, providerKeyContext,
+  ANTHROPIC_WORKSPACE_ID, BOOTSTRAP_SECRET, isProviderKeyName, PROVIDER_KEY_NAMES, PROVIDER_KEY_VALUE, providerKeyContext,
 } from '@rizehubhq/shared';
 import type { Route } from './types';
 import { baseEnvValue, providerKeyOverlayNames, workerEnv } from '../config';
@@ -80,6 +80,9 @@ export function createSettingsRoutes(d: SettingsRouteDeps): Route[] {
         if (problem) return [400, { error: problem }];
         const value = b.value.trim();
         if (!PROVIDER_KEY_VALUE.test(value)) return [400, { error: 'That doesn\'t look like an API key (8 to 512 characters, no spaces).' }];
+        if (b.name === 'ANTHROPIC_WORKSPACE_ID' && !ANTHROPIC_WORKSPACE_ID.test(value)) {
+          return [400, { error: 'An Anthropic workspace ID looks like wrkspc_01Jw… (Console → Settings → Workspaces).' }];
+        }
         const kr = d.keyring();
         if (!kr) return [503, { error: 'The worker cannot encrypt keys: VAULT_MASTER_KEY is not set.' }];
         const t = b.test === false ? null : await tester(b.name, value);

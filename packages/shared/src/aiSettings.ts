@@ -42,6 +42,8 @@ export interface ProviderKeyDef {
   hint: string;
   /** Where the CEO creates it. */
   docs: string;
+  /** Not a secret (an ID): a plain text field, called an ID rather than a key. Stored sealed like the keys. */
+  plain?: boolean;
 }
 
 /**
@@ -54,6 +56,10 @@ export const PROVIDER_KEYS: readonly ProviderKeyDef[] = [
   { name: 'GROQ_API_KEY', group: 'ai', label: 'Groq', hint: 'Free tier: fast fallback models and voice transcription.', docs: 'https://console.groq.com/keys' },
   { name: 'OPENROUTER_API_KEY', group: 'ai', label: 'OpenRouter', hint: 'Free ":free" models as fallback; other models are paid.', docs: 'https://openrouter.ai/settings/keys' },
   { name: 'ANTHROPIC_API_KEY', group: 'ai', label: 'Anthropic (Claude)', hint: 'Paid: paid, hybrid and claude profiles.', docs: 'https://console.anthropic.com/settings/keys' },
+  {
+    name: 'ANTHROPIC_WORKSPACE_ID', group: 'ai', label: 'Anthropic workspace', plain: true, docs: 'https://platform.claude.com/settings/workspaces',
+    hint: 'Only for an Anthropic key that works in several workspaces: the workspace (wrkspc_…) its requests run in. Add it before the key.',
+  },
   { name: 'OPENAI_API_KEY', group: 'ai', label: 'OpenAI', hint: 'Paid: QA on the paid profile, the openai profile.', docs: 'https://platform.openai.com/api-keys' },
   { name: 'MOONSHOT_API_KEY', group: 'ai', label: 'Moonshot (Kimi)', hint: 'Paid: last-resort backup and the kimi profile.', docs: 'https://platform.kimi.ai' },
   { name: 'TAVILY_API_KEY', group: 'research', label: 'Tavily search', hint: 'Web search for agents (tried first).', docs: 'https://app.tavily.com' },
@@ -74,6 +80,13 @@ export const BOOTSTRAP_SECRET = /^(SUPABASE_|VAULT_|HQ_INTERNAL_SECRET$|HQ_MCP_T
 export const providerKeyContext = (name: string) => `provider_key:${name}`;
 /** Shape check for a pasted key: 8–512 printable characters, no spaces. */
 export const PROVIDER_KEY_VALUE = /^[\x21-\x7e]{8,512}$/;
+/** Anthropic workspace ID, sent as the anthropic-workspace-id header (required with a multi-workspace key). */
+export const ANTHROPIC_WORKSPACE_ID = /^wrkspc_[A-Za-z0-9]{8,64}$/;
+/** The extra header for every Anthropic call: empty unless a valid workspace ID is set. */
+export function anthropicWorkspaceHeaders(workspaceId: string | undefined | null): Record<string, string> {
+  const id = workspaceId?.trim();
+  return id && ANTHROPIC_WORKSPACE_ID.test(id) ? { 'anthropic-workspace-id': id } : {};
+}
 
 // ---------- AI settings rows ----------
 export const AI_SETTING_KEYS = {

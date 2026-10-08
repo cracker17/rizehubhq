@@ -331,4 +331,7 @@ test('claudeBudget / priceRun / claudeProcessEnv / redact', async () => {
   const env = claudeProcessEnv(KEY, '/tmp/h', { PATH: '/bin', GITHUB_TOKEN: 'ghp_x', SUPABASE_URL: 'https://x', LANG: 'C.UTF-8' });
   assert.deepEqual(Object.keys(env).sort(), ['ANTHROPIC_API_KEY', 'CLAUDE_AGENT_SDK_CLIENT_APP', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'CLAUDE_CONFIG_DIR', 'DISABLE_AUTOUPDATER', 'HOME', 'LANG', 'PATH', 'USERPROFILE']);
   assert.equal(redact(`a ${KEY} b`, [KEY]), 'a [redacted] b');
+  const ws = claudeProcessEnv(KEY, '/tmp/h', { ANTHROPIC_WORKSPACE_ID: 'wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ' });
+  assert.equal(ws.ANTHROPIC_CUSTOM_HEADERS, 'anthropic-workspace-id: wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ');
+  assert.equal(claudeProcessEnv(KEY, '/tmp/h', { ANTHROPIC_WORKSPACE_ID: 'bad value' }).ANTHROPIC_CUSTOM_HEADERS, undefined);
 });

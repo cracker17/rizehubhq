@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import YAML from 'yaml';
 import { z } from 'zod';
 import type { LanguageModel } from 'ai';
-import { AI_PROFILES, type ModelRole } from '@rizehubhq/shared';
+import { AI_PROFILES, anthropicWorkspaceHeaders, type ModelRole } from '@rizehubhq/shared';
 import { config, workerEnv } from '../config';
 
 export const PROVIDERS = ['google', 'groq', 'openrouter', 'anthropic', 'openai', 'moonshot'] as const;
@@ -149,7 +149,10 @@ export async function createModel(c: Candidate, env: Readonly<Record<string, str
     case 'google': { const { createGoogleGenerativeAI } = await import('@ai-sdk/google'); return createGoogleGenerativeAI({ apiKey })(c.modelId); }
     case 'groq': { const { createGroq } = await import('@ai-sdk/groq'); return createGroq({ apiKey })(c.modelId); }
     case 'openrouter': { const { createOpenRouter } = await import('@openrouter/ai-sdk-provider'); return createOpenRouter({ apiKey })(c.modelId); }
-    case 'anthropic': { const { createAnthropic } = await import('@ai-sdk/anthropic'); return createAnthropic({ apiKey })(c.modelId); }
+    case 'anthropic': {
+      const { createAnthropic } = await import('@ai-sdk/anthropic');
+      return createAnthropic({ apiKey, headers: anthropicWorkspaceHeaders(env.ANTHROPIC_WORKSPACE_ID) })(c.modelId);
+    }
     case 'openai': { const { createOpenAI } = await import('@ai-sdk/openai'); return createOpenAI({ apiKey })(c.modelId); }
     // .chat(): Moonshot serves chat/completions only (the default OpenAI model uses the Responses API).
     case 'moonshot': { const { createOpenAI } = await import('@ai-sdk/openai'); return createOpenAI({ apiKey, baseURL: MOONSHOT_BASE_URL, name: 'moonshot' }).chat(c.modelId); }
