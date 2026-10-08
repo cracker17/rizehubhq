@@ -36,6 +36,8 @@ export default async function ({ db, step, val, as, assert }) {
     // HQ Brain (20260930010000_brain_index.sql)
     'brain_health()', 'brain_list_projects()', 'brain_project_bundle(text,integer)', 'brain_get_document(text)',
     'brain_search(text,text,text,jsonb,integer)', 'brain_recent_events(integer)',
+    // Email me updates (20261009000000_ceo_email.sql)
+    'ceo_email_set(jsonb)', 'ceo_email_recent()',
   ];
   // groups B + C: worker / bot only, and trigger functions
   const SERVICE_ONLY = [
@@ -59,6 +61,8 @@ export default async function ({ db, step, val, as, assert }) {
     'brain_delete_documents(jsonb)', 'brain_refresh_projects()', 'brain_chunks_missing_embedding(integer)',
     'brain_set_embeddings(jsonb)', 'brain_clear_embeddings()', 'brain_reset_index()',
     'brain_log_event(text,text,text,text,text,jsonb)', 'brain_set_sync_state(jsonb)',
+    // Email me updates: the worker's queue and log
+    'ceo_email_pending(timestamp with time zone,text[],integer)', 'ceo_email_record(text,boolean,text)', 'ceo_email_address_ok(text)',
   ];
 
   await step('hardening: every public (non-extension) function has a fixed search_path', async () => {

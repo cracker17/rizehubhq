@@ -5,7 +5,7 @@ import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
 import { totpState } from '@/lib/auth/mfaServer';
 import { demoSnapshot } from '@/lib/mock';
-import { MCP_CALLBACK_PATH } from '@rizehubhq/shared';
+import { CEO_EMAIL_SETTING_KEY, MCP_CALLBACK_PATH, parseCeoEmailSettings, type CeoEmailSettings } from '@rizehubhq/shared';
 
 function callbackUrl(): string | null {
   const base = process.env.DASHBOARD_URL?.trim().replace(/\/+$/, '');
@@ -43,6 +43,9 @@ export interface ConnectorView {
   created_at: string;
 }
 
+/** One row of ceo_email_recent() (Admin → Connectors → Email me updates). */
+export interface CeoEmailRecent { key: string; title: string; kind: string | null; sent_at: string; ok: boolean; error: string | null; attempts: number }
+
 export interface ConnectorsPage {
   mode: 'demo' | 'live';
   connectors: ConnectorView[];
@@ -50,9 +53,12 @@ export interface ConnectorsPage {
   totpOn: boolean;
   /** <DASHBOARD_URL>/api/connectors/callback: the redirect URL the CEO copies into their own OAuth apps (null: use the browser's origin). */
   callbackUrl: string | null;
+  /** "Email me updates" (docs/15 §5c): the saved settings and the last few emails. */
+  ceoEmail: { settings: CeoEmailSettings; recent: CeoEmailRecent[] };
   error?: string;
 }
 
+const DEMO_GMAIL_ID = '00000000-0000-4000-8000-00000000d0e1';
 const COLS = 'id,kind,catalog_key,name,account_email,url,status,settings,last_checked_at,last_used_at,last_error,created_at';
 
 export async function loadConnectors(): Promise<ConnectorsPage> {
@@ -60,8 +66,18 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
     const agents = demoSnapshot().agents.map((a) => ({ id: a.id, name: a.name }));
     return {
       mode: 'demo', agents, totpOn: false, callbackUrl: callbackUrl(),
+      ceoEmail: {
+        settings: parseCeoEmailSettings({
+          enabled: true, connector_id: DEMO_GMAIL_ID, to: 'you@gmail.com', events: { results: true, questions: true, failures: true, plans: false },
+          enabled_at: new Date(Date.now() - 86_400_000).toISOString(),
+        }),
+        recent: [
+          { key: 'approval:demo-1', title: 'Calendar summary for this week', kind: 'deliverable', sent_at: new Date(Date.now() - 3_600_000).toISOString(), ok: true, error: null, attempts: 1 },
+          { key: 'approval:demo-2', title: 'Question: which tone for the bundle page?', kind: 'external_action', sent_at: new Date(Date.now() - 7_200_000).toISOString(), ok: true, error: null, attempts: 1 },
+        ],
+      },
       connectors: [{
-        id: 'demo-gmail', kind: 'gmail', catalog: 'gmail', url: null, tools: [], name: 'Main inbox', account_email: 'you@gmail.com', status: 'active', mode: 'read',
+        id: DEMO_GMAIL_ID, kind: 'gmail', catalog: 'gmail', url: null, tools: [], name: 'Main inbox', account_email: 'you@gmail.com', status: 'active', mode: 'read',
         agents: ['coo', 'sales'], last_checked_at: new Date().toISOString(), last_used_at: null, last_error: null, created_at: new Date().toISOString(),
         calendar: null, provider: null, isDefault: false,
       }, {
@@ -85,12 +101,14 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
     };
   }
   const db = (await createSupabaseServer())!;
-  const [rows, grants, agents, state, tools] = await Promise.all([
+  const [rows, grants, agents, state, tools, ceoSetting, ceoRecent] = await Promise.all([
     db.from('connectors').select(COLS).order('created_at'),
     db.from('connector_grants').select('connector_id,agent_id'),
     db.from('agents').select('id,name').eq('enabled', true).order('name'),
     totpState(db),
     db.from('connector_tools').select('connector_id,name,description,policy,locked_reason,badges,review_needed,annotations').order('name'),
+    db.from('settings').select('value').eq('key', CEO_EMAIL_SETTING_KEY).maybeSingle(),
+    db.rpc('ceo_email_recent'),
   ]);
   const toolsBy = new Map<string, ToolView[]>();
   for (const t of (tools.data ?? []) as { connector_id: string; name: string; description: string; policy: ToolView['policy']; locked_reason: ToolView['locked']; badges: string[]; review_needed: boolean; annotations: ToolView['annotations'] }[]) {
@@ -122,6 +140,10 @@ export async function loadConnectors(): Promise<ConnectorsPage> {
       provider: r.kind === 'storage' && (r.settings?.provider === 'drive' || r.settings?.provider === 'dropbox') ? r.settings.provider : null,
       isDefault: r.id === effectiveDefault,
     })),
+    ceoEmail: {
+      settings: parseCeoEmailSettings((ceoSetting.data as { value?: unknown } | null)?.value),
+      recent: ((ceoRecent.data ?? []) as CeoEmailRecent[]).slice(0, 5),
+    },
     error: rows.error?.message ?? grants.error?.message,
   };
 }

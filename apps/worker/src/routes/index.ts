@@ -8,5 +8,6 @@ import { transcribeRoutes } from './transcribe';
 import { connectorRoutes } from './connectors';
 import { mcpConnectorRoutes } from './mcpConnectors';
 import { storageConnectorRoutes } from './storageConnectors';
+import { ceoEmailRoutes } from './ceoEmail';
 
-export const EXTRA_ROUTES: Route[] = [...vaultRoutes, ...rizehubRoutes, ...mcpRoutes, ...salesRoutes, ...transcribeRoutes, ...connectorRoutes, ...mcpConnectorRoutes, ...storageConnectorRoutes];
+export const EXTRA_ROUTES: Route[] = [...vaultRoutes, ...rizehubRoutes, ...mcpRoutes, ...salesRoutes, ...transcribeRoutes, ...connectorRoutes, ...mcpConnectorRoutes, ...storageConnectorRoutes, ...ceoEmailRoutes];

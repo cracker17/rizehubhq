@@ -38,6 +38,17 @@
 
 ### Gmail / Calendar (EA)
 - **Built (M13.4, docs/15 §5):** @gmail.com accounts connect with a Google **App Password** in Admin → Connectors (IMAP read-only; drafts via IMAP; sending only per email after the CEO approves it, level *Read + drafts + send*). The App Password is tested against Google, sealed with the vault keyring (context `connector:<id>`) and stored in `connectors.secret_cipher` (browser role can't read it); agents get only accounts granted to them; a rejected password marks the account *needs a new App Password*.
+- **Email me updates (docs/15 §5c, docs/08 "Email"):** the worker emails the CEO copies of results / questions / failures
+  / plans from one connected Gmail account. This is the one place HQ sends mail without a per-email approval, so the
+  **recipient is locked to the CEO**: a single address in the `ceo_email` settings row, written only by
+  `ceo_email_set()` (one plain address, no lists, display names or line breaks; audited `ceo_email.updated`), and
+  **changing the address or turning the emails on needs a fresh 2FA code** (`ceo_step_up_guard`; the Telegram bot /
+  service role cannot do it once 2FA is enrolled). The browser can't write that row directly (restrictive RLS). The
+  sender takes the address only from that row, never from an agent, approval or deliverable, and sends to it alone (no
+  cc/bcc). Action approvals and Vault 2FA questions are never emailed. Deliverable text is untrusted: rendered by an
+  escape-everything Markdown renderer, links limited to http(s)/mailto. The log (`ceo_email_log`) is service-role only
+  and stores no secrets (Gmail errors are reduced to friendly messages). Note: the email body contains the full
+  deliverable, so it lands in that inbox too; pick an address with 2-Step Verification on.
 - **Calendar built (docs/15 §5b):** read-only through each calendar's **Secret address in iCal format**. That address
   **is a credential**: anyone who has it can read the whole calendar (titles, guests, Meet links), and it never expires on
   its own. HQ treats it like a password: typed into a password field, test-read by the worker, sealed with the vault

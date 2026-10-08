@@ -81,6 +81,28 @@ never echoed: the bot says "Heard your code (not shown)" and deletes the voice m
 | Task done / QA pass | Batched into digest (to avoid spam) |
 Quiet hours setting (e.g. 22:00–07:00) → only urgent + blocked.
 
+### Email (second channel, built 2026-10-09: "Email me updates")
+Telegram and the dashboard stay the place to decide. On top, the worker can email the CEO a **copy** of each update
+(`apps/worker/src/notify/ceoEmail.ts`, every 30 s, skipped while HQ is paused). Off until the CEO turns it on in
+Admin → Connectors → *Email me updates* (docs/15 §5c).
+
+| Switch (default) | What is emailed | Subject |
+|---|---|---|
+| Results (on) | every `deliverable` approval (QA passed): request text, agent, QA score + notes, summary, the **full content** (Markdown rendered to safe HTML, cut at 50,000 characters), links, the saved files and folder (`output.storage`) | `✅ Result ready: <task>` |
+| Questions (on) | `ask_ceo` questions (`payload.type = 'question'`) with the options | `❓ <agent> asks: <question>` |
+| Failures (on) | `task_failed`, `planning_failed` (the request itself failed), `qa_escalation`, `qa_stuck` | `⚠️ Task failed: …` / `⚠️ Request failed: …` / `⚠️ QA keeps failing: …` |
+| Plans (off) | the COO's plan: tasks with agents, estimated cost, questions | `📋 Plan to approve: …` |
+
+- Never emailed: action approvals (send / publish / app calls / RizeHub actions) and Vault 2FA questions; they stay on
+  Telegram and in the dashboard.
+- Every email has an **Open in HQ** button (`<DASHBOARD_URL>/approvals?id=<id>`) and says that approving happens in HQ
+  or Telegram: there are no buttons that act. Plain-text alternative included; branded "RizeHub HQ" only.
+- Once per approval (`ceo_email_log` key `approval:<id>`), only approvals created after the emails were turned on
+  (`enabled_at`, no backfill), at most 10 per tick. A fresh deliverable waits up to 2 minutes for its storage links.
+  A failed send is retried up to 3 times, 2 minutes apart; a rejected App Password marks the account *needs a new App
+  Password* and stops sending until it is replaced.
+- Quiet hours do not apply (email is not a push notification).
+
 ## Implementation sketch
 
 ```ts

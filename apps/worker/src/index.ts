@@ -18,6 +18,7 @@ import { hermesStartupReport } from './hermes/config';
 import { claudeStartupReport } from './claude/config';
 import { startSalesBackground, stopSalesBackground } from './sales/background';
 import { listApprovedGmailSends, startGmailSender } from './connectors/gmailSend';
+import { startCeoEmailSender, supabaseCeoEmailDeps } from './notify/ceoEmail';
 import { executeApprovedMcpCalls, listApprovedMcpCalls } from './connectors/mcpExecute';
 import { createMcpOpener } from './connectors/mcpClient';
 import { createSupabaseConnectorStore } from './connectors/store';
@@ -132,6 +133,15 @@ async function main() {
     },
     paused: async () => { const v = (await db.getSettings().catch(() => ({} as Record<string, unknown>))).paused; return v === true || v === 'true'; },
   });
+  // "Email me updates" (docs/08, docs/15 §5c): results / questions / plans / failures emailed to the CEO's one address,
+  // every 30 s, same pause rule. Nothing happens until the CEO turns it on in Admin → Connectors.
+  const ceoEmail = startCeoEmailSender({
+    deps: {
+      ...supabaseCeoEmailDeps(sb), store: createSupabaseConnectorStore(sb), keyring,
+      dashboardUrl: (workerEnv().DASHBOARD_URL ?? 'https://hq.rizehub.ph').replace(/\/+$/, ''), log: (m) => console.log(m),
+    },
+    paused: async () => { const v = (await db.getSettings().catch(() => ({} as Record<string, unknown>))).paused; return v === true || v === 'true'; },
+  });
   // App tool calls the CEO approved (mcp.call, docs/15 §3), same cadence and pause rule.
   const execDb = async (id: string, phase: 'claim' | 'done' | 'failed', result: Record<string, unknown> = {}) => {
     const r = await sb.rpc('external_action_exec', { p_approval: id, p_phase: phase, p_result: result });
@@ -188,6 +198,7 @@ async function main() {
     server.close();
     stopSalesBackground(salesTimers);
     clearInterval(gmailSender);
+    clearInterval(ceoEmail);
     clearInterval(mcpRunner);
     clearInterval(voiceNotes);
     stopSettings();

@@ -1,5 +1,5 @@
 'use client';
-// Admin → Connectors (docs/15, docs/06 §11): Gmail accounts, Calendars (Google Calendar secret iCal address), storage
+// Admin → Connectors (docs/15, docs/06 §11): Gmail accounts, Email me updates, Calendars (Google Calendar secret iCal address), storage
 // (Google Drive / Dropbox) and MCP apps.
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,7 @@ import { StepUpDialog, type StepUpRequest } from '@/components/StepUpDialog';
 import { useHq } from '@/lib/data/store';
 import { AppsSection } from './AppsSection';
 import { CalendarsSection } from './CalendarsSection';
+import { CeoEmailSection } from './CeoEmailSection';
 import { StorageSection } from './StorageSection';
 
 const STATUS: Record<ConnectorView['status'], { label: string; color: string }> = {
@@ -298,6 +299,8 @@ export function ConnectorsView({ page, connected, storageConnected, mcpError }: 
           </ul>
         )}
       </section>
+
+      <CeoEmailSection page={page} run={run} toast={toast} />
 
       <CalendarsSection page={page} run={run} test={test} busy={busy} toast={toast} refresh={() => router.refresh()} />
 

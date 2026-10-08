@@ -466,6 +466,12 @@ Every new function needs its own `revoke … from public, anon` + `grant` block:
 - Restrictive RLS policies on `settings` stop `authenticated` from inserting, updating or deleting `ai_*` rows directly (other rows unchanged).
 - Tests: `scripts/db-tests/180-provider-keys.mjs`. Precedence and the worker side: docs/14 "Dashboard settings".
 
+## Email me updates (`20261009000000_ceo_email.sql`)
+- `settings` row `ceo_email` = `{enabled, connector_id, to, events {results, questions, failures, plans}, enabled_at}`, written only by `ceo_email_set(p jsonb)` (`hq_guard`; validates the address with `ceo_email_address_ok`, an active `kind = 'gmail'` connector while on, ≥ 1 event; a new `to` or turning it on → `ceo_step_up_guard()`; stamps / clears `enabled_at`; logs `ceo_email.updated` with before/after). Restrictive policies `ceo_email_row_via_rpc_{insert,update,delete}` keep `authenticated` off that row.
+- `ceo_email_log (key pk 'approval:<id>' | 'test:<time>', sent_at = last attempt, ok, error ≤ 300, attempts)`: RLS on, no policies, no grants to `authenticated`/`anon`.
+- Worker only: `ceo_email_pending(since, events[], limit)` (approvals at/after `since` classified results/plans/questions/failures, never action approvals or Vault 2FA questions, not logged or failed < 3 times and > 2 min ago; joins request, client and the task's `output.storage`) and `ceo_email_record(key, ok, error)`. CEO: `ceo_email_recent()` (last 20 with the approval title).
+- Tests: `scripts/db-tests/220-ceo-email.mjs`; the function lists in `130-security-hardening.mjs`. Sender: docs/15 §5c.
+
 ## Realtime
 
 ```sql

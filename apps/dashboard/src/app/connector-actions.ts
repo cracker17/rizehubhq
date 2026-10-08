@@ -31,7 +31,7 @@ function friendly(message: string): string {
   if (isStepUpError(message)) return 'Confirm with a fresh 2FA code.';
   if (/not allowed|permission denied|42501/i.test(message)) return 'This account is not allowed to do that (not the CEO).';
   if (/JWT|session/i.test(message)) return 'Your session expired. Sign in again.';
-  return message.replace(/^connector_\w+: /, '');
+  return message.replace(/^(connector_\w+|ceo_email_set): /, '');
 }
 
 const agentsOf = (v: unknown) => [...new Set((Array.isArray(v) ? v : []).map(String).filter((a) => AGENT.test(a)))].slice(0, 10);
@@ -251,4 +251,43 @@ export async function testStorageAction(input: { id: string }): Promise<Connecto
     ok: true, working: Boolean(r.body.ok),
     message: r.body.ok ? `Connected${r.body.account ? ` as ${r.body.account}` : ''}. HQ can save files.` : (r.body.error ?? 'The storage did not answer.'),
   };
+}
+
+// ---------- Email me updates (docs/15 §5c) ----------
+export interface CeoEmailInput {
+  enabled: boolean; connectorId: string | null; to: string;
+  events: { results: boolean; questions: boolean; failures: boolean; plans: boolean };
+  totp?: string | null;
+}
+
+/**
+ * Saves the CEO's email settings through ceo_email_set() (validated and audited in SQL). A new address, or turning the
+ * emails on, needs a fresh 2FA code: the SQL function refuses without one and the card asks for it ({ stepUp: true }).
+ */
+export async function saveCeoEmailAction(input: CeoEmailInput): Promise<ConnectorResult> {
+  const connectorId = String(input.connectorId ?? '').trim();
+  if (connectorId && !ID.test(connectorId)) return { ok: false, error: 'Pick a Gmail account to send from.' };
+  const to = String(input.to ?? '').trim().toLowerCase().slice(0, 254);
+  const ev = input.events ?? { results: true, questions: true, failures: true, plans: false };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: 'Demo mode: email settings need the live dashboard.' };
+  return rpcWithStepUp(ceo.db, 'ceo_email_set', {
+    p: {
+      enabled: input.enabled === true, connector_id: connectorId || null, to: to || null,
+      events: { results: ev.results === true, questions: ev.questions === true, failures: ev.failures === true, plans: ev.plans === true },
+    },
+  }, input.totp);
+}
+
+/** One test email to the SAVED address from the SAVED account (the worker reads both from settings; nothing is passed). */
+export async function testCeoEmailAction(): Promise<ConnectorResult<{ sent: boolean; message: string }>> {
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: true, sent: false, message: 'Demo mode: no email was sent. The live dashboard sends one to the saved address.' };
+  const r = await callWorker<{ ok: boolean; to?: string; error?: string }>('/notify/ceo-email/test', {}, 45_000);
+  if (r.status !== 200) return { ok: false, error: r.body.error ?? 'Could not send the test email.' };
+  return r.body.ok
+    ? { ok: true, sent: true, message: `Test email sent to ${r.body.to ?? 'your address'}. Check the inbox (and Spam the first time).` }
+    : { ok: true, sent: false, message: r.body.error ?? 'Gmail did not send the test email.' };
 }

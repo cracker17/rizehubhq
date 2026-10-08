@@ -112,6 +112,32 @@ tokens expire every 7 days for unreviewed apps, and permanent access needs a pai
   OnlineJobs/Indeed/LinkedIn **alert emails** in the granted accounts, scores the jobs and drafts applications; the CEO
   opens the listing and applies. Agents never log in to job sites (brain/playbooks/job-hunt.md).
 
+## 5c. Email me updates (CEO email copy of results, built 2026-10-09)
+
+The CEO gets each result (and, if chosen, questions, failures, plans) by email as well as on Telegram / in the
+dashboard. What is sent and when: docs/08 "Email". How it is wired:
+- **Settings** — `settings` row `ceo_email` = `{enabled, connector_id, to, events {results, questions, failures, plans},
+  enabled_at}` (shared parser `packages/shared/src/ceoEmail.ts`). Written **only** by `ceo_email_set(p jsonb)`
+  (`supabase/migrations/20261009000000_ceo_email.sql`): `hq_guard`, one plain address (no display name, list or line
+  breaks), the sender must be a `kind = 'gmail'` connector and **active** while the emails are on, at least one event,
+  audited as `ceo_email.updated`. A **new address, or turning it on, needs a fresh 2FA code** (`ceo_step_up_guard`;
+  the bot / service role can't do it once the CEO has 2FA). Turning it on stamps `enabled_at` (nothing older is ever
+  sent); turning it off clears it. Restrictive RLS policies `ceo_email_row_via_rpc_*` stop the browser writing the row
+  directly (same pattern as the `ai_*` rows).
+- **Sender** — `apps/worker/src/notify/ceoEmail.ts`, started from `index.ts` (30 s, respects pause). It asks
+  `ceo_email_pending(since, events, limit)` (service role only) for approvals created at/after `enabled_at` in the
+  switched-on events and not yet logged, opens the chosen account's sealed App Password (context `connector:<id>`) and
+  sends over SMTP (smtp.gmail.com:465) **from that account to `settings.to` only** — no cc/bcc, nothing taken from an
+  agent, an approval or the content. Any active Gmail account can be the sender (it does not need the agent *send*
+  level: the CEO picks it and the recipient is the CEO). Each attempt goes into `ceo_email_log` via
+  `ceo_email_record()`; the CEO sees the last rows through `ceo_email_recent()`.
+- **Content** — HTML (inline styles, dark text on white, 640 px max, readable on a phone) plus a text part. Agent
+  output is untrusted: `notify/markdown.ts` escapes everything and only emits its own tags; links keep only
+  http(s)/mailto URLs.
+- **Card** — Admin → Connectors → *Email me updates* (below Gmail accounts, docs/06 §11). *Send test email* calls the
+  worker's `POST /notify/ceo-email/test` (x-hq-secret, body ignored, one per 20 s): one email to the **saved** address
+  from the **saved** account, logged as `test:<time>`.
+
 ## 5b. Calendars (Google Calendar, read-only, secret iCal address)
 
 Why: the COO kept asking the CEO for "today's meetings" because `calendar_read` was a placeholder. App Passwords don't
@@ -216,6 +242,9 @@ Each step: new migration only, tests, docs, and a heads-up before deploying (an 
 - **Kimi**: a Moonshot account (platform.kimi.ai), a top-up, an API key into `.env` (the API & AI panel later), and
   budget caps.
 - **Gmail**: 2-Step Verification + one App Password per account.
+- **Email me updates** (§5c): after a Gmail account is connected, Admin → Connectors → *Email me updates*: *Send from*
+  that account, *Send to* your address (e.g. talentedhand10@gmail.com), tick what you want, switch *Send these emails*
+  on → **Save** → enter the 2FA code → *Send test email* and check the inbox (and Spam the first time; mark it *Not spam*).
 - **Calendar**: copy each calendar's *Secret address in iCal format* (Google Calendar on a computer → Settings → the
   calendar → Integrate calendar) into Admin → Connectors → Calendars.
 - **GitHub**: a fine-grained personal access token (repos HQ may touch; read-only first).
