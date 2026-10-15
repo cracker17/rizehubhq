@@ -13,6 +13,8 @@ export interface OperatorClient {
   rules: string;
   enabled: boolean;
   paused: boolean;
+  /** 'addressed' (default): replies only to messages meant for Julev; 'all': anything that needs a reply. */
+  reply_when?: 'addressed' | 'all';
 }
 
 export interface OperatorChannel {
@@ -21,6 +23,11 @@ export interface OperatorChannel {
   kind: 'google_chat' | 'gmail' | 'slack' | 'teams' | 'whatsapp';
   /** WhatsApp Business: Meta's phone number id (the webhook names it). */
   wa_phone_id?: string | null;
+  /** A DM / inbox (counts as addressed to Julev). */
+  direct?: boolean;
+  /** Found by the unread sweep: read only when the sweep sees it unread. */
+  auto_discovered?: boolean;
+  account_id?: string | null;
   name: string;
   url: string;
   enabled: boolean;
@@ -93,7 +100,13 @@ export interface OperatorDb {
   recordUsage(u: UsageEntry): Promise<void>;
   monthSpendUsd(): Promise<number>;
   spendSinceUsd(sinceIso: string): Promise<number>;
+  // ---------- unread sweep (20261017040000_operator_discovery.sql) ----------
+  accounts(): Promise<OperatorAccount[]>;
+  discover(accountId: string, name: string, url: string, direct: boolean): Promise<{ channel_id: string; created: boolean; enabled: boolean }>;
+  accountSwept(accountId: string, found: number, error: string | null): Promise<void>;
 }
+
+export interface OperatorAccount { id: string; client_slug: string; kind: 'google_chat' | 'gmail' | 'slack' | 'teams'; label: string; home_url: string; enabled: boolean; last_swept_at: string | null; last_error: string | null }
 
 export interface BrainBundle {
   project: { slug: string; name: string; status: string | null } | null;
@@ -170,5 +183,12 @@ export function createSupabaseOperatorDb(sb: SupabaseClient): OperatorDb {
     },
     monthSpendUsd: () => sumUsage(manilaMonthStartIso()),
     spendSinceUsd: sumUsage,
+    accounts: async () => {
+      const { data, error } = await sb.from('operator_accounts').select('*').eq('enabled', true).order('created_at');
+      if (error) throw new Error(`operator_accounts: ${error.message}`);
+      return (data ?? []) as OperatorAccount[];
+    },
+    discover: (accountId, name, url, direct) => rpc('operator_discover', { p_account: accountId, p_name: name, p_url: url, p_direct: direct }),
+    accountSwept: async (accountId, found, error) => { await rpc('operator_account_swept', { p_account: accountId, p_found: found, p_error: error }); },
   };
 }

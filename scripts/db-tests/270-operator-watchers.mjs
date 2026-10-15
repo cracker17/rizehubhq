@@ -31,7 +31,7 @@ export default async function ({ db, step, val, assert }) {
   const draft = async (ch, id, body, result) => {
     const nid = await val(`select operator_ingest($1, $2::jsonb)`, [ch, JSON.stringify({ external_id: id, sender_name: 'Alex', body, sent_at: '2026-10-17T02:00:00Z' })]);
     assert.equal((await db.query(`select * from operator_claim_new()`)).rows[0].id, nid);
-    return { nid, outcome: await val(`select operator_record_draft($1, $2::jsonb)`, [nid, JSON.stringify(result)]) };
+    return { nid, outcome: await val(`select operator_record_draft($1, $2::jsonb)`, [nid, JSON.stringify({ addressed_to_julev: true, ...result })]) };
   };
 
   await step('operator watchers: an approved Slack reply becomes manual (never claimed); Google Chat is still sent', async () => {

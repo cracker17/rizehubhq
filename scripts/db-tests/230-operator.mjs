@@ -9,7 +9,7 @@ export default async function ({ db, step, val, as, assert }) {
   const ingest = (id, extra = {}) => val(`select operator_ingest($1, $2::jsonb)`, [channel, JSON.stringify({
     external_id: id, sender_name: 'Alex', body: `message ${id}`, sent_at: '2026-10-15T01:00:00Z', ...extra })]);
   const claim = () => db.query(`select * from operator_claim_new()`).then((r) => (r.rows[0]?.id ? r.rows[0] : undefined)); // a null composite = all-null row
-  const draft = (id, result) => val(`select operator_record_draft($1, $2::jsonb)`, [id, JSON.stringify(result)]);
+  const draft = (id, result) => val(`select operator_record_draft($1, $2::jsonb)`, [id, JSON.stringify({ addressed_to_julev: true, ...result })]);
   const row = (id) => db.query(`select * from operator_inbox where id = $1`, [id]).then((r) => r.rows[0]);
   const setting = (k, v) => db.query(`insert into settings (key, value) values ($1, $2::jsonb) on conflict (key) do update set value = excluded.value`, [k, JSON.stringify(v)]);
   const claimSend = () => db.query(`select * from operator_claim_send()`).then((r) => r.rows[0]?.id ?? null);

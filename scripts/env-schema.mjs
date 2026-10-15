@@ -188,7 +188,7 @@ export const VARS = [
   S({ key: 'OPERATOR_MAX_USD_PER_MESSAGE', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),
   S({ key: 'OPERATOR_CDP_URL', group: 'Operator', svc: ['operator'], check: (v) => (isUrl(v) ? null : 'must be a URL like http://ws-lvlup:9223') }),
   S({ key: 'OPERATOR_GCHAT_SELECTORS', group: 'Operator', svc: ['operator'], check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } }),
-  ...['OPERATOR_SLACK_SELECTORS', 'OPERATOR_TEAMS_SELECTORS', 'OPERATOR_GMAIL_SELECTORS'].map((key) => S({ key, group: 'Operator', svc: ['operator'],
+  ...['OPERATOR_SLACK_SELECTORS', 'OPERATOR_TEAMS_SELECTORS', 'OPERATOR_GMAIL_SELECTORS', 'OPERATOR_DISCOVER_SELECTORS'].map((key) => S({ key, group: 'Operator', svc: ['operator'],
     check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } })),
   S({ key: 'OPERATOR_HOOK_PORT', group: 'Operator', svc: ['operator'], check: intIn(1024, 65535) }),
   S({ key: 'OPERATOR_HOOK_URL', group: 'Operator', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL like http://hq-operator:4200'), note: 'where the dashboard relays the WhatsApp webhook' }),

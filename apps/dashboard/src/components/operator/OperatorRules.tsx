@@ -11,7 +11,7 @@ import {
   ACTION_TYPES, allowedModes, autonomyFor, MODE_LABEL,
   type AutonomyMode, type OperatorClientRow, type OperatorHomeData,
 } from '@/lib/operatorView';
-import { setAutonomyAction, setAutoSendAction, setDigestTimesAction, type OperatorResult } from '@/app/operator-actions';
+import { setAutonomyAction, setAutoSendAction, setDigestTimesAction, setReplyWhenAction, type OperatorResult } from '@/app/operator-actions';
 import { Pill } from './Pill';
 
 type Run = (fn: () => Promise<OperatorResult>, done: string) => void;
@@ -64,6 +64,27 @@ export function OperatorRules({ data, client, pending, run }: { data: OperatorHo
                   {label}
                 </button>
               ))}
+            </div>
+          )}
+
+          {target !== '*' && client && (
+            <div className="item flex flex-wrap items-center gap-3 px-3 py-2.5">
+              <span className="min-w-[160px] flex-1 text-[13px]">
+                <span className="block font-medium">Answer</span>
+                <span className="block text-xs text-[var(--color-muted)]">{(client.reply_when ?? 'addressed') === 'addressed'
+                  ? 'Only messages meant for you: DMs, @mentions and questions to you. The rest is kept as FYI.'
+                  : 'Anything that needs a reply from you, even when nobody named you.'}</span>
+              </span>
+              <span role="radiogroup" aria-label="Answer" className="inline-flex rounded-lg bg-[var(--color-panel-2)] p-0.5">
+                {([['addressed', 'Meant for me'], ['all', 'Anything']] as const).map(([m, label]) => (
+                  <button key={m} role="radio" aria-checked={(client.reply_when ?? 'addressed') === m} disabled={pending || readOnly || (client.reply_when ?? 'addressed') === m}
+                    onClick={() => run(() => setReplyWhenAction(client.slug, m), m === 'addressed' ? 'Answers only messages meant for you' : 'Answers anything that needs a reply')}
+                    className={clsx('h-7 rounded-md px-2.5 text-xs font-medium active:scale-[.97] disabled:cursor-default',
+                      (client.reply_when ?? 'addressed') === m ? 'bg-[color-mix(in_oklab,var(--color-primary)_22%,transparent)] text-[#d6ccff]' : 'text-[var(--color-muted)] hover:text-white')}>
+                    {label}
+                  </button>
+                ))}
+              </span>
             </div>
           )}
 

@@ -379,6 +379,27 @@ operator logs "WhatsApp webhook listening"). `/operator` → Add chat → WhatsA
 Check: send the number a message from your phone → it shows on `/operator` and a draft reaches Telegram; ✅ Send →
 the reply arrives on the phone, quoting the message.
 
+### Unread sweep: the operator finds unread chats itself (`20261017040000_operator_discovery.sql`)
+
+Besides the chats you add, the operator now **looks for unread conversations** in every app logged in in a client's
+browser. `/operator` → Watched chats → Unread sweep → **Add account**: Slack (the workspace address), Google Chat
+(`https://chat.google.com/u/0/`), Teams (`https://teams.microsoft.com/v2/`) or Gmail (an unread search, default
+`#search/is:unread in:inbox`). Every `OPERATOR_POLL_MS` it opens the app home in one tab of that client's browser,
+reads the unread list (up to 15 conversations), creates a channel for each new one ("found by the sweep"), and reads it:
+only the unread messages count as new, earlier ones are history. Gmail's account is one channel (each unread thread is
+a message, at most 5 on the first read). WhatsApp Business needs no sweep (webhook). Reading a chat **marks it read**
+in that account: `/operator` and Telegram become your unread list. Stop on a found chat keeps it stopped.
+
+**Answer only what is meant for you** (Reply rules → Answer, per client, default "Meant for me"): drafts are made only
+for direct messages (DMs, WhatsApp, the Gmail inbox), @Julev mentions, and questions to Julev (the classifier's
+`addressed_to_julev`). Everything else is stored as FYI (in the digests, no draft). "Anything" = phase 1 behaviour.
+SQL enforces it in front of the tiers (`operator_record_draft` wraps `operator_record_draft_tiers`).
+
+What happens next is unchanged: a task becomes a job after your ✅ (or by itself if the Tasks rule is Auto), working
+with the logins in that client's browser and the linked API tokens; replies in Slack / Teams / Gmail stay "you post
+it" until that app passes a send test (next milestone). The sweep's list selectors are best guesses: probe and tune
+with `OPERATOR_DISCOVER_SELECTORS` ({"slack": {"item": "…", "unread": "…"}}).
+
 ## Phase 3+ (not built yet)
 
-Unread discovery across each client's accounts (see the plan in the vault: operator-phase3 session).
+Posting in Slack / Teams / Gmail after a send test; an Add client flow with a setup checklist.

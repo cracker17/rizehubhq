@@ -22,7 +22,11 @@ import { createSupabaseOperatorDb } from './db';
 import { BrowserPool, chatPage } from './browser/cdp';
 import { selectors } from './browser/chatDom';
 import { readChat, sendReply } from './browser/googleChat';
-import { readWatched, watchSelectors } from './browser/watchers';
+import { isSignedOut, readWatched, watchSelectors, WatchSignedOutError } from './browser/watchers';
+import { listSelectors, readUnreadList } from './browser/discover';
+import { SignedOutError } from './browser/googleChat';
+import type { BrowserContext, Page } from 'playwright-core';
+import type { OperatorAccount, OperatorChannel, OperatorClient } from './db';
 import { startHookServer } from './hooks';
 import { sendWhatsApp } from './whatsapp';
 import { MaybeSentError } from './browser/googleChat';
@@ -56,13 +60,45 @@ async function main() {
   const sel = selectors(cfg.selectorOverrides);
   const pool = new BrowserPool((profile) => cdpEndpointFor(profile, workerEnv()));
 
+  // Unread sweep: one tab per app account, reused (opened again when the browser reconnected).
+  const sweepTabs = new Map<string, Page>();
+  const sweepPage = async (ctx: BrowserContext, acc: OperatorAccount): Promise<Page> => {
+    const p = sweepTabs.get(acc.id);
+    if (p && !p.isClosed() && p.context() === ctx) return p;
+    const np = await ctx.newPage();
+    sweepTabs.set(acc.id, np);
+    return np;
+  };
+  const signedOut = (kind: OperatorAccount['kind'], url: string) => {
+    if (kind === 'google_chat') { if (/accounts\.google\.com|\/ServiceLogin/i.test(url)) throw new SignedOutError(); return; }
+    if (isSignedOut(kind, url)) throw new WatchSignedOutError(kind);
+  };
+  const readPage = (page: Page, client: OperatorClient, ch: OperatorChannel) => {
+    const kind = ch.kind;
+    if (kind === 'google_chat') return readChat(page, sel, client.my_names);
+    if (kind === 'whatsapp') return Promise.resolve({ title: ch.name, messages: [] });
+    return readWatched(page, kind, watchSelectors(kind, cfg.watchOverrides[kind]), client.my_names);
+  };
+
   const chat: ChatDriver = {
+    sweep: (client, acc) => pool.with(client.profile, async (ctx) => {
+      if (acc.kind === 'gmail') return [];
+      const page = await sweepPage(ctx, acc);
+      await page.goto(acc.home_url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      signedOut(acc.kind, page.url());
+      await page.waitForTimeout(3000);
+      signedOut(acc.kind, page.url());
+      return readUnreadList(page, acc.kind, listSelectors(acc.kind, cfg.discoverOverrides[acc.kind]));
+    }),
+    readAt: (client, acc, ch) => pool.with(client.profile, async (ctx) => {
+      const page = await sweepPage(ctx, acc);
+      await page.goto(ch.url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.waitForTimeout(2500);
+      return readPage(page, client, ch);
+    }),
     read: (client, ch) => (ch.kind === 'whatsapp' ? Promise.resolve({ title: ch.name, messages: [] }) : pool.with(client.profile, async (ctx) => {
       const { page } = await chatPage(ctx, ch.url);
-      const kind = ch.kind;
-      if (kind === 'google_chat') return readChat(page, sel, client.my_names);
-      if (kind === 'whatsapp') return { title: ch.name, messages: [] };
-      return readWatched(page, kind, watchSelectors(kind, cfg.watchOverrides[kind]), client.my_names);
+      return readPage(page, client, ch);
     })),
     send: (client, ch, input, steps) => (ch.kind === 'whatsapp'
       // WhatsApp Business: the Cloud API, not the browser (whatsapp.ts). threadKey = the customer, externalId = their wamid.
@@ -172,6 +208,7 @@ async function main() {
   };
   const stops = [
     loop('watch', Math.min(cfg.pollMs, 15_000), () => op.watchTick()),
+    loop('sweep', Math.min(cfg.pollMs, 15_000), () => op.sweepTick()),
     loop('classify', cfg.tickMs, () => op.classifyTick()),
     loop('send', cfg.tickMs, () => op.sendTick()),
     ...(cfg.jobs ? [

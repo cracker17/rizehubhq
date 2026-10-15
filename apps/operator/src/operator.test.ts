@@ -82,7 +82,7 @@ function setup(o: { chat?: ChatMessage[]; classify?: OperatorDeps['classify']; s
     classify: o.classify ?? (async ({ prompt }) => {
       prompts.push(prompt);
       return { result: { category: 'reply', action_types: ['ack'], confidence: 0.9, summary: 's', reasons: 'r', draft: 'On it @Alex', mentions: ['Alex'],
-        task_plan: [], needs_from_julev: '' }, costUsd: 0.004, tokensIn: 900, tokensOut: 80, model: 'claude-test' } satisfies ClassifyOutcome;
+        task_plan: [], needs_from_julev: '', addressed_to_julev: true }, costUsd: 0.004, tokensIn: 900, tokensOut: 80, model: 'claude-test' } satisfies ClassifyOutcome;
     }),
   });
   return { db, op, sent, prompts, setVisible: (m: ChatMessage[]) => { visible = m; }, tick: (ms: number) => { t += ms; } };

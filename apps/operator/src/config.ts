@@ -42,6 +42,8 @@ export interface OperatorConfig {
   loginCheckMs: number;
   workspacesDir: string;
   hookPort: number;
+  /** OPERATOR_DISCOVER_SELECTORS: {"slack": {...}, "google_chat": {...}, "teams": {...}} for the unread sweep (browser/discover.ts). */
+  discoverOverrides: Record<'google_chat' | 'slack' | 'teams', Record<string, string>>;
   watchOverrides: Record<'gmail' | 'slack' | 'teams', Record<string, string>>;
 }
 
@@ -57,6 +59,18 @@ function jsonSelectors(raw: string | undefined, name: string): Record<string, st
     }
   } catch { /* below */ }
   throw new Error(`${name} must be a JSON object of selector strings`);
+}
+
+function discoverOverrides(raw: string | undefined): Record<'google_chat' | 'slack' | 'teams', Record<string, string>> {
+  const out = { google_chat: {}, slack: {}, teams: {} } as Record<'google_chat' | 'slack' | 'teams', Record<string, string>>;
+  if (!raw?.trim()) return out;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error('OPERATOR_DISCOVER_SELECTORS must be JSON like {"slack":{"item":"…"}}'); }
+  for (const k of Object.keys(out) as (keyof typeof out)[]) {
+    const v = (parsed as Record<string, unknown> | null)?.[k];
+    if (v !== undefined) out[k] = jsonSelectors(JSON.stringify(v), `OPERATOR_DISCOVER_SELECTORS.${k}`);
+  }
+  return out;
 }
 
 function int(v: string | undefined, fallback: number, min: number): number {
@@ -83,6 +97,7 @@ export function loadOperatorConfig(env: Env): OperatorConfig {
     loginCheckMs: int(env.OPERATOR_LOGIN_CHECK_MS, 6 * 3600_000, 600_000),
     workspacesDir: env.OPERATOR_WORKSPACES_DIR?.trim() || '/tmp/operator-jobs',
     hookPort: int(env.OPERATOR_HOOK_PORT, 4200, 1024),
+    discoverOverrides: discoverOverrides(env.OPERATOR_DISCOVER_SELECTORS),
     watchOverrides: {
       gmail: jsonSelectors(env.OPERATOR_GMAIL_SELECTORS, 'OPERATOR_GMAIL_SELECTORS'),
       slack: jsonSelectors(env.OPERATOR_SLACK_SELECTORS, 'OPERATOR_SLACK_SELECTORS'),

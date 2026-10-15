@@ -21,6 +21,7 @@ import { useOperatorLive, type LiveState } from './useOperatorLive';
 import { Pill } from './Pill';
 import { OperatorJobs } from './OperatorJobs';
 import { OperatorRules } from './OperatorRules';
+import { Accounts } from './OperatorAccounts';
 
 const KIND_ICON = { read: MessageSquareText, think: Sparkles, type: Keyboard, send: Send, you: UserRound, warn: TriangleAlert } as const;
 /** The kill switch: the one red solid button (destructive = red; it only ever stops sends). */
@@ -263,7 +264,8 @@ function Chats({ data, client, pending, run }: {
           <li key={c.id} className="item flex items-center gap-2 px-3 py-2.5">
             <span className="min-w-0 flex-1">
               <span className={clsx('block truncate text-[13px] font-medium', !c.enabled && 'text-[var(--color-dim)]')}>{c.name}
-                {c.kind && c.kind !== 'google_chat' && <span className="ml-1.5 text-[11px] font-normal text-[var(--color-dim)]">{CHANNEL_KINDS.find((k) => k.kind === c.kind)?.label} · read only</span>}
+                {c.kind && c.kind !== 'google_chat' && <span className="ml-1.5 text-[11px] font-normal text-[var(--color-dim)]">{CHANNEL_KINDS.find((k) => k.kind === c.kind)?.label}{c.kind !== 'whatsapp' && ' · read only'}</span>}
+                {c.auto_discovered && <span className="ml-1.5 text-[11px] font-normal text-[var(--color-dim)]">· found by the sweep</span>}
               </span>
               <span className={clsx('block truncate text-[11px]', c.last_error ? 'text-[#ff9a9d]' : 'text-[var(--color-dim)]')}>
                 {c.last_error ? c.last_error : c.enabled ? `Read ${ago(c.last_polled_at)}` : 'Not watched'}
@@ -277,6 +279,7 @@ function Chats({ data, client, pending, run }: {
           </li>
         ))}
       </ul>
+      {client && <Accounts data={data} client={client} pending={pending} run={run} />}
       {adding && client && (
         <form className="mt-3 flex flex-col gap-2" onSubmit={(e) => {
           e.preventDefault();

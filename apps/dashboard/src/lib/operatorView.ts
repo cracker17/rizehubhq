@@ -4,10 +4,12 @@ export type Tone = 'brand' | 'info' | 'success' | 'warning' | 'danger' | 'muted'
 
 export interface OperatorClientRow {
   slug: string; name: string; profile: string; paused: boolean; enabled: boolean; viewer_url: string | null; brain_project: string | null;
+  /** Phase 3: 'addressed' = answer only messages meant for Julev (default); 'all' = anything that needs a reply. */
+  reply_when?: 'addressed' | 'all';
 }
 export type ChannelKind = 'google_chat' | 'gmail' | 'slack' | 'teams' | 'whatsapp';
 export interface OperatorChannelRow {
-  id: string; client_slug: string; kind?: ChannelKind; name: string; url: string; enabled: boolean; last_polled_at: string | null; last_error: string | null;
+  id: string; client_slug: string; kind?: ChannelKind; name: string; direct?: boolean; auto_discovered?: boolean; url: string; enabled: boolean; last_polled_at: string | null; last_error: string | null;
 }
 export type InboxStatus = 'new' | 'classifying' | 'fyi' | 'drafted' | 'approved' | 'sending' | 'sent' | 'skipped' | 'failed' | 'blocked' | 'manual';
 export interface OperatorInboxRow {
@@ -32,6 +34,11 @@ export interface OperatorJobActionRow {
 export type AutonomyMode = 'auto' | 'approve' | 'never';
 export interface OperatorAutonomyRow { client_slug: string; action_type: string; mode: AutonomyMode }
 
+export type SweepKind = 'google_chat' | 'gmail' | 'slack' | 'teams';
+export interface OperatorAccountRow {
+  id: string; client_slug: string; kind: SweepKind; label: string; home_url: string; enabled: boolean; last_swept_at: string | null; last_found: number; last_error: string | null;
+}
+
 export interface OperatorHomeData {
   clients: OperatorClientRow[];
   channels: OperatorChannelRow[];
@@ -41,6 +48,8 @@ export interface OperatorHomeData {
   jobs: OperatorJobRow[];
   jobActions: OperatorJobActionRow[];
   autonomy: OperatorAutonomyRow[];
+  /** Phase 3 unread sweep: the app accounts in each client's browser (empty before the migration). */
+  accounts: OperatorAccountRow[];
   /** Telegram digest times 'HH:MM' (null = off); settings.operator_digest_times. */
   digestTimes: { morning: string | null; evening: string | null };
   killSwitch: boolean;
@@ -261,6 +270,14 @@ export function channelUrl(kind: ChannelKind, v: string): string | null {
     default: return null;
   }
 }
+
+/** The app homes the sweep opens (Gmail: the unread inbox search, which is read as one channel). */
+export const ACCOUNT_KINDS: { kind: SweepKind; label: string; home: string; hint: string }[] = [
+  { kind: 'slack', label: 'Slack', home: 'https://app.slack.com/client/T…', hint: 'The workspace address in the client’s browser (app.slack.com/client/T…).' },
+  { kind: 'google_chat', label: 'Google Chat', home: 'https://chat.google.com/u/0/', hint: 'Google Chat home in the client’s browser.' },
+  { kind: 'teams', label: 'Teams', home: 'https://teams.microsoft.com/v2/', hint: 'Teams on the web, signed in as Julev in the client’s tenant.' },
+  { kind: 'gmail', label: 'Gmail', home: 'https://mail.google.com/mail/u/0/#search/is%3Aunread+in%3Ainbox', hint: 'Unread inbox mail (change the search to narrow it, e.g. from:client.com).' },
+];
 
 /** A Google Chat address as the CEO pasted it; null when it is not one the operator can watch. */
 export function chatUrl(v: string): string | null {

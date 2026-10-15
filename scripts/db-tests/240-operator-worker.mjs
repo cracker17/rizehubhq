@@ -30,7 +30,7 @@ export default async function ({ db, step, val, as, assert }) {
       const nid = await val(`select operator_ingest($1, $2::jsonb)`, [channel, JSON.stringify({ external_id: id, sender_name: 'Alex', body: `Please update the team page (${id})`, sent_at: '2026-10-16T01:00:00Z' })]);
       const c = (await db.query(`select * from operator_claim_new()`)).rows[0];
       assert.equal(c.id, nid);
-      assert.equal(await val(`select operator_record_draft($1, $2::jsonb)`, [nid, JSON.stringify({ category: 'task', action_types: ['task'], confidence: 0.9,
+      assert.equal(await val(`select operator_record_draft($1, $2::jsonb)`, [nid, JSON.stringify({ addressed_to_julev: true, category: 'task', action_types: ['task'], confidence: 0.9,
         draft: 'On it, I will update you here.', summary: 'Update the team page', task_plan: ['Open the CMS', 'Edit the bios', 'Publish after approval'] })]), 'approval');
       return nid;
     };

@@ -5,7 +5,7 @@
 import { revalidatePath } from 'next/cache';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
-import { channelUrl, CHANNEL_KINDS, taskBrief, type ChannelKind } from '@/lib/operatorView';
+import { ACCOUNT_KINDS, channelUrl, CHANNEL_KINDS, taskBrief, type ChannelKind, type SweepKind } from '@/lib/operatorView';
 
 export type OperatorResult = { ok: true } | { ok: false; error: string };
 type Db = NonNullable<Awaited<ReturnType<typeof createSupabaseServer>>>;
@@ -104,6 +104,28 @@ export async function setDigestTimesAction(morning: string, evening: string): Pr
   const m = t(morning), e = t(evening);
   if (m === undefined || e === undefined) return { ok: false, error: 'Use a time like 08:00, or leave it empty to turn that digest off.' };
   return call('operator_set_digest_times', { p_morning: m, p_evening: e });
+}
+
+// ---------- unread sweep: accounts and the "addressed" rule ----------
+
+export async function addAccountAction(slug: string, kind: SweepKind, label: string, homeUrl: string): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  const k = ACCOUNT_KINDS.find((a) => a.kind === kind);
+  if (!k) return { ok: false, error: 'Unknown app.' };
+  const u = channelUrl(k.kind, String(homeUrl ?? ''));
+  if (!u) return { ok: false, error: `Paste the ${k.label} address. ${k.hint}` };
+  return call('operator_add_account', { p_client: slug, p_kind: k.kind, p_label: String(label ?? '').trim().slice(0, 120) || `${k.label}`, p_home_url: u });
+}
+
+export async function setAccountEnabledAction(id: string, enabled: boolean): Promise<OperatorResult> {
+  if (!ID.test(id)) return { ok: false, error: 'Unknown account.' };
+  return call('operator_set_account_enabled', { p_account: id, p_enabled: enabled === true });
+}
+
+export async function setReplyWhenAction(slug: string, mode: 'addressed' | 'all'): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  if (mode !== 'addressed' && mode !== 'all') return { ok: false, error: 'Unknown rule.' };
+  return call('operator_set_reply_when', { p_client: slug, p_mode: mode });
 }
 
 export async function setViewerUrlAction(slug: string, url: string): Promise<OperatorResult> {

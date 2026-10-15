@@ -10,14 +10,20 @@
 import type { Gate } from './ai';
 import type { ClassifyOutcome } from './classify';
 import { ClassifyError } from './classify';
-import type { BrainBundle, BrainHit, InboxRow, OperatorChannel, OperatorClient, OperatorDb } from './db';
+import type { BrainBundle, BrainHit, InboxRow, OperatorAccount, OperatorChannel, OperatorClient, OperatorDb } from './db';
+import { baselineFlags, type Discovered } from './browser/discover';
 import type { ChatMessage } from './browser/chatDom';
 import { MaybeSentError } from './browser/googleChat';
 import type { SendInput, SendSteps } from './browser/googleChat';
 import { buildUserPrompt, formatMemory, searchQuery } from './prompt';
 
+export type ReadResult = { title: string; messages: ChatMessage[] };
+
 export interface ChatDriver {
-  read(client: OperatorClient, channel: OperatorChannel): Promise<{ title: string; messages: ChatMessage[] }>;
+  read(client: OperatorClient, channel: OperatorChannel): Promise<ReadResult>;
+  /** Unread sweep (phase 3): the unread conversations on an app's home, and reading one of them in the account's tab. */
+  sweep?(client: OperatorClient, account: OperatorAccount): Promise<Discovered[]>;
+  readAt?(client: OperatorClient, account: OperatorAccount, channel: OperatorChannel): Promise<ReadResult>;
   send(client: OperatorClient, channel: OperatorChannel, input: SendInput, steps: SendSteps): Promise<{ sent: boolean } & Record<string, unknown>>;
 }
 
@@ -56,7 +62,7 @@ export class Operator {
     let stored = 0;
     for (const ch of channels) {
       const client = clients.get(ch.client_slug);
-      if (!client) continue;
+      if (!client || ch.auto_discovered || ch.kind === 'whatsapp') continue; // the sweep / the webhook read those
       const last = this.lastPoll.get(ch.id) ?? 0;
       if (this.now() - last < this.d.pollMs) continue;
       this.lastPoll.set(ch.id, this.now());
@@ -65,10 +71,11 @@ export class Operator {
     return stored;
   }
 
-  async pollChannel(client: OperatorClient, ch: OperatorChannel): Promise<number> {
-    let read: Awaited<ReturnType<ChatDriver['read']>>;
+  /** opts.unread: on a first read, how many of the newest messages are new (the rest is history). */
+  async pollChannel(client: OperatorClient, ch: OperatorChannel, opts: { unread?: number; read?: () => Promise<ReadResult> } = {}): Promise<number> {
+    let read: ReadResult;
     try {
-      read = await this.d.chat.read(client, ch);
+      read = await (opts.read ? opts.read() : this.d.chat.read(client, ch));
     } catch (e) {
       this.log(`[operator] ${client.slug}/${ch.name}: read failed: ${errMsg(e)}`);
       await this.d.db.channelPolled(ch.id, null, errMsg(e)).catch(() => undefined);
@@ -80,13 +87,54 @@ export class Operator {
     const idx = ch.last_seen_key ? read.messages.findIndex((m) => m.external_id === ch.last_seen_key) : -1;
     const fresh = idx >= 0 ? read.messages.slice(idx + 1) : read.messages;
     let stored = 0;
-    for (const m of fresh) {
-      const id = await this.d.db.ingest(ch.id, { ...m, space_name: read.title || ch.name, url: ch.url, baseline });
+    const flags = baselineFlags(fresh.length, baseline, opts.unread);
+    for (const [i, m] of fresh.entries()) {
+      const id = await this.d.db.ingest(ch.id, { ...m, space_name: read.title || ch.name, url: ch.url, baseline: flags[i] });
       if (id) stored++;
     }
     const lastKey = read.messages.at(-1)?.external_id ?? null;
     await this.d.db.channelPolled(ch.id, lastKey, null);
     if (stored) this.log(`[operator] ${client.slug}/${ch.name}: ${stored} new message(s)${baseline ? ' (baseline, not answered)' : ''}`);
+    return stored;
+  }
+
+  // ---------- unread sweep ----------
+
+  private lastSweep = new Map<string, number>();
+
+  /**
+   * Every enabled account that is due (OPERATOR_POLL_MS): read the app's unread list in the client's browser, make sure
+   * each unread conversation has a channel (auto-discovered), and read it now. Gmail: the account IS the channel (its
+   * unread inbox search). Returns how many new messages were stored.
+   */
+  async sweepTick(): Promise<number> {
+    if (!this.d.chat.sweep || !this.d.chat.readAt) return 0;
+    const accounts = await this.d.db.accounts();
+    if (!accounts.length) return 0;
+    let { clients, channels } = await this.lookups();
+    let stored = 0;
+    for (const acc of accounts) {
+      const client = clients.get(acc.client_slug);
+      if (!client) continue;
+      if (this.now() - (this.lastSweep.get(acc.id) ?? 0) < this.d.pollMs) continue;
+      this.lastSweep.set(acc.id, this.now());
+      try {
+        const found: Discovered[] = acc.kind === 'gmail' ? [{ name: acc.label, url: acc.home_url, unread: 5, direct: true }] : await this.d.chat.sweep(client, acc);
+        for (const f of found) {
+          const r = await this.d.db.discover(acc.id, f.name, f.url, f.direct);
+          if (!r.enabled) continue;
+          if (r.created || !channels.some((c) => c.id === r.channel_id)) ({ clients, channels } = await this.lookups());
+          const ch = channels.find((c) => c.id === r.channel_id);
+          if (!ch) continue;
+          stored += await this.pollChannel(client, ch, { unread: f.unread, read: () => this.d.chat.readAt!(client, acc, ch) });
+        }
+        await this.d.db.accountSwept(acc.id, found.length, null);
+        if (found.length && acc.kind !== 'gmail') this.log(`[operator] ${client.slug}/${acc.label}: ${found.length} unread conversation(s)`);
+      } catch (e) {
+        this.log(`[operator] ${client.slug}/${acc.label}: sweep failed: ${errMsg(e)}`);
+        await this.d.db.accountSwept(acc.id, 0, errMsg(e)).catch(() => undefined);
+      }
+    }
     return stored;
   }
 
@@ -118,7 +166,7 @@ export class Operator {
       this.d.db.history(row.channel_id, row.sent_at, 20).catch(() => [] as InboxRow[]),
       this.memory(client, row),
     ]);
-    const prompt = buildUserPrompt({ client, channelName: channel.name, message: row, history, memory: memory.text });
+    const prompt = buildUserPrompt({ client, channelName: channel.name, message: row, history, memory: memory.text, direct: channel.direct || channel.kind === 'whatsapp', kind: channel.kind });
     try {
       const out = await this.d.classify({ prompt, model: g.model, apiKey: g.apiKey, capUsd: g.capUsd });
       await this.d.db.recordUsage({ tokensIn: out.tokensIn, tokensOut: out.tokensOut, costUsd: out.costUsd,

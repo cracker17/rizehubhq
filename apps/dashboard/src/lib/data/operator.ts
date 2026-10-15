@@ -5,7 +5,7 @@ import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
 import { digestTimes } from '@/lib/operatorView';
 import type {
-  OperatorActionRow, OperatorAutonomyRow, OperatorChannelRow, OperatorClientRow, OperatorHomeData, OperatorInboxRow, OperatorJobActionRow, OperatorJobRow,
+  OperatorAccountRow, OperatorActionRow, OperatorAutonomyRow, OperatorChannelRow, OperatorClientRow, OperatorHomeData, OperatorInboxRow, OperatorJobActionRow, OperatorJobRow,
 } from '@/lib/operatorView';
 
 export interface Loaded<T> { data: T; error?: string }
@@ -15,12 +15,12 @@ const on = (v: unknown) => v === true || v === 'true';
 export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
   if (!supabaseEnv()) return { data: demoOperator() };
   const db = await createSupabaseServer();
-  const empty: OperatorHomeData = { clients: [], channels: [], inbox: [], actions: [], jobs: [], jobActions: [], autonomy: [], digestTimes: { morning: '08:00', evening: '18:00' }, killSwitch: false, officePaused: false, autoSend: false, heartbeatAt: null, demo: false };
+  const empty: OperatorHomeData = { clients: [], channels: [], inbox: [], actions: [], jobs: [], jobActions: [], autonomy: [], accounts: [], digestTimes: { morning: '08:00', evening: '18:00' }, killSwitch: false, officePaused: false, autoSend: false, heartbeatAt: null, demo: false };
   if (!db) return { data: empty, error: 'Supabase is not configured.' };
   try {
     const [clients, channels, inbox, actions, settings] = await Promise.all([
-      db.from('operator_clients').select('slug,name,profile,paused,enabled,viewer_url,brain_project').order('name'),
-      db.from('operator_channels').select('id,client_slug,kind,name,url,enabled,last_polled_at,last_error').order('created_at'),
+      db.from('operator_clients').select('*').order('name'),
+      db.from('operator_channels').select('*').order('created_at'),
       db.from('operator_inbox').select('id,client_slug,channel_id,sender_name,body,sent_at,created_at,status,category,mode,draft,final_text,approval_id,error,mentions_me,from_me,space_name')
         .order('created_at', { ascending: false }).limit(60),
       db.from('operator_actions').select('id,created_at,client_slug,inbox_id,actor,action,ok,detail').order('id', { ascending: false }).limit(120),
@@ -33,10 +33,11 @@ export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
     }
     // Phase 2+ tables: missing before 20261016000000_operator_worker.sql is applied; the page still works without them.
     const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
-    const [jobs, autonomy] = await Promise.all([
+    const [jobs, autonomy, accounts] = await Promise.all([
       db.from('operator_jobs').select('id,client_slug,source,title,brief,status,runs,max_runs,cost_usd,error,feedback,created_at,updated_at,result,qa')
         .or(`status.in.(queued,running,waiting,verifying),updated_at.gt.${weekAgo}`).order('updated_at', { ascending: false }).limit(60),
       db.from('operator_autonomy').select('client_slug,action_type,mode'),
+      db.from('operator_accounts').select('id,client_slug,kind,label,home_url,enabled,last_swept_at,last_found,last_error').order('created_at'),
     ]);
     const jobRows = (jobs.error ? [] : jobs.data ?? []) as OperatorJobRow[];
     const jobActions = jobRows.length
@@ -52,6 +53,7 @@ export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
         jobs: jobRows,
         jobActions: (jobActions.error ? [] : jobActions.data ?? []) as OperatorJobActionRow[],
         autonomy: (autonomy.error ? [] : autonomy.data ?? []) as OperatorAutonomyRow[],
+        accounts: (accounts.error ? [] : accounts.data ?? []) as OperatorAccountRow[],
         digestTimes: digestTimes(s.operator_digest_times),
         killSwitch: on(s.operator_paused), officePaused: on(s.paused), autoSend: on(s.operator_auto_send),
         heartbeatAt: (s.operator_heartbeat as { at?: string } | undefined)?.at ?? null,
@@ -81,7 +83,7 @@ export function demoOperator(now = Date.now()): OperatorHomeData {
   const a = (minAgo: number, action: string, detail: Record<string, unknown> = {}, actor: OperatorActionRow['actor'] = 'operator', inbox_id: string | null = null): OperatorActionRow =>
     ({ id: id--, created_at: t(minAgo), client_slug: 'lvlup', inbox_id, actor, action, ok: !/failed|blocked/.test(action), detail });
   return {
-    clients: [{ slug: 'lvlup', name: 'LvlUp Ventures', profile: 'lvlup', paused: false, enabled: true, viewer_url: null, brain_project: 'lvlup-ventures' }],
+    clients: [{ slug: 'lvlup', name: 'LvlUp Ventures', profile: 'lvlup', paused: false, enabled: true, viewer_url: null, brain_project: 'lvlup-ventures', reply_when: 'addressed' }],
     channels: [
       { id: ch1, client_slug: 'lvlup', name: 'Alex, Riley', url: 'https://chat.google.com/room/demo1', enabled: true, last_polled_at: t(1), last_error: null },
       { id: ch2, client_slug: 'lvlup', name: 'Sam, Riley', url: 'https://chat.google.com/room/demo2', enabled: true, last_polled_at: t(1), last_error: null },
@@ -119,6 +121,10 @@ export function demoOperator(now = Date.now()): OperatorHomeData {
       ...(['factual', 'reply', 'task', 'publish', 'deadline', 'commitment', 'money', 'new_contact', 'delete'] as const).map((type) => ({ client_slug: '*', action_type: type, mode: 'approve' as const })),
       { client_slug: '*', action_type: 'credentials', mode: 'never' },
       { client_slug: 'lvlup', action_type: 'money', mode: 'never' },
+    ],
+    accounts: [
+      { id: 'demo-a1', client_slug: 'lvlup', kind: 'slack', label: 'LvlUp Slack', home_url: 'https://app.slack.com/client/T0LVLUP', enabled: true, last_swept_at: t(1), last_found: 2, last_error: null },
+      { id: 'demo-a2', client_slug: 'lvlup', kind: 'gmail', label: 'LvlUp mail', home_url: 'https://mail.google.com/mail/u/0/#search/is%3Aunread+in%3Ainbox', enabled: true, last_swept_at: t(1), last_found: 1, last_error: null },
     ],
     digestTimes: { morning: '08:00', evening: '18:00' },
     killSwitch: false, officePaused: false, autoSend: true, heartbeatAt: t(0.5), demo: true,

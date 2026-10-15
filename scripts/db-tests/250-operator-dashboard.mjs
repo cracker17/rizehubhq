@@ -66,7 +66,7 @@ export default async function ({ db, step, val, assert }) {
     await db.query(`insert into settings (key, value) values ('operator_auto_send', 'true'::jsonb) on conflict (key) do update set value = excluded.value`);
     const nid = await val(`select operator_ingest($1, $2::jsonb)`, [ch, JSON.stringify({ external_id: 'r1', sender_name: 'Alex', body: 'What time is the call?', sent_at: '2026-10-17T01:00:00Z' })]);
     assert.equal((await db.query(`select * from operator_claim_new()`)).rows[0].id, nid);
-    assert.equal(await val(`select operator_record_draft($1, $2::jsonb)`, [nid, JSON.stringify({ category: 'reply', action_types: ['factual'], confidence: 0.9, draft: 'The call is at 3 pm.' })]), 'auto');
+    assert.equal(await val(`select operator_record_draft($1, $2::jsonb)`, [nid, JSON.stringify({ addressed_to_julev: true, category: 'reply', action_types: ['factual'], confidence: 0.9, draft: 'The call is at 3 pm.' })]), 'auto');
     await db.query(`insert into settings (key, value) values ('operator_auto_send', 'false'::jsonb) on conflict (key) do update set value = excluded.value`);
   });
 }
