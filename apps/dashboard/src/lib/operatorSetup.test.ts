@@ -30,5 +30,5 @@ test('setup: the Ready? list (optional items do not block)', () => {
   const ready = setupChecklist({ ...base, client: { slug: 'mm', name: 'MM', viewer_url: 'https://ws-mm.rizehub.ph/', brain_project: null },
     logins: [{ site: 'google', state: 'ok', enabled: true }], accounts: 1, online: true });
   assert.deepEqual(ready.filter((i) => !i.done && !i.optional), []);
-  assert.equal(setupChecklist({ ...base, logins: [{ site: 'slack', state: 'signed_out', enabled: true }] }).find((i) => i.label === 'All logins OK')!.done, false);
+  assert.equal(setupChecklist({ ...base, logins: [{ site: 'slack', state: 'signed_out', enabled: true }] }).find((i) => i.label === 'Signed in to all of them')!.done, false);
 });

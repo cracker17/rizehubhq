@@ -166,20 +166,27 @@ function BrowserStep({ data, pending, run }: { data: OperatorSetupData; pending:
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-semibold">Its own browser</h2>
-        <Pill tone={online ? 'success' : 'muted'}>{online ? 'Operator online' : 'Operator offline'}</Pill>
+        <h2 className="text-base font-semibold">{c.name}&apos;s browser</h2>
+        <Pill tone={online ? 'success' : 'muted'}>{online ? 'Operator running' : 'Operator not running'}</Pill>
       </div>
-      <p className="text-[13px] text-[var(--color-muted)]">
-        {c.name}&apos;s logins, cookies and sessions live in their own Chrome profile on the server (<code>profiles/{c.slug}</code>), separate from every other client, and survive restarts.
-        Add it once on the server:
-      </p>
-      <CodeBlock title="1 · deploy/workspace/docker-compose.yml → under services:" text={s.compose} />
-      <CodeBlock title="2 · HQ .env" text={s.env} />
-      <CodeBlock title="3 · on the server" text={s.commands} />
-      <p className="text-xs text-[var(--color-dim)]">Viewer: {s.nginx}</p>
-      <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { e.preventDefault(); run(() => setViewerUrlAction(c.slug, url), 'Live screen saved'); }}>
-        <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" aria-label="Live screen address" />
-        <button className={btn.primary} disabled={pending || data.home.demo}>Save live screen</button>
+      <div className="item flex flex-col gap-1.5 px-3 py-2.5 text-[13px]">
+        <p className="font-medium">How it works</p>
+        <p className="text-[var(--color-muted)]">The operator uses a real Chrome browser that runs on your server, one for each client. You sign in to {c.name}&apos;s apps (Google, Slack, Webflow…) in it <b>once</b>; it stays signed in, even after restarts, and never mixes with another client.</p>
+        <p className="text-[var(--color-muted)]">You see that browser on the Operator page (the <b>live screen</b>) and use it there yourself: to sign in, or to take over.</p>
+      </div>
+
+      <h3 className="mt-1 text-[13px] font-semibold">A · Create the browser (once, on the server)</h3>
+      <p className="text-xs text-[var(--color-muted)]">For you or whoever runs the server. Copy each block into the place named above it. Skip this if {c.name} already has a browser.</p>
+      <CodeBlock title="1 · Add to deploy/workspace/docker-compose.yml, under services:" text={s.compose} />
+      <CodeBlock title="2 · Add to the HQ .env file" text={s.env} />
+      <CodeBlock title="3 · Run on the server" text={s.commands} />
+      <p className="text-xs text-[var(--color-dim)]">4 · Its web address: make a copy of deploy/workspace/nginx-ws.rizehub.ph.conf and set {s.nginx}.</p>
+
+      <h3 className="mt-1 text-[13px] font-semibold">B · Tell HQ where to show it</h3>
+      <p className="text-xs text-[var(--color-muted)]">The web address of that browser&apos;s screen (from step A). Usually you can keep the suggestion.</p>
+      <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { e.preventDefault(); run(() => setViewerUrlAction(c.slug, url), 'Saved: the live screen shows on the Operator page'); }}>
+        <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" aria-label="Browser screen address" />
+        <button className={btn.primary} disabled={pending || data.home.demo}>Save</button>
       </form>
     </div>
   );
@@ -291,7 +298,9 @@ function ApisStep({ data, pending }: { data: OperatorSetupData; pending: boolean
           <span className="text-xs text-[var(--color-dim)]">then pick the token again</span>
         </label>
       )}
-      <Link href="/vault" className={clsx(btn.ghost, 'self-start')}><ExternalLink size={14} aria-hidden />Add a token in the Client Vault</Link>
+      {c.client_id
+        ? <Link href={`/clients/${c.client_id}?tab=access&add=1`} className={clsx(btn.ghost, 'self-start')}><ExternalLink size={14} aria-hidden />Add a token in {c.name}&apos;s Client Vault</Link>
+        : <p className="text-xs text-[var(--color-muted)]">Tokens are saved in the Client Vault: <Link href="/clients" className="text-[#c4b5ff] hover:underline">Clients</Link> → {c.name} → Access → Add. (Link this operator client to an HQ client with the same short name first.)</p>}
     </div>
   );
 }

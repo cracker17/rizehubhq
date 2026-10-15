@@ -42,13 +42,13 @@ function Dot({ on }: { on: boolean }) {
 function activeStep(actions: OperatorActionRow[], client: string, now: number): OperatorActionRow | null {
   const a = actions.find((x) => x.client_slug === client);
   if (!a || now - new Date(a.created_at).getTime() > 40_000) return null;
-  return a.action.startsWith('browser.') || a.action === 'message.classified' || a.action === 'message.new' ? a : null;
+  return a.action.startsWith('browser.') || ['message.classified', 'message.new', 'job.progress', 'job.started', 'qa.run', 'action.done', 'send.done', 'update.done', 'action.requested', 'approval.requested', 'update.requested'].includes(a.action) ? a : null;
 }
 
-export function OperatorHome({ data, error }: { data: OperatorHomeData; error?: string }) {
+export function OperatorHome({ data, error, scripted = false, liveScreen }: { data: OperatorHomeData; error?: string; scripted?: boolean; liveScreen?: React.ReactNode }) {
   const { toast } = useHq();
   const [pending, start] = useTransition();
-  const { actions, live } = useOperatorLive(data.actions, data.demo);
+  const { actions, live } = useOperatorLive(data.actions, data.demo, !scripted);
   const [clientSlug, setClientSlug] = useState(data.clients[0]?.slug ?? '');
   const client = data.clients.find((c) => c.slug === clientSlug) ?? data.clients[0] ?? null;
   const online = isOnline(data.heartbeatAt);
@@ -95,9 +95,9 @@ export function OperatorHome({ data, error }: { data: OperatorHomeData; error?: 
         </div>
       )}
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-5">
+      <div className={clsx('grid min-w-0 gap-4 lg:gap-5', scripted ? '2xl:grid-cols-[minmax(0,1fr)_340px]' : 'lg:grid-cols-[minmax(0,1fr)_360px]')}>
         <div className="flex min-w-0 flex-col gap-4 lg:gap-5">
-          {client ? <LiveScreen client={client} actions={actions} pending={pending} run={run} demo={data.demo} />
+          {client ? <LiveScreen client={client} actions={actions} pending={pending} run={run} demo={data.demo} drawn={liveScreen} />
             : <section className="card p-6 text-sm text-[var(--color-muted)]">No client is set up yet. <Link href="/operator/setup" className="text-[#c4b5ff] hover:underline">Add a client</Link>: a short wizard for its browser, logins, apps and API tokens.</section>}
 
           {client && <OperatorJobs data={data} client={client} pending={pending} run={run} />}
@@ -148,8 +148,8 @@ export function OperatorHome({ data, error }: { data: OperatorHomeData; error?: 
   );
 }
 
-function LiveScreen({ client, actions, pending, run, demo }: {
-  client: OperatorClientRow; actions: OperatorActionRow[]; pending: boolean; demo: boolean;
+function LiveScreen({ client, actions, pending, run, demo, drawn }: {
+  client: OperatorClientRow; actions: OperatorActionRow[]; pending: boolean; demo: boolean; drawn?: React.ReactNode;
   run: (fn: () => Promise<OperatorResult>, done: string) => void;
 }) {
   const [show, setShow] = useState(true);
@@ -179,7 +179,17 @@ function LiveScreen({ client, actions, pending, run, demo }: {
         </div>
       </div>
 
-      {client.viewer_url && show ? (
+      {drawn ? (
+        <div className="relative">
+          {drawn}
+          {working && step && (
+            <div className="pointer-events-none absolute right-3 top-10 flex max-w-[70%] items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] glass">
+              <Sparkles size={14} className="text-[#c4b5ff]" aria-hidden />
+              <span className="truncate">{describeAction(step).text}</span>
+            </div>
+          )}
+        </div>
+      ) : client.viewer_url && show ? (
         <div className="relative aspect-[16/10] w-full bg-black">
           <iframe title={`${client.name} browser`} src={href ?? undefined} className="absolute inset-0 h-full w-full border-0" allow="clipboard-read; clipboard-write; fullscreen" />
           {working && step && (

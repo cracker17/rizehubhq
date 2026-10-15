@@ -20,7 +20,8 @@ const DEMO_STEPS: [string, Record<string, unknown>][] = [
   ['send.done', { mode: 'auto' }],
 ];
 
-export function useOperatorLive(initial: OperatorActionRow[], demo: boolean): { actions: OperatorActionRow[]; live: LiveState } {
+/** ambient = the small looping demo feed (off while the scripted demo player drives the page). */
+export function useOperatorLive(initial: OperatorActionRow[], demo: boolean, ambient = demo): { actions: OperatorActionRow[]; live: LiveState } {
   const { session } = useHq();
   const router = useRouter();
   const [actions, setActions] = useState<OperatorActionRow[]>(initial);
@@ -35,7 +36,7 @@ export function useOperatorLive(initial: OperatorActionRow[], demo: boolean): { 
   }, [initial]);
 
   useEffect(() => {
-    if (!demo) return;
+    if (!demo || !ambient) return;
     let i = 0;
     let next = 5000;
     const t = setInterval(() => {
@@ -46,7 +47,7 @@ export function useOperatorLive(initial: OperatorActionRow[], demo: boolean): { 
       setActions((cur) => [row, ...cur].slice(0, 200));
     }, 2600);
     return () => clearInterval(t);
-  }, [demo]);
+  }, [demo, ambient]);
 
   useEffect(() => {
     if (demo || !session.supabase) return;

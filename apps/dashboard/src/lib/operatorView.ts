@@ -236,6 +236,7 @@ export function describeAction(a: OperatorActionRow): { text: string; tone: Tone
     case 'update.done': return { text: 'Told the client it\'s done', tone: 'success', kind: 'send' };
     case 'reply.manual': return { text: `Approved for ${str(d.channel) || 'the chat'}: you post it (${str(d.kind)} is read-only)`, tone: 'info', kind: 'you' };
     case 'update.manual': return { text: `Client update ready for you to post in ${str(d.channel) || 'the chat'}`, tone: 'info', kind: 'you' };
+    case 'job.progress': return { text: clip(str(d.step), 140) || 'Working', tone: 'brand', kind: 'type' };
     case 'qa.run': return { text: 'Checking the result (375 / 1366 px, console, links)', tone: 'brand', kind: 'think' };
     default: return { text: a.action.replace(/[._]/g, ' '), tone: a.ok ? 'muted' : 'danger', kind: a.ok ? 'read' : 'warn' };
   }

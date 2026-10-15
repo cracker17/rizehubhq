@@ -41,7 +41,7 @@ export function serverSetup(slug: string, port: number): { compose: string; env:
   return {
     compose,
     env: `${envName(slug)}=http://ws-${slug}:9223`,
-    nginx: `server_name ${host};  →  proxy_pass https://127.0.0.1:${port};  (copy nginx-ws.rizehub.ph.conf; snippet /etc/nginx/snippets/ws-${slug}-auth.conf)`,
+    nginx: `server_name ${host} and proxy_pass https://127.0.0.1:${port} (its login snippet: /etc/nginx/snippets/ws-${slug}-auth.conf)`,
     commands: [
       `mkdir -p deploy/workspace/profiles/${slug}`,
       'docker compose -f deploy/workspace/docker-compose.yml --env-file deploy/workspace/.env up -d',
@@ -88,10 +88,10 @@ export function setupChecklist(s: SetupState): { label: string; done: boolean; s
   return [
     { label: 'Client saved', done: !!s.client, step: 'client' },
     { label: 'Linked to its project memory (HQ Brain)', done: !!s.client?.brain_project, step: 'client', optional: true },
-    { label: 'Live screen address set (the client’s browser)', done: !!s.client?.viewer_url, step: 'browser' },
-    { label: 'Operator online', done: s.online, step: 'browser' },
-    { label: 'Sites to keep logged in', done: logins.length > 0, step: 'logins' },
-    { label: 'All logins OK', done: logins.length > 0 && logins.every((l) => l.state === 'ok'), step: 'logins' },
+    { label: 'Its browser is set up (you can see it on the Operator page)', done: !!s.client?.viewer_url, step: 'browser' },
+    { label: 'The operator is running on the server', done: s.online, step: 'browser' },
+    { label: 'Sites it should stay signed in to are chosen', done: logins.length > 0, step: 'logins' },
+    { label: 'Signed in to all of them', done: logins.length > 0 && logins.every((l) => l.state === 'ok'), step: 'logins' },
     { label: 'Something to watch (an app for the unread sweep, a chat, or WhatsApp)', done: s.accounts + s.channels > 0 || s.whatsapp, step: 'apps' },
     { label: 'Webflow API token linked', done: s.webflowLinked, step: 'apis', optional: true },
     { label: 'Airtable API token linked', done: s.airtableLinked, step: 'apis', optional: true },

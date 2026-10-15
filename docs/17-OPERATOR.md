@@ -452,6 +452,15 @@ Pull requests write if you want those actions; a Vercel token scoped to the team
 step; or `OPERATOR_GITHUB_TOKEN_<CLIENT>` / `OPERATOR_VERCEL_TOKEN_<CLIENT>`. Team projects on Vercel need the team id
 (wizard, or `OPERATOR_VERCEL_TEAM_<CLIENT>`). GitHub and Vercel are also login presets in the wizard.
 
+### Demo (`/operator` without Supabase, or `/operator?demo=1` on the live dashboard)
+
+A scripted LvlUp morning plays on the real Operator page with fake data (`lib/operatorDemo.ts`, tested): Alex asks in
+Google Chat to fix a broken footer link → draft → **you tap ✅ Send + start** on the simulated Telegram panel → the
+reply is typed and posted → a job reads GitHub (PR #42, CI passed) and Vercel (preview ready), QA-checks the preview →
+asks to merge → **✅ Do it** → production deploys → QA on the live page → done with screenshots → client update →
+**✅ Send** → memory → **✅ Save** → evening digest. The live screen draws what the browser would show (Google Chat,
+the PR, the deployment, the site under QA) with the operator's cursor. Nothing is written anywhere.
+
 ## Phase 4+ (ideas, not built)
 
 Per-client autonomy presets, a weekly operator report, and moving the workspace browsers to their own VPS once there
