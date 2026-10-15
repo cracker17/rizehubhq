@@ -5,6 +5,7 @@
 import { revalidatePath } from 'next/cache';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
+import { ensureStepUp } from '@/lib/auth/mfaServer';
 import { ACCOUNT_KINDS, channelUrl, CHANNEL_KINDS, taskBrief, type ChannelKind, type SweepKind } from '@/lib/operatorView';
 
 export type OperatorResult = { ok: true } | { ok: false; error: string };
@@ -31,6 +32,7 @@ async function call(fn: string, args: Record<string, unknown>): Promise<Operator
   const { error } = await c.db.rpc(fn, args);
   if (error) return { ok: false, error: error.message.replace(/^.*?ERROR:\s*/, '') };
   revalidatePath('/operator');
+  revalidatePath('/operator/setup');
   return { ok: true };
 }
 
@@ -147,4 +149,42 @@ export async function setViewerUrlAction(slug: string, url: string): Promise<Ope
   const u = String(url ?? '').trim();
   if (u && !/^https:\/\/\S+$/.test(u)) return { ok: false, error: 'The live screen address must start with https://' };
   return call('operator_set_viewer_url', { p_client: slug, p_url: u || null });
+}
+
+// ---------- setup wizard ----------
+
+export async function saveClientAction(input: { slug: string; name: string; brainProject: string; myNames: string; rules: string }): Promise<OperatorResult & { slug?: string }> {
+  const slug = String(input.slug ?? '').trim().toLowerCase();
+  if (!SLUG.test(slug)) return { ok: false, error: 'The short name must be lowercase letters, digits and dashes, e.g. madam-muse.' };
+  const names = String(input.myNames ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 6);
+  const r = await call('operator_save_client', { p_slug: slug, p_name: String(input.name ?? '').trim(), p_brain_project: String(input.brainProject ?? '').trim() || null,
+    p_my_names: names, p_rules: String(input.rules ?? '').slice(0, 4000) });
+  return r.ok ? { ok: true, slug } : r;
+}
+
+export async function setLoginSiteAction(slug: string, site: string, label: string, url: string, enabled: boolean): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(site)) return { ok: false, error: 'Unknown site.' };
+  if (!/^https:\/\/\S+$/.test(String(url ?? '').trim())) return { ok: false, error: 'The page to check must start with https://' };
+  return call('operator_set_login_site', { p_client: slug, p_site: site, p_label: String(label ?? site).slice(0, 80), p_url: String(url).trim(), p_enabled: enabled === true });
+}
+
+export async function requestLoginCheckAction(slug: string): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  return call('operator_request_login_check', { p_client: slug });
+}
+
+/** Link (or unlink with null) a Client Vault API token for the operator. Needs your 2FA code when 2FA is on. */
+export async function linkCredentialAction(slug: string, platform: 'webflow' | 'airtable', credentialId: string | null, totp?: string | null): Promise<OperatorResult & { stepUp?: boolean }> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  if (platform !== 'webflow' && platform !== 'airtable') return { ok: false, error: 'Unknown platform.' };
+  if (credentialId && !ID.test(credentialId)) return { ok: false, error: 'Unknown credential.' };
+  const c = await ceoDb();
+  if ('error' in c) return { ok: false, error: c.error };
+  const step = await ensureStepUp(c.db, (s) => (s.factorId ? 'required' : 'not_needed'), totp);
+  if (!step.ok) return step;
+  const { error } = await c.db.rpc('operator_set_credential', { p_client: slug, p_platform: platform, p_credential: credentialId });
+  if (error) return { ok: false, error: error.message.replace(/^.*?ERROR:\s*/, ''), stepUp: /step_up/i.test(error.message) };
+  revalidatePath('/operator');
+  return { ok: true };
 }

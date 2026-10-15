@@ -205,12 +205,12 @@ async function main() {
       }
       : undefined,
   });
-  const loginCheck = () => checkLogins({
+  const loginCheck = (only: string | null = null) => checkLogins({
     logins: () => jobDb.logins(),
     profileOf: async (slug) => (await db.clients()).find((c) => c.slug === slug)?.profile ?? null,
     withProfile,
     record: (c, s, st, d) => jobDb.loginChecked(c, s, st, d),
-    log: console.log,
+    log: console.log, only,
   });
   let lastDaily: string | null = null;
   const daily = async () => {
@@ -246,7 +246,13 @@ async function main() {
       loop('action', cfg.tickMs, () => jobs.actionTick()),
       loop('update', cfg.tickMs, () => jobs.updateTick()),
       loop('verify', 60_000, () => jobs.verifyStaleTick()),
-      loop('logins', cfg.loginCheckMs, loginCheck),
+      loop('logins', cfg.loginCheckMs, () => loginCheck()),
+      // "Check now" from the setup wizard
+      loop('logins-now', 30_000, async () => {
+        const { data, error } = await sb.rpc('operator_take_login_checks');
+        if (error) return; // migration not applied yet
+        for (const slug of (data as string[] | null) ?? []) await loginCheck(slug);
+      }),
       loop('daily', 3600_000, daily),
     ] : []),
     // Morning / evening digests (phase 3): SQL decides whether one is due and saves it once; the bot sends it.

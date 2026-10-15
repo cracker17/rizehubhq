@@ -30,3 +30,12 @@ test('a failing check is recorded as error (not as a lost login) and the pass go
   assert.equal(n, 2);
   assert.deepEqual(rec, ['lvlup/webflow:error', 'lvlup/google:error']);
 });
+
+test('login verdicts for Slack, Teams and Shopify', async () => {
+  const { loginVerdict } = await import('./logins');
+  const q = (finalUrl: string, checkUrl: string) => ({ checkUrl, finalUrl, title: '', passwordField: false, status: 200 });
+  assert.equal(loginVerdict('slack', q('https://lvlup.slack.com/signin', 'https://app.slack.com/client/')).state, 'signed_out');
+  assert.equal(loginVerdict('slack', q('https://app.slack.com/client/T01/C02', 'https://app.slack.com/client/')).state, 'ok');
+  assert.equal(loginVerdict('teams', q('https://login.microsoftonline.com/common/oauth2', 'https://teams.microsoft.com/v2/')).state, 'signed_out');
+  assert.equal(loginVerdict('shopify', q('https://accounts.shopify.com/lookup', 'https://admin.shopify.com/')).state, 'signed_out');
+});

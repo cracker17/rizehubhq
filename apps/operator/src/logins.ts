@@ -13,6 +13,9 @@ const SIGNED_OUT: Record<string, RegExp> = {
   google: /^https:\/\/(accounts\.google\.com|workspace\.google\.com\/(intl\/[^/]+\/)?products)/i,
   webflow: /^https:\/\/(www\.)?webflow\.com\/(login|signup|dashboard\/login)/i,
   airtable: /^https:\/\/(www\.)?airtable\.com\/(login|signup|sso)/i,
+  slack: /^https:\/\/([a-z0-9-]+\.)?slack\.com\/(signin|sign_in|checkcookie|workspace-signin)/i,
+  teams: /^https:\/\/(login\.microsoftonline\.com|login\.live\.com)\//i,
+  shopify: /^https:\/\/(accounts\.shopify\.com|admin\.shopify\.com\/login)/i,
 };
 const GENERIC = /\/(login|log-in|signin|sign-in|sign_in|signup|sso|auth\/|oauth|ServiceLogin)(\b|[/?#])/i;
 

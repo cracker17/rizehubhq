@@ -415,6 +415,24 @@ then Reply), type the approved text, compare the composer with it, ask the datab
 send key (Gmail: Ctrl/⌘+Enter). Once the key is pressed it is never retried. @mentions are plain text there. Tune
 with the `composeBox` / `composeOpen` / `composeSendKey` keys of `OPERATOR_<APP>_SELECTORS`, then test again.
 
-## Phase 3+ (not built yet)
+### Setup wizard (`20261017060000_operator_setup.sql`)
 
-An Add client flow with a setup wizard (logins, APIs, sessions).
+`/operator` → **Add client** (or **Set up <client>**) opens `/operator/setup`, six short steps:
+
+1. **Client**: name, short name (= its browser profile), project memory (HQ Brain slug), how you appear, reply rules
+   (`operator_save_client`).
+2. **Browser**: every client has **its own Chrome profile** (`deploy/workspace/profiles/<slug>`, its own container):
+   logins, cookies and sessions stay there and survive restarts. The step prints the compose block, the
+   `OPERATOR_CDP_<CLIENT>` line, the viewer host/port and the server commands to paste once; then the live screen
+   address.
+3. **Logins**: tick the sites it uses (Google, Slack, Teams, Webflow, Airtable, Shopify) → `operator_logins`; open the
+   client's browser and log in once yourself; **Check now** asks the operator to check within a minute
+   (`operator_request_login_check`), then every 6 h with Telegram notices.
+4. **Apps to watch**: the unread-sweep accounts, Posting (send tests), WhatsApp Business.
+5. **APIs**: link the client's Webflow / Airtable tokens from the Client Vault (2FA code when 2FA is on).
+6. **Ready?**: a checklist with a **Fix** button per missing item.
+
+## Phase 4+ (ideas, not built)
+
+Per-client autonomy presets, a weekly operator report, and moving the workspace browsers to their own VPS once there
+are more than two or three clients (1.5 GB each).

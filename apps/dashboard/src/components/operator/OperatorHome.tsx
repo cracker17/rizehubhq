@@ -70,6 +70,8 @@ export function OperatorHome({ data, error }: { data: OperatorHomeData; error?: 
           <p className="text-sm text-[var(--color-muted)]">Watches your client chats, drafts replies with the project&apos;s memory, and posts only what the rules or you allow.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/operator/setup" className={btn.ghost}><Plus size={16} aria-hidden />Add client</Link>
+          {client && <Link href={`/operator/setup?client=${client.slug}&step=check`} className={btn.ghost}>Set up {client.name}</Link>}
           <Pill tone={online ? 'success' : 'muted'}><Dot on={online} />{online ? 'Online' : 'Offline'}</Pill>
           <Pill tone={state.tone}>{state.label}</Pill>
           {waiting > 0 && <Link href="/approvals" className="contents"><Pill tone="warning">{waiting} waiting for you</Pill></Link>}
@@ -96,7 +98,7 @@ export function OperatorHome({ data, error }: { data: OperatorHomeData; error?: 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-5">
         <div className="flex min-w-0 flex-col gap-4 lg:gap-5">
           {client ? <LiveScreen client={client} actions={actions} pending={pending} run={run} demo={data.demo} />
-            : <section className="card p-6 text-sm text-[var(--color-muted)]">No client is set up yet. LvlUp Ventures is added by the migration; others are added by SQL for now (docs/17).</section>}
+            : <section className="card p-6 text-sm text-[var(--color-muted)]">No client is set up yet. <Link href="/operator/setup" className="text-[#c4b5ff] hover:underline">Add a client</Link>: a short wizard for its browser, logins, apps and API tokens.</section>}
 
           {client && <OperatorJobs data={data} client={client} pending={pending} run={run} />}
 

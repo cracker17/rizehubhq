@@ -133,3 +133,43 @@ export function demoOperator(now = Date.now()): OperatorHomeData {
     killSwitch: false, officePaused: false, autoSend: true, heartbeatAt: t(0.5), demo: true,
   };
 }
+
+// ---------- setup wizard (/operator/setup) ----------
+
+export interface OperatorSetupClient {
+  slug: string; name: string; brain_project: string | null; my_names: string[]; rules: string; viewer_url: string | null;
+  client_id: string | null; webflow_credential: string | null; airtable_credential: string | null;
+}
+export interface OperatorSetupData {
+  home: OperatorHomeData;
+  client: OperatorSetupClient | null;
+  logins: { site: string; label: string; check_url: string; enabled: boolean; state: string; last_checked_at: string | null; detail: string | null }[];
+  credentials: { id: string; label: string; platform: string; secret_type: string; status: string }[];
+}
+
+/** The wizard for one client (slug), or for a new one (null). */
+export async function loadOperatorSetup(slug: string | null): Promise<Loaded<OperatorSetupData>> {
+  const { data: home, error } = await loadOperatorHome();
+  const row = slug ? (home.clients.find((c) => c.slug === slug) as unknown as OperatorSetupClient | undefined) ?? null : null;
+  if (home.demo) {
+    return { data: { home, client: row ? { ...row, my_names: ['Julev', 'Julev Ajeto'], rules: '- No financial figures', client_id: null, webflow_credential: null, airtable_credential: null } : null,
+      logins: row ? [
+        { site: 'google', label: 'Google (Chat, Gmail)', check_url: 'https://chat.google.com/', enabled: true, state: 'ok', last_checked_at: new Date().toISOString(), detail: null },
+        { site: 'webflow', label: 'Webflow', check_url: 'https://webflow.com/dashboard', enabled: true, state: 'signed_out', last_checked_at: new Date().toISOString(), detail: 'redirected to https://webflow.com/login' },
+      ] : [],
+      credentials: [] } };
+  }
+  if (!row || error) return { data: { home, client: row, logins: [], credentials: [] }, error };
+  const db = await createSupabaseServer();
+  if (!db) return { data: { home, client: row, logins: [], credentials: [] }, error: 'Supabase is not configured.' };
+  const [logins, creds] = await Promise.all([
+    db.from('operator_logins').select('site,label,check_url,enabled,state,last_checked_at,detail').eq('client_slug', row.slug).order('site'),
+    row.client_id
+      ? db.from('client_credentials').select('id,label,platform,secret_type,status').eq('client_id', row.client_id).in('platform', ['webflow', 'airtable', 'Webflow', 'Airtable'])
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  return {
+    data: { home, client: row, logins: (logins.error ? [] : logins.data ?? []) as OperatorSetupData['logins'], credentials: (creds.error ? [] : creds.data ?? []) as OperatorSetupData['credentials'] },
+    error: logins.error?.message,
+  };
+}
