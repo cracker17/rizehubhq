@@ -218,6 +218,8 @@ export default async function ({ db, step, val, as, assert }) {
 
   await step('operator worker: login checks notify once when lost and once when back', async () => {
     assert.deepEqual((await db.query(`select site from operator_logins where client_slug = 'lvlup' order by site`)).rows.map((r) => r.site), ['airtable', 'google', 'webflow']);
+    assert.equal((await db.query(`select check_url from operator_logins where client_slug = 'lvlup' and site = 'airtable'`)).rows[0].check_url, 'https://airtable.com/account',
+      'a page that needs a login (the home page does not)');
     await val(`select operator_login_checked('lvlup', 'webflow', 'ok')`);
     await val(`select operator_login_checked('lvlup', 'webflow', 'signed_out', 'redirected to /login')`);
     await val(`select operator_login_checked('lvlup', 'webflow', 'signed_out', 'redirected to /login')`);

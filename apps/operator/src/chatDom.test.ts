@@ -64,6 +64,9 @@ test('config: defaults, minimums, CDP endpoint per profile', () => {
   assert.equal(c.pollMs, 120_000);
   assert.equal(c.sends, true);
   assert.equal(c.modelRole, 'specialist');
+  assert.deepEqual([c.jobs, c.jobTickMs, c.maxUsdPerJobRun, c.loginCheckMs, c.workspacesDir], [true, 10_000, 2, 6 * 3600_000, '/tmp/operator-jobs']);
+  const j = loadOperatorConfig({ OPERATOR_JOBS: 'off', OPERATOR_JOB_TICK_MS: '10', OPERATOR_MAX_USD_PER_JOB_RUN: '-1', OPERATOR_LOGIN_CHECK_MS: '1000' });
+  assert.deepEqual([j.jobs, j.jobTickMs, j.maxUsdPerJobRun, j.loginCheckMs], [false, 2_000, 2, 600_000]);
   assert.equal(loadOperatorConfig({ OPERATOR_POLL_MS: '5000', OPERATOR_SENDS: 'off', OPERATOR_MODEL_ROLE: 'nope' }).pollMs, 30_000);
   assert.equal(loadOperatorConfig({ OPERATOR_SENDS: 'off' }).sends, false);
   assert.throws(() => loadOperatorConfig({ OPERATOR_GCHAT_SELECTORS: '[1]x' }), /JSON object/);

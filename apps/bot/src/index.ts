@@ -1,6 +1,6 @@
 // RizeHub HQ Telegram bot (docs/08-TELEGRAM-BOT.md). Long polling; only whitelisted users.
 // Commands + approval buttons here; outbound notifications in notifier.ts (polls Supabase every 5 s).
-import { Bot, GrammyError } from 'grammy';
+import { Bot, GrammyError, InputFile } from 'grammy';
 import { createClient } from '@supabase/supabase-js';
 import { budgetCaps, summarizeSpend, localDate } from './budget';
 import { parseCallback } from './callbacks';
@@ -12,7 +12,7 @@ import type { InlineMarkup } from './keyboard';
 import { notifierTick, renderApproval, tzOf, type NotifierState, type Sender } from './notifier';
 import { createRequest, processText, type ChatIO, type IntakeDeps } from './intake';
 import { PendingNotes } from './pending';
-import { clientArg, formatOperatorStatus } from './operator';
+import { clientArg, formatJobs, formatLogins, formatOperatorStatus, parseTaskArgs } from './operator';
 import { handleVoice, telegramDownloader, type VoiceClip, type VoiceDeps } from './voice';
 
 const cfg = loadBotConfig(process.env);
@@ -40,6 +40,11 @@ const sender: Sender = {
     try { await bot.api.editMessageText(chatId, messageId, text, html(markup ?? { inline_keyboard: [] })); }
     catch (e) { if (!notModified(e)) throw e; }
   },
+  photos: async (chatId, photos) => {
+    const items = photos.slice(0, 10);
+    if (items.length === 1) { await bot.api.sendPhoto(chatId, new InputFile(items[0]!.jpeg, 'qa.jpg'), { caption: items[0]!.caption.slice(0, 1000) }); return; }
+    if (items.length) await bot.api.sendMediaGroup(chatId, items.map((p, i) => ({ type: 'photo' as const, media: new InputFile(p.jpeg, `qa-${i + 1}.jpg`), caption: p.caption.slice(0, 1000) })));
+  },
 };
 const decisionDeps: DecisionDeps = { db, pending, names: () => names, dashboardUrl: cfg.dashboardUrl, tz: () => tz };
 
@@ -59,6 +64,9 @@ const HELP = [
   '/pause &lt;client&gt; · /resume &lt;client&gt; : stop / restart the operator for one client',
   '/inbox : reply drafts from client chats waiting for you',
   '/status &lt;client&gt; : what the operator saw, sent and is waiting on',
+  '/task &lt;client&gt; &lt;what to do&gt; : give the operator a job (it reports start, done + QA screenshots)',
+  '/jobs [client] : the operator\'s open and recent jobs',
+  '/logins [client] : is each workspace site still logged in?',
   '/cancel : drop a pending change note',
   '/help : this list',
   `Dashboard: ${cfg.dashboardUrl}`,
@@ -151,6 +159,33 @@ bot.command('inbox', async (ctx) => {
     }
     if (total > rows.length) await ctx.reply(`…and ${total - rows.length} more on ${cfg.dashboardUrl}/operator`);
   } catch (e) { return ctx.reply(`Couldn't read the inbox: ${errText(e)}`); }
+});
+
+// ---------- operator worker mode: /task, /jobs, /logins ----------
+bot.command('task', async (ctx) => {
+  const t = parseTaskArgs(ctx.match);
+  if (!t) return ctx.reply('Usage: /task <client> <what to do>\nExample: /task lvlup Add Sam Lee to the team page (photo in the shared drive)');
+  try {
+    await db.addOperatorJob(t.client, t.brief);
+    return ctx.reply(`🛠 Queued for ${t.client}. I'll tell you when it starts and when it's done (with QA screenshots). Changes to the outside world come here for ✅ first.\n/jobs ${t.client} shows progress.`);
+  } catch (e) {
+    const msg = errText(e);
+    if (/unknown client/i.test(msg)) {
+      const known = (await db.operatorClients().catch(() => [])).map((c) => c.slug);
+      return ctx.reply(`No operator client "${t.client}".${known.length ? ` Known: ${known.join(', ')}` : ''}`);
+    }
+    return ctx.reply(`Couldn't queue that: ${msg}`);
+  }
+});
+bot.command('jobs', async (ctx) => {
+  const slug = clientArg(ctx.match);
+  try { return ctx.reply(formatJobs(await db.operatorJobs(slug, 12), slug, tz), html()); }
+  catch (e) { return ctx.reply(`Couldn't read the jobs: ${errText(e)}`); }
+});
+bot.command('logins', async (ctx) => {
+  const slug = clientArg(ctx.match);
+  try { return ctx.reply(formatLogins(await db.operatorLogins(slug), tz), html()); }
+  catch (e) { return ctx.reply(`Couldn't read the logins: ${errText(e)}`); }
 });
 
 bot.command('budget', async (ctx) => {

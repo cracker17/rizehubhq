@@ -12,6 +12,14 @@
 //   OPERATOR_MODEL_ROLE              model role for classify + draft (default specialist; CLAUDE_MODEL_OPERATOR overrides)
 //   OPERATOR_MAX_USD_PER_MESSAGE     spend cap for one classify + draft call (default 0.25)
 //   OPERATOR_GCHAT_SELECTORS         JSON overrides for the Google Chat DOM selectors (browser/selectors.ts)
+//   OPERATOR_JOBS=on|off             worker mode (tasks: run, QA, approved actions, client updates). Default on
+//   OPERATOR_JOB_TICK_MS             how often a queued job is looked for (default 10000, min 2000)
+//   OPERATOR_MAX_USD_PER_JOB_RUN     spend cap for one run of a job (default 2)
+//   OPERATOR_LOGIN_CHECK_MS          "still logged in?" check of every site (default 21600000 = 6 h, min 600000; also once at start)
+//   OPERATOR_WORKSPACES_DIR          parent of each job's sandbox folder for the terminal tool (default /tmp/operator-jobs).
+//                                    The terminal exists only when agent commands are isolated (AGENT_UID / DEV_SANDBOX_PREFIX)
+//   OPERATOR_WEBFLOW_TOKEN_<CLIENT>  fallback API tokens when none is linked in the Client Vault (jobs/apis.ts)
+//   OPERATOR_AIRTABLE_TOKEN_<CLIENT>
 import { MODEL_ROLES, type ModelRole } from '@rizehubhq/shared';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -24,6 +32,11 @@ export interface OperatorConfig {
   modelRole: ModelRole;
   maxUsdPerMessage: number;
   selectorOverrides: Record<string, string>;
+  jobs: boolean;
+  jobTickMs: number;
+  maxUsdPerJobRun: number;
+  loginCheckMs: number;
+  workspacesDir: string;
 }
 
 const truthy = (v: string | undefined) => ['1', 'true', 'on', 'yes'].includes((v ?? '').trim().toLowerCase());
@@ -37,6 +50,7 @@ function int(v: string | undefined, fallback: number, min: number): number {
 export function loadOperatorConfig(env: Env): OperatorConfig {
   const role = (env.OPERATOR_MODEL_ROLE ?? '').trim() as ModelRole;
   const usd = Number(env.OPERATOR_MAX_USD_PER_MESSAGE);
+  const jobUsd = Number(env.OPERATOR_MAX_USD_PER_JOB_RUN);
   let selectorOverrides: Record<string, string> = {};
   if (env.OPERATOR_GCHAT_SELECTORS?.trim()) {
     try {
@@ -54,6 +68,11 @@ export function loadOperatorConfig(env: Env): OperatorConfig {
     modelRole: (MODEL_ROLES as readonly string[]).includes(role) ? role : 'specialist',
     maxUsdPerMessage: Number.isFinite(usd) && usd > 0 ? usd : 0.25,
     selectorOverrides,
+    jobs: !falsy(env.OPERATOR_JOBS),
+    jobTickMs: int(env.OPERATOR_JOB_TICK_MS, 10_000, 2_000),
+    maxUsdPerJobRun: Number.isFinite(jobUsd) && jobUsd > 0 ? jobUsd : 2,
+    loginCheckMs: int(env.OPERATOR_LOGIN_CHECK_MS, 6 * 3600_000, 600_000),
+    workspacesDir: env.OPERATOR_WORKSPACES_DIR?.trim() || '/tmp/operator-jobs',
   };
 }
 

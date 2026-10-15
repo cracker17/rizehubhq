@@ -1,6 +1,6 @@
 // Telegram message text (HTML parse mode). Pure functions; every dynamic string goes through esc().
 import type { SpendSummary } from './budget';
-import { isOperatorReply, operatorDecisionLine, operatorReplyBody } from './operator';
+import { isOperatorReply, operatorActionBody, operatorDecisionLine, operatorMemoryBody, operatorReplyBody, operatorUpdateBody } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, QuickFacts } from './types';
 
 export const TG_LIMIT = 4096;
@@ -67,6 +67,12 @@ function actionBody(ap: BotApproval, names: Names): string[] {
   switch (p.type) {
     case 'operator_reply':
       return operatorReplyBody(ap);
+    case 'operator_update':
+      return operatorUpdateBody(ap);
+    case 'operator_action':
+      return operatorActionBody(ap);
+    case 'operator_memory': case 'brain_proposal':
+      return operatorMemoryBody(ap);
     case 'question':
       return [`❓ <b>QUESTION</b> · ${who}`, esc(p.question ?? ap.summary ?? ap.title), ...(p.options?.length ? [`Options: ${p.options.map(esc).join(' / ')}`] : [])];
     case 'task_failed':

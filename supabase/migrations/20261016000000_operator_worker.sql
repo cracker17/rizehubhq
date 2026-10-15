@@ -778,6 +778,6 @@ insert into operator_logins (client_slug, site, label, check_url)
 select 'lvlup', s.site, s.label, s.url
   from (values ('google', 'Google (Chat)', 'https://chat.google.com/'),
                ('webflow', 'Webflow', 'https://webflow.com/dashboard'),
-               ('airtable', 'Airtable', 'https://airtable.com/')) as s(site, label, url)
+               ('airtable', 'Airtable', 'https://airtable.com/account')) as s(site, label, url)
  where exists (select 1 from operator_clients where slug = 'lvlup')
 on conflict (client_slug, site) do nothing;

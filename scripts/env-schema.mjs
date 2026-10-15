@@ -177,8 +177,9 @@ export const VARS = [
   S({ key: 'CLAUDE_HQ_MCP_URL', group: 'Claude runtime', svc: ['worker'], check: (v) => (isUrl(v) ? null : 'must be a URL, e.g. http://127.0.0.1:4000/mcp') }),
   ...['', ...Object.values(CLAUDE_AGENTS).map((s) => `_${s}`)].map((s) => S({ key: `CLAUDE_MODEL${s}`, group: 'Claude runtime', svc: s ? ['worker'] : ['worker', 'operator'],
     check: (v) => (/^(anthropic:)?claude-[\w.-]+$/.test(v) ? null : 'must be an Anthropic model id like claude-sonnet-5') })),
-  // Operator (docs/17-OPERATOR.md): container hq-operator. OPERATOR_CDP_<PROFILE> (one per client browser) is not listed:
-  // belongsTo() sends those names to the operator only.
+  // Operator (docs/17-OPERATOR.md): container hq-operator. OPERATOR_CDP_<PROFILE> (one per client browser) and the
+  // fallback API tokens OPERATOR_WEBFLOW_TOKEN_<CLIENT> / OPERATOR_AIRTABLE_TOKEN_<CLIENT> are not listed: belongsTo()
+  // sends those names to the operator only.
   S({ key: 'OPERATOR_ENABLED', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
   S({ key: 'OPERATOR_SENDS', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
   S({ key: 'OPERATOR_POLL_MS', group: 'Operator', svc: ['operator'], check: intIn(30_000) }),
@@ -187,6 +188,11 @@ export const VARS = [
   S({ key: 'OPERATOR_MAX_USD_PER_MESSAGE', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),
   S({ key: 'OPERATOR_CDP_URL', group: 'Operator', svc: ['operator'], check: (v) => (isUrl(v) ? null : 'must be a URL like http://ws-lvlup:9223') }),
   S({ key: 'OPERATOR_GCHAT_SELECTORS', group: 'Operator', svc: ['operator'], check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } }),
+  S({ key: 'OPERATOR_JOBS', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
+  S({ key: 'OPERATOR_JOB_TICK_MS', group: 'Operator', svc: ['operator'], check: intIn(2_000) }),
+  S({ key: 'OPERATOR_MAX_USD_PER_JOB_RUN', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),
+  S({ key: 'OPERATOR_LOGIN_CHECK_MS', group: 'Operator', svc: ['operator'], check: intIn(600_000) }),
+  S({ key: 'OPERATOR_WORKSPACES_DIR', group: 'Operator', svc: ['operator'], check: (v) => (v.startsWith('/') ? null : 'must be an absolute path like /tmp/operator-jobs') }),
   S({ key: 'CLAUDE_MODEL_OPERATOR', group: 'Operator', svc: ['operator'], check: (v) => (/^(anthropic:)?claude-[\w.-]+$/.test(v) ? null : 'must be an Anthropic model id like claude-sonnet-5') }),
   // HQ Brain (docs/16-BRAIN.md): container hq-brain; the dashboard only gets the URL + internal secret
   S({ key: 'BRAIN_URL', group: 'Brain', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL'), note: 'docker-compose.yml overrides it with http://hq-brain:4100' }),
@@ -225,6 +231,7 @@ export function belongsTo(key, svc) {
   const v = BY_KEY.get(key);
   if (!v) {
     if (/^OPERATOR_CDP_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // one browser endpoint per client profile
+    if (/^OPERATOR_(WEBFLOW|AIRTABLE)_TOKEN_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // job API tokens (fallback to the Client Vault)
     return svc === 'worker' && !/^(NEXT_PUBLIC_|TELEGRAM_|BACKUP_)/.test(key);
   }
   return v.svc.includes(svc);

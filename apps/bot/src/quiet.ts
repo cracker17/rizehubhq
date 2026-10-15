@@ -37,7 +37,8 @@ export function inQuietHours(now: Date, q: QuietHours, tz = 'Asia/Manila'): bool
 export function isUrgentApproval(ap: Pick<BotApproval, 'payload' | 'requests'>): boolean {
   // Operator reply drafts too: a client is waiting in the chat (US daytime is the Manila night).
   const type = (ap.payload as { type?: string } | null)?.type;
-  return ap.requests?.priority === 'urgent' || type === 'task_failed' || type === 'operator_reply';
+  // Client updates and a job's actions too: the client (or a running job) waits on them. Memories wait for the morning.
+  return ap.requests?.priority === 'urgent' || type === 'task_failed' || type === 'operator_reply' || type === 'operator_update' || type === 'operator_action';
 }
 
 export function shouldSendApproval(ap: Pick<BotApproval, 'payload' | 'requests'>, quiet: boolean): boolean {

@@ -42,6 +42,15 @@ test('split: the brain gets Supabase + BRAIN_*; the worker (agent code) never ge
   for (const k of ['BRAIN_INTERNAL_SECRET', 'BRAIN_WEBHOOK_SECRET']) assert.ok(!parseEnv(parts.bot).has(k), `bot: ${k}`);
 });
 
+test('split: operator job tokens + worker-mode settings go to the operator only', () => {
+  const parts = splitEnv(parseEnv([MASTER, 'OPERATOR_WEBFLOW_TOKEN_LVLUP=wf_x', 'OPERATOR_AIRTABLE_TOKEN_LVLUP=pat_x', 'OPERATOR_MAX_USD_PER_JOB_RUN=2', 'OPERATOR_CDP_LVLUP=http://ws-lvlup:9223'].join('\n')));
+  const o = parseEnv(parts.operator);
+  for (const k of ['OPERATOR_WEBFLOW_TOKEN_LVLUP', 'OPERATOR_AIRTABLE_TOKEN_LVLUP', 'OPERATOR_MAX_USD_PER_JOB_RUN', 'OPERATOR_CDP_LVLUP']) {
+    assert.ok(o.has(k), `operator: ${k}`);
+    for (const svc of ['worker', 'dashboard', 'bot', 'brain']) assert.ok(!parseEnv(parts[svc]).has(k), `${svc}: ${k}`);
+  }
+});
+
 test('check-env: a dashboard file with SUPABASE_SERVICE_ROLE_KEY or VAULT_MASTER_KEY fails; the split files pass', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rzh-env-'));
   fs.writeFileSync(path.join(dir, '.env'), MASTER);

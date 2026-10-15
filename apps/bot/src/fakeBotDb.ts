@@ -1,7 +1,7 @@
 // In-memory BotDb for tests (mirrors decide_approval's pending re-check).
 import { randomUUID } from 'node:crypto';
 import type { BotDb, NewRequest, NewVoiceNote } from './db';
-import type { OperatorNotice, OperatorStatus } from './operator';
+import type { OperatorJobLite, OperatorLoginLite, OperatorNotice, OperatorStatus } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
 export function approval(p: Partial<BotApproval> = {}): BotApproval {
@@ -77,6 +77,18 @@ export class FakeBotDb implements BotDb {
   }
   operatorNotices: (OperatorNotice & { telegram_sent_at: string | null })[] = [];
   operatorStatuses = new Map<string, OperatorStatus>();
+  operatorJobRows: OperatorJobLite[] = [];
+  operatorLoginRows: OperatorLoginLite[] = [];
+  evidence = new Map<number, { label: string; jpeg: Buffer }>();
+  async addOperatorJob(client: string, brief: string) {
+    if (!this.operatorStatuses.has(client)) throw new Error(`unknown client ${client}`);
+    const id = randomUUID();
+    this.operatorJobRows.unshift({ id, client_slug: client, title: brief.split('\n')[0]!.slice(0, 200), status: 'queued', cost_usd: 0, updated_at: this.now().toISOString(), error: null });
+    return id;
+  }
+  async operatorJobs(client: string | null, limit: number) { return this.operatorJobRows.filter((j) => !client || j.client_slug === client).slice(0, limit); }
+  async operatorLogins(client: string | null) { return this.operatorLoginRows.filter((l) => !client || l.client_slug === client); }
+  async operatorEvidence(ids: number[]) { return ids.flatMap((id) => { const e = this.evidence.get(id); return e ? [{ id, ...e }] : []; }); }
   async unsentOperatorNotices(sinceIso: string) { return this.operatorNotices.filter((n) => !n.telegram_sent_at && n.created_at >= sinceIso); }
   async markOperatorNoticeSent(id: number) { const n = this.operatorNotices.find((x) => x.id === id); if (n && !n.telegram_sent_at) n.telegram_sent_at = this.now().toISOString(); }
   async setOperatorPaused(paused: boolean) { this.settings.operator_paused = paused; }

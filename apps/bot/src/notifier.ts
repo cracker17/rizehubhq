@@ -4,12 +4,14 @@ import type { BotDb } from './db';
 import { formatApproval, formatBudgetAlert, formatReport, isQuestion } from './format';
 import { approvalKeyboard, decidedKeyboard, type InlineMarkup } from './keyboard';
 import { inQuietHours, parseQuietHours, shouldSendApproval } from './quiet';
-import { formatOperatorNotice, isOperatorReply, OPERATOR_LABELS, shouldNotify } from './operator';
+import { formatOperatorNotice, noticeEvidence, operatorLabels, shouldNotify } from './operator';
 import type { BotApproval } from './types';
 
 export interface Sender {
   send(chatId: number, html: string, markup?: InlineMarkup): Promise<number>;
   edit(chatId: number, messageId: number, html: string, markup?: InlineMarkup): Promise<void>;
+  /** A photo album (Telegram sendMediaGroup; one photo is sent alone). Optional: tests may leave it out. */
+  photos?(chatId: number, photos: { jpeg: Buffer; caption: string }[]): Promise<void>;
 }
 
 export interface NotifierDeps {
@@ -36,9 +38,7 @@ export function tzOf(settings: Record<string, unknown>): string {
 export function renderApproval(ap: BotApproval, names: Map<string, string>, dashboardUrl: string, tz: string): { text: string; markup: InlineMarkup } {
   const text = formatApproval(ap, names, tz);
   const markup = ap.status === 'pending'
-    ? approvalKeyboard(ap.id, dashboardUrl, isOperatorReply(ap)
-      ? { approveLabel: OPERATOR_LABELS.approve, changesLabel: OPERATOR_LABELS.changes, rejectLabel: OPERATOR_LABELS.reject }
-      : { changesLabel: isQuestion(ap) ? '✏️ Answer' : undefined })
+    ? approvalKeyboard(ap.id, dashboardUrl, operatorLabels(ap) ?? { changesLabel: isQuestion(ap) ? '✏️ Answer' : undefined })
     : decidedKeyboard(ap.id, dashboardUrl);
   return { text, markup };
 }
@@ -106,7 +106,18 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
   });
   for (const n of notices) {
     try {
-      if (shouldNotify(n)) { await deps.sender.send(deps.chatId, formatOperatorNotice(n)); r.operatorNotices++; }
+      if (shouldNotify(n)) {
+        await deps.sender.send(deps.chatId, formatOperatorNotice(n, deps.dashboardUrl));
+        r.operatorNotices++;
+        // QA screenshots of a finished job as an album; best effort (the text already went out).
+        const ids = noticeEvidence(n);
+        if (ids.length && deps.sender.photos) {
+          try {
+            const shots = await deps.db.operatorEvidence(ids);
+            if (shots.length) await deps.sender.photos(deps.chatId, shots.map((s) => ({ jpeg: s.jpeg, caption: s.label })));
+          } catch (e) { log(`[bot] QA screenshots of notice ${n.id} not sent: ${e instanceof Error ? e.message : String(e)}`); }
+        }
+      }
       await deps.db.markOperatorNoticeSent(n.id);
     } catch (e) {
       r.errors++;

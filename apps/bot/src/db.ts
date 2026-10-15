@@ -1,7 +1,7 @@
 // BotDb: everything the bot reads/writes in Supabase (service role, server-only). Decisions go
 // through the decide_approval RPC so the bot and dashboard share one set of rules.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { NOTICE_ACTIONS, type OperatorNotice, type OperatorStatus } from './operator';
+import { NOTICE_ACTIONS, type OperatorJobLite, type OperatorLoginLite, type OperatorNotice, type OperatorStatus } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
 export const APPROVAL_COLS = '*, requests(priority,title,due_date,clients(name))';
@@ -48,6 +48,14 @@ export interface BotDb {
   operatorClients(): Promise<{ slug: string; name: string }[]>;
   /** Reply drafts waiting for the CEO (pending operator_reply approvals), oldest first. */
   pendingOperatorReplies(limit: number): Promise<{ rows: BotApproval[]; total: number }>;
+  // ---------- worker mode (20261016000000_operator_worker.sql) ----------
+  /** /task: queues a job for the client (operator_add_job). Returns the job id. */
+  addOperatorJob(client: string, brief: string): Promise<string>;
+  /** /jobs: open jobs plus the last 2 days' finished ones, newest first. */
+  operatorJobs(client: string | null, limit: number): Promise<OperatorJobLite[]>;
+  operatorLogins(client: string | null): Promise<OperatorLoginLite[]>;
+  /** QA screenshots by id (decoded). */
+  operatorEvidence(ids: number[]): Promise<{ id: number; label: string; jpeg: Buffer }[]>;
 }
 
 export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
@@ -111,9 +119,16 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
     unsentOperatorNotices: async (sinceIso) => {
       // operator_inbox(...) is a to-one embed (inbox_id → operator_inbox.id): PostgREST returns an object, not a list.
       const res = await sb.from('operator_actions')
-        .select('id,created_at,client_slug,inbox_id,action,ok,detail,operator_inbox(sender_name,final_text,mode,error,url)')
+        .select('id,created_at,client_slug,inbox_id,job_id,action,ok,detail,operator_inbox(sender_name,final_text,mode,error,url)')
         .is('telegram_sent_at', null).in('action', [...NOTICE_ACTIONS]).gte('created_at', sinceIso).order('id').limit(20);
-      return must<OperatorNotice[]>(res as unknown as { data: OperatorNotice[] | null; error: { message: string } | null }, 'operator_actions');
+      const rows = must<OperatorNotice[]>(res as unknown as { data: OperatorNotice[] | null; error: { message: string } | null }, 'operator_actions');
+      const jobIds = [...new Set(rows.map((r) => r.job_id).filter((x): x is string => !!x))];
+      if (jobIds.length) {
+        const jobs = await sb.from('operator_jobs').select('id,title').in('id', jobIds);
+        const titles = new Map(((jobs.data ?? []) as { id: string; title: string }[]).map((j) => [j.id, j.title]));
+        for (const r of rows) if (r.job_id) r.job_title = titles.get(r.job_id) ?? null;
+      }
+      return rows;
     },
     markOperatorNoticeSent: async (id) => {
       must(await sb.from('operator_actions').update({ telegram_sent_at: new Date().toISOString() }).eq('id', id).is('telegram_sent_at', null), 'operator notice sent');
@@ -128,6 +143,23 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
       const res = await sb.from('approvals').select(APPROVAL_COLS, { count: 'exact' }).eq('status', 'pending')
         .eq('payload->>type', 'operator_reply').order('created_at').limit(limit);
       return { rows: must<BotApproval[]>(res, 'approvals'), total: res.count ?? 0 };
+    },
+    addOperatorJob: async (client, brief) => must<string>(await sb.rpc('operator_add_job', { p_client: client, p_brief: brief, p_channel: null, p_via: 'telegram' }), 'operator_add_job'),
+    operatorJobs: async (client, limit) => {
+      let q = sb.from('operator_jobs').select('id,client_slug,title,status,cost_usd,updated_at,error')
+        .or(`status.in.(queued,running,waiting,verifying),updated_at.gt.${new Date(Date.now() - 2 * 86400_000).toISOString()}`);
+      if (client) q = q.eq('client_slug', client);
+      return must<OperatorJobLite[]>(await q.order('updated_at', { ascending: false }).limit(limit), 'operator_jobs');
+    },
+    operatorLogins: async (client) => {
+      let q = sb.from('operator_logins').select('client_slug,site,label,state,last_checked_at,detail').eq('enabled', true);
+      if (client) q = q.eq('client_slug', client);
+      return must<OperatorLoginLite[]>(await q.order('client_slug').order('site'), 'operator_logins');
+    },
+    operatorEvidence: async (ids) => {
+      const rows = must<{ id: number; label: string; data: string }[]>(await sb.from('operator_evidence').select('id,label,data').in('id', ids).order('id'), 'operator_evidence');
+      // bytea comes back hex-encoded ("\\x...") through PostgREST
+      return rows.map((r) => ({ id: Number(r.id), label: r.label, jpeg: Buffer.from(String(r.data).replace(/^\\x/, ''), 'hex') })).filter((r) => r.jpeg.length > 0);
     },
   };
 }

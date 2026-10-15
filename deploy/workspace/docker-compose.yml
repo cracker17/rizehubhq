@@ -28,9 +28,12 @@ x-browser: &browser
     PASSWORD: ${WS_VIEWER_PASSWORD:?set WS_VIEWER_PASSWORD in deploy/workspace/.env}
     # An explicit, non-default profile dir: Chrome 136+ ignores --remote-debugging-port on its default profile.
     # The DevTools port binds to 127.0.0.1 inside the container; only the cdp-* sidecar can reach it.
+    # --restore-last-session: session-only cookies (sites without "remember me") survive a container restart, so a
+    # restart does not log the operator out (docs/17 "Logins").
     CHROME_CLI: >-
       --user-data-dir=/config/hq-profile --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1
       --remote-allow-origins=* --no-first-run --no-default-browser-check --disable-features=Translate
+      --restore-last-session
   volumes:
     - ./init:/custom-cont-init.d:ro          # clears stale profile locks after a crash or reboot
   shm_size: 1gb
