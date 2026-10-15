@@ -79,7 +79,7 @@ export const VARS = [
   S({ key: 'DAILY_AI_BUDGET_USD', group: 'AI', svc: ['worker', 'dashboard', 'operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0 (0 = no cap)') }),
   S({ key: 'MONTHLY_BUDGET_USD', group: 'AI', svc: ['worker', 'bot', 'operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0') }),
   ...['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'MOONSHOT_API_KEY']
-    .map((key) => S({ key, group: 'AI', svc: key === 'ANTHROPIC_API_KEY' ? ['worker', 'operator'] : ['worker'], secret: true, check: (v) => (v.length >= 20 && !/\s/.test(v) ? null : 'looks too short / has spaces') })),
+    .map((key) => S({ key, group: 'AI', svc: ['ANTHROPIC_API_KEY', 'GROQ_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'].includes(key) ? ['worker', 'operator'] : ['worker'], secret: true, check: (v) => (v.length >= 20 && !/\s/.test(v) ? null : 'looks too short / has spaces') })),
   S({ key: 'ANTHROPIC_WORKSPACE_ID', group: 'AI', svc: ['worker', 'operator'], check: (v) => (/^wrkspc_[A-Za-z0-9]{8,64}$/.test(v) ? null : 'must look like wrkspc_01Jw… (only for a multi-workspace Anthropic key)') }),
   // Worker
   S({ key: 'POLL_INTERVAL_MS', group: 'Worker', svc: ['worker'], check: intIn(250) }),
@@ -196,6 +196,12 @@ export const VARS = [
   S({ key: 'OPERATOR_WHATSAPP_VERIFY_TOKEN', group: 'Operator', svc: ['operator'], secret: true, check: (v) => (v.length >= 16 ? null : 'too short: openssl rand -hex 16') }),
   S({ key: 'OPERATOR_WHATSAPP_TOKEN', group: 'Operator', svc: ['operator'], secret: true }),
   S({ key: 'OPERATOR_WHATSAPP_GRAPH_VERSION', group: 'Operator', svc: ['operator'], check: (v) => (/^v\d{1,3}\.\d$/.test(v) ? null : 'must look like v23.0') }),
+  S({ key: 'OPERATOR_FALLBACK', group: 'Operator', svc: ['operator'], check: (v) => (['on', 'off', 'true', 'false', '1', '0', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be on | off') }),
+  S({ key: 'OPERATOR_FALLBACK_PROVIDERS', group: 'Operator', svc: ['operator'], check: (v) => (v.split(',').every((p) => ['groq', 'google', 'openrouter', 'openai', 'moonshot'].includes(p.trim())) ? null : 'comma list of groq, google, openrouter, openai, moonshot') }),
+  S({ key: 'OPERATOR_FALLBACK_ROLE', group: 'Operator', svc: ['operator'], check: (v) => (['lead', 'specialist', 'dev', 'design', 'writer', 'sales', 'reports', 'qa', 'light'].includes(v) ? null : 'must be a model role') }),
+  S({ key: 'OPERATOR_FALLBACK_JOBS', group: 'Operator', svc: ['operator'], check: (v) => (['on', 'off', 'true', 'false', '1', '0', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be on | off') }),
+  S({ key: 'OPERATOR_FALLBACK_MAX_STEPS', group: 'Operator', svc: ['operator'], check: intIn(4, 60) }),
+  S({ key: 'OPERATOR_FALLBACK_MAX_USD_PER_DAY', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number (0 = no cap)') }),
   S({ key: 'OPERATOR_JOBS', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
   S({ key: 'OPERATOR_JOB_TICK_MS', group: 'Operator', svc: ['operator'], check: intIn(2_000) }),
   S({ key: 'OPERATOR_MAX_USD_PER_JOB_RUN', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),

@@ -85,7 +85,7 @@ export function formatJobMemory(notes: MemoryNote[]): string {
   return keep.length ? keep.map((n) => `- ${n.created_at.slice(0, 10)} [${n.kind}] ${clip(n.text, 400)}`).join('\n') : '(none)';
 }
 
-export function buildJobPrompt(o: { client: OperatorClient; job: JobRow; memory: string; recentWork: MemoryNote[]; actions: JobActionRow[]; tools: string[] }): string {
+export function buildJobPrompt(o: { client: OperatorClient; job: JobRow; memory: string; recentWork: MemoryNote[]; actions: JobActionRow[]; tools: string[]; voice?: string }): string {
   const j = o.job;
   const plan = list(j.plan);
   const prev = j.result && typeof j.result.summary === 'string' ? `Earlier run's result: ${clip(j.result.summary, 800)}${list(j.result.links).length ? `\nLinks: ${list(j.result.links).join(', ')}` : ''}` : '';
@@ -93,6 +93,7 @@ export function buildJobPrompt(o: { client: OperatorClient; job: JobRow; memory:
     `CLIENT: ${o.client.name} (${o.client.slug})`,
     `CLIENT RULES (always follow):\n${o.client.rules.trim() || '(none)'}`,
     `PROJECT MEMORY (HQ Brain):\n<data>\n${o.memory}\n</data>`,
+    o.voice ? `${o.voice}\n(Write client_update in this voice.)` : '',
     `RECENT OPERATOR WORK FOR THIS CLIENT:\n<data>\n${formatJobMemory(o.recentWork)}\n</data>`,
     `JOB: ${clip(j.title, 200)} (run ${j.runs} of ${j.max_runs}; ${j.source === 'chat' ? 'asked in the client chat, Julev approved the plan' : 'added by Julev'})`,
     `BRIEF:\n<data>\n${clip(j.brief, 6000)}\n</data>`,

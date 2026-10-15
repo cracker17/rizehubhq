@@ -16,6 +16,7 @@ import type { ChatMessage } from './browser/chatDom';
 import { MaybeSentError } from './browser/googleChat';
 import type { SendInput, SendSteps } from './browser/googleChat';
 import { buildUserPrompt, formatMemory, searchQuery } from './prompt';
+import { voiceSection } from './fallback';
 
 export type ReadResult = { title: string; messages: ChatMessage[] };
 
@@ -45,6 +46,16 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slic
 export class Operator {
   private lastPoll = new Map<string, number>();
   private lastBlockedLog = { reason: '', at: 0 };
+  private voices = new Map<string, { text: string; at: number }>();
+
+  /** Julev's voice for a client: his recent messages there (cached 10 minutes). */
+  private async voice(client: string): Promise<string> {
+    const v = this.voices.get(client);
+    if (v && this.now() - v.at < 10 * 60_000) return v.text;
+    const text = voiceSection(await (this.d.db.myMessages?.(client, 40) ?? Promise.resolve([] as string[])).catch(() => [] as string[]));
+    this.voices.set(client, { text, at: this.now() });
+    return text;
+  }
 
   constructor(private d: OperatorDeps) {}
 
@@ -183,15 +194,16 @@ export class Operator {
       return 'failed';
     }
 
-    const [history, memory] = await Promise.all([
+    const [history, memory, voice] = await Promise.all([
       this.d.db.history(row.channel_id, row.sent_at, 20).catch(() => [] as InboxRow[]),
       this.memory(client, row),
+      this.voice(client.slug),
     ]);
-    const prompt = buildUserPrompt({ client, channelName: channel.name, message: row, history, memory: memory.text, direct: channel.direct || channel.kind === 'whatsapp', kind: channel.kind });
+    const prompt = buildUserPrompt({ client, channelName: channel.name, message: row, history, memory: memory.text, direct: channel.direct || channel.kind === 'whatsapp', kind: channel.kind, voice });
     try {
       const out = await this.d.classify({ prompt, model: g.model, apiKey: g.apiKey, capUsd: g.capUsd });
       await this.d.db.recordUsage({ tokensIn: out.tokensIn, tokensOut: out.tokensOut, costUsd: out.costUsd,
-        detail: { model: out.model, inbox_id: row.id, client: client.slug } });
+        detail: { model: out.model, inbox_id: row.id, client: client.slug, ...(out.model.startsWith('fallback:') || g.model.startsWith('fallback:') ? { runtime: 'operator-fallback' } : {}) } });
       const outcome = await this.d.db.recordDraft(row.id, { ...out.result, project: memory.project, model: out.model, cost_usd: out.costUsd });
       this.log(`[operator] ${client.slug}: ${row.sender_name}'s message → ${out.result.category} (${out.result.action_types.join(',') || '-'}, ${out.result.confidence}) → ${outcome}`);
       return outcome;

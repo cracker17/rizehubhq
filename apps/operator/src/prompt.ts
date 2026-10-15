@@ -103,18 +103,19 @@ export function formatHistory(rows: InboxRow[], currentId: string): string {
   return lines.length ? lines.join('\n') : '(no earlier messages stored for this chat)';
 }
 
-export function buildUserPrompt(o: { client: OperatorClient; channelName: string; message: InboxRow; history: InboxRow[]; memory: string; direct?: boolean; kind?: string }): string {
+export function buildUserPrompt(o: { client: OperatorClient; channelName: string; message: InboxRow; history: InboxRow[]; memory: string; direct?: boolean; kind?: string; voice?: string }): string {
   const m = o.message;
   return [
     `CLIENT: ${o.client.name} (${o.client.slug})`,
     `Julev appears in this chat as: ${o.client.my_names.join(', ') || 'Julev'}`,
     `CLIENT RULES (always follow):\n${o.client.rules.trim() || '(none)'}`,
     `PROJECT MEMORY (HQ Brain):\n<data>\n${o.memory}\n</data>`,
+    o.voice ?? '',
     `CHAT: ${o.channelName}${m.space_name ? ` (${m.space_name})` : ''}${o.kind && o.kind !== 'google_chat' ? ` · ${o.kind}` : ''}${o.direct ? ' · a direct conversation with Julev' : ''}`,
     `EARLIER MESSAGES (oldest first):\n<data>\n${formatHistory(o.history, m.id)}\n</data>`,
     `NEW MESSAGE${m.mentions_me ? ' (mentions Julev)' : ''}:\n<data>\n[${m.sent_at ?? '?'}] ${clip(m.sender_name, 60) || 'Unknown'}: ${clip(m.body, 6000)}\n</data>`,
     'Return the JSON result.',
-  ].join('\n\n');
+  ].filter(Boolean).join('\n\n');
 }
 
 /** The search query for brain_search: the message's own words (short, no punctuation noise). */

@@ -16,6 +16,7 @@ import { executeApiAction, type ApiEnv } from './apis';
 import { JobBrowser, type WithContext } from './browser';
 import type { JobDb } from './db';
 import { checkBrowseUrl } from './guards';
+import { voiceSection } from '../fallback';
 import { buildJobPrompt, JOB_SYSTEM_PROMPT, type JobActionRow, type JobRow } from './prompt';
 import { qaFeedback, qaSummary, qaTargets, qaVerdict, type QaReport } from './qa';
 import type { JobRunOutcome } from './runner';
@@ -25,7 +26,7 @@ export interface AgentCall { prompt: string; systemPrompt: string; tools: ToolSp
 
 export interface JobLoopDeps {
   db: JobDb;
-  op: Pick<OperatorDb, 'clients' | 'channels' | 'brainBundle' | 'brainSearch' | 'recordUsage'>;
+  op: Pick<OperatorDb, 'clients' | 'channels' | 'brainBundle' | 'brainSearch' | 'recordUsage'> & Partial<Pick<OperatorDb, 'myMessages'>>;
   /** The client's workspace browser, under its profile lock, one call at a time. */
   withProfile: (profile: string) => WithContext;
   gate: () => Promise<Gate>;
@@ -85,10 +86,11 @@ export class JobLoop {
     const step = (action: string, detail: Record<string, unknown> = {}) => this.d.db.step(job.id, action, detail).catch(() => undefined);
     const withCtx = this.d.withProfile(client.profile);
     const browser = new JobBrowser(withCtx, { step });
-    const [memory, recentWork, actions] = await Promise.all([
+    const [memory, recentWork, actions, mine] = await Promise.all([
       this.memory(client, `${job.title} ${job.brief}`),
       this.d.db.recentWork(client.slug, 10).catch(() => []),
       this.d.db.actions(job.id).catch(() => [] as JobActionRow[]),
+      this.d.op.myMessages ? this.d.op.myMessages(client.slug, 40).catch(() => [] as string[]) : Promise.resolve([] as string[]),
     ]);
     const box = new JobToolbox({
       job, client, browser, withCtx, net: this.d.net, api: this.d.api, step,
@@ -100,7 +102,7 @@ export class JobLoop {
       terminal: this.d.terminal?.(job.id),
     });
     const tools = box.specs();
-    const prompt = buildJobPrompt({ client, job, memory, recentWork, actions, tools: tools.map((t) => t.name) });
+    const prompt = buildJobPrompt({ client, job, memory, recentWork, actions, tools: tools.map((t) => t.name), voice: voiceSection(mine) });
     await step('job.run_started', { run: job.runs });
     let out: JobRunOutcome;
     try {
@@ -112,7 +114,7 @@ export class JobLoop {
     }
     if (out.costUsd > 0 || out.tokensIn > 0) {
       await this.d.op.recordUsage({ tokensIn: out.tokensIn, tokensOut: out.tokensOut, costUsd: out.costUsd,
-        detail: { model: out.model, job_id: job.id, client: client.slug, runtime: 'operator-job', turns: out.turns, outcome: out.outcome } }).catch(() => undefined);
+        detail: { model: out.model, job_id: job.id, client: client.slug, runtime: g.model.startsWith('fallback:') ? 'operator-fallback' : 'operator-job', turns: out.turns, outcome: out.outcome } }).catch(() => undefined);
     }
     const f = out.end?.kind === 'finished' ? out.end.finish : null;
     const result = f ? { ...f, evidence: box.evidence } : {};

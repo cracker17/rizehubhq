@@ -29,6 +29,9 @@ import { SignedOutError } from './browser/googleChat';
 import type { BrowserContext, Page } from 'playwright-core';
 import type { OperatorAccount, OperatorChannel, OperatorClient } from './db';
 import { startHookServer } from './hooks';
+import { chooseGate, classifyFallback, fallbackCandidate, FallbackSwitch, isClaudeOutage, loadFallbackConfig, parseFallbackId, runJobFallback } from './fallback';
+import { createModel } from 'worker/src/models/router';
+import { MODEL_ROLES } from '@rizehubhq/shared';
 import { sendWhatsApp } from './whatsapp';
 import { MaybeSentError } from './browser/googleChat';
 import { Operator, type ChatDriver } from './operator';
@@ -159,10 +162,37 @@ async function main() {
     return gate({ env, ai, spend: { monthUsd, dayUsd }, model, maxUsdPerMessage: capUsd });
   };
 
+  // Fallback model (fallback.ts): when Claude is out (key, credit, budget, overload) replies and small jobs go on with the
+  // models.yaml fallback (default Groq). Telegram is told once when it switches and once when Claude is back.
+  const fbCfg = loadFallbackConfig(workerEnv(), MODEL_ROLES);
+  const fb = new FallbackSwitch();
+  const smartGate = (kind: 'message' | 'job', capUsd: number) => async () => {
+    const claude = await gateFor(capUsd)();
+    const env = workerEnv();
+    const candidate = fallbackCandidate({ env: routerEnv(env, runtime.snapshot?.dashboard), cfg: models, role: fbCfg.role, providers: fbCfg.providers });
+    const spent = fb.isDown() || !claude.ok ? await db.fallbackSpendSinceUsd(manilaDayStartIso()).catch(() => 0) : 0;
+    const r = chooseGate({ claude, claudeDown: fb.isDown(), kind, cfg: fbCfg, candidate, fallbackSpentTodayUsd: spent, capUsd });
+    if (r.event === 'restored' && fb.restored()) await db.log('ai.restored', null, null, {}).catch(() => undefined);
+    if (r.event === 'fallback' && fb.shouldAnnounce()) {
+      console.log(`[operator] Claude unavailable (${r.reason}): falling back to ${r.gate.ok ? r.gate.model : '-'}`);
+      await db.log('ai.fallback', null, null, { reason: r.reason, model: r.gate.ok ? r.gate.model.replace(/^fallback:/, '') : null, jobs: fbCfg.jobs }).catch(() => undefined);
+    }
+    return r.gate;
+  };
+  const fallbackLm = async (model: string) => {
+    const c = parseFallbackId(model);
+    if (!c) throw new Error(`not a fallback model: ${model}`);
+    return { c, lm: await createModel(c, routerEnv(workerEnv(), runtime.snapshot?.dashboard)) };
+  };
+
   const op = new Operator({
     db, chat, pollMs: cfg.pollMs, sends: cfg.sends,
-    gate: gateFor(cfg.maxUsdPerMessage),
-    classify: (o) => classifyMessage({ ...o, env: workerEnv() }),
+    gate: smartGate('message', cfg.maxUsdPerMessage),
+    classify: async (o) => {
+      if (o.model.startsWith('fallback:')) { const { c, lm } = await fallbackLm(o.model); return classifyFallback({ model: lm, c, prompt: o.prompt }); }
+      try { return await classifyMessage({ ...o, env: workerEnv() }); }
+      catch (e) { const m = e instanceof Error ? e.message : String(e); if (isClaudeOutage(m)) fb.markDown(m); throw e; }
+    },
   });
 
   // ---------- WhatsApp Business webhook (internal listener; the dashboard forwards Meta's calls) ----------
@@ -189,8 +219,16 @@ async function main() {
     : null;
   const jobs = new JobLoop({
     db: jobDb, op: db, withProfile,
-    gate: gateFor(cfg.maxUsdPerJobRun),
-    runAgent: (c) => runJobAgent({ ...c, env: workerEnv() }),
+    gate: smartGate('job', cfg.maxUsdPerJobRun),
+    runAgent: async (c) => {
+      if (c.model.startsWith('fallback:')) {
+        const { c: cand, lm } = await fallbackLm(c.model);
+        return runJobFallback({ model: lm, c: cand, prompt: c.prompt, systemPrompt: c.systemPrompt, tools: c.tools, ended: c.ended, maxSteps: fbCfg.maxSteps });
+      }
+      const out = await runJobAgent({ ...c, env: workerEnv() });
+      if (out.outcome === 'error' && out.error && isClaudeOutage(out.error)) fb.markDown(out.error);
+      return out;
+    },
     qa: (urls, withCtx) => runQa(urls, { withCtx, net }),
     api: {
       http: { fetch: (...a) => fetch(...a), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) },

@@ -63,7 +63,7 @@ export function parseCandidate(spec: string): Candidate {
   return { provider, modelId };
 }
 
-const KEY_ENV: Record<Provider, string> = {
+export const KEY_ENV: Record<Provider, string> = {
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   groq: 'GROQ_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',

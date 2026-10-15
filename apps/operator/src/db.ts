@@ -100,6 +100,10 @@ export interface OperatorDb {
   recordUsage(u: UsageEntry): Promise<void>;
   monthSpendUsd(): Promise<number>;
   spendSinceUsd(sinceIso: string): Promise<number>;
+  /** Julev's own recent messages to a client (newest first): his voice for the drafts. */
+  myMessages(client: string, limit: number): Promise<string[]>;
+  /** What the fallback model spent since then (usage rows with detail.runtime = operator-fallback). */
+  fallbackSpendSinceUsd(sinceIso: string): Promise<number>;
   // ---------- unread sweep (20261017040000_operator_discovery.sql) ----------
   accounts(): Promise<OperatorAccount[]>;
   discover(accountId: string, name: string, url: string, direct: boolean): Promise<{ channel_id: string; created: boolean; enabled: boolean }>;
@@ -185,6 +189,18 @@ export function createSupabaseOperatorDb(sb: SupabaseClient): OperatorDb {
         p_tokens_in: u.tokensIn, p_tokens_out: u.tokensOut, p_cost: u.costUsd, p_detail: u.detail });
     },
     monthSpendUsd: () => sumUsage(manilaMonthStartIso()),
+    myMessages: async (client, limit) => {
+      const { data, error } = await sb.from('operator_inbox').select('body').eq('client_slug', client).eq('from_me', true)
+        .order('created_at', { ascending: false }).limit(limit);
+      if (error) throw new Error(`operator_inbox: ${error.message}`);
+      return ((data ?? []) as { body: string }[]).map((r) => r.body);
+    },
+    fallbackSpendSinceUsd: async (sinceIso) => {
+      const { data, error } = await sb.from('activity_log').select('cost_usd').like('action', 'usage.%').eq('detail->>runtime', 'operator-fallback')
+        .gte('created_at', sinceIso).gt('cost_usd', 0).limit(5000);
+      if (error) throw new Error(`activity_log: ${error.message}`);
+      return ((data ?? []) as { cost_usd: number | string }[]).reduce((s, r) => s + Number(r.cost_usd || 0), 0);
+    },
     spendSinceUsd: sumUsage,
     accounts: async () => {
       const { data, error } = await sb.from('operator_accounts').select('*').eq('enabled', true).order('created_at');

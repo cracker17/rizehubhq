@@ -473,6 +473,19 @@ Watched chats → **People to watch**: one name per line (part of a name works; 
 chat messages get drafts; everyone else is still stored (history the drafter reads for context) but stays FYI. Empty
 = everyone. Gmail keeps its own sender list. The live screen has **Full screen** (Esc to leave).
 
+### When Claude is out: fallback model + your voice (`apps/operator/src/fallback.ts`)
+
+If Claude can't be used (no key, credit too low, budget used up, overloaded, key rejected), the operator keeps going on
+the fallback model from `config/models.yaml` (default **Groq**, the role's first Groq model with a key: today
+`groq:openai/gpt-oss-120b`; nothing is hard-coded). Replies are drafted with the same schema, tiers and approvals;
+**small jobs** run with the same tools in a capped loop (`OPERATOR_FALLBACK_MAX_STEPS`, default 24); a job that needs
+more waits or tells you. Telegram says once "🔁 Claude is unavailable … continue on groq:…" and once "✅ Claude is
+back"; Claude is tried again every 30 minutes. The fallback has its own daily cap (`OPERATOR_FALLBACK_MAX_USD_PER_DAY`,
+default $1; Groq's free tier costs $0). Off: `OPERATOR_FALLBACK=off`; jobs only on Claude: `OPERATOR_FALLBACK_JOBS=off`.
+
+**Your voice**: every draft (Claude or the fallback) and every job's client update gets up to 12 of your own recent
+messages to that client as style examples ("HOW JULEV WRITES"), so replies sound like you whichever model writes them.
+
 ### Demo (`/operator` without Supabase, or `/operator?demo=1` on the live dashboard)
 
 A scripted LvlUp morning plays on the real Operator page with fake data (`lib/operatorDemo.ts`, tested): Alex asks in
