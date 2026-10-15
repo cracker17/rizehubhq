@@ -59,6 +59,8 @@ export interface OperatorHomeData {
   accounts: OperatorAccountRow[];
   /** Phase 3: the Gmail senders to watch per client (empty = everyone). */
   emailTargets: { client_slug: string; pattern: string }[];
+  /** Phase 3: the people whose chat messages get drafts (empty = everyone). */
+  chatPeople: { client_slug: string; name: string }[];
   /** Phase 3: posting in Slack / Teams / Gmail per client (a passed send test + the switch). */
   posting: OperatorPostingRow[];
   /** Telegram digest times 'HH:MM' (null = off); settings.operator_digest_times. */

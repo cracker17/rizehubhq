@@ -2,11 +2,11 @@
 // /operator (docs/17-OPERATOR.md "Operator page"): watch the AI work. The client's real browser on the left (the same
 // screen the operator drives; Take over pauses its sends while you use it), the live step-by-step feed on the right,
 // then the inbox of client messages with what happened to each, and the chats being watched.
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import {
-  Eye, EyeOff, ExternalLink, Hand, Keyboard, MessageSquareText, MonitorPlay, OctagonX, Play, Plus, Send, Sparkles, TriangleAlert, Undo2, UserRound,
+  Eye, EyeOff, ExternalLink, Maximize2, Minimize2, Hand, Keyboard, MessageSquareText, MonitorPlay, OctagonX, Play, Plus, Send, Sparkles, TriangleAlert, Undo2, UserRound,
 } from 'lucide-react';
 import { useHq } from '@/lib/data/store';
 import { btn, inputCls } from '@/components/clients/ui';
@@ -21,7 +21,7 @@ import { useOperatorLive, type LiveState } from './useOperatorLive';
 import { Pill } from './Pill';
 import { OperatorJobs } from './OperatorJobs';
 import { OperatorRules } from './OperatorRules';
-import { Accounts, Posting } from './OperatorAccounts';
+import { Accounts, ChatPeople, Posting } from './OperatorAccounts';
 
 const KIND_ICON = { read: MessageSquareText, think: Sparkles, type: Keyboard, send: Send, you: UserRound, warn: TriangleAlert } as const;
 /** The kill switch: the one red solid button (destructive = red; it only ever stops sends). */
@@ -155,6 +155,17 @@ function LiveScreen({ client, actions, pending, run, demo, drawn }: {
   const [show, setShow] = useState(true);
   const [editing, setEditing] = useState(false);
   const [url, setUrl] = useState(client.viewer_url ?? '');
+  const screenRef = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const on = () => setFull(document.fullscreenElement === screenRef.current && !!screenRef.current);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+  const toggleFull = () => {
+    if (document.fullscreenElement) { void document.exitFullscreen().catch(() => undefined); return; }
+    void screenRef.current?.requestFullscreen?.().catch(() => undefined);
+  };
   const step = activeStep(actions, client.slug, Date.now());
   // Live: through HQ, which signs a short-lived viewer token for you (HQ login + 2FA); the viewer has no password prompt.
   const href = demo || !client.viewer_url ? client.viewer_url : `/api/operator/viewer?client=${encodeURIComponent(client.slug)}`;
@@ -171,6 +182,7 @@ function LiveScreen({ client, actions, pending, run, demo, drawn }: {
         <h2 className="text-base font-semibold">Live screen · {client.name}</h2>
         {client.paused ? <Pill tone="warning">You have control</Pill> : working ? <Pill tone="brand"><Dot on />AI is working</Pill> : <Pill tone="muted">Idle</Pill>}
         <div className="ml-auto flex flex-wrap gap-2">
+          {(drawn || (client.viewer_url && show)) && <button className={btn.small} onClick={toggleFull} aria-pressed={full}>{full ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}{full ? 'Exit full screen' : 'Full screen'}</button>}
           {client.viewer_url && <button className={btn.small} onClick={() => setShow((v) => !v)} aria-pressed={show}>{show ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}{show ? 'Hide' : 'Show'}</button>}
           {href && <a className={btn.small} href={href} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} aria-hidden />New tab</a>}
           {client.paused
@@ -180,7 +192,7 @@ function LiveScreen({ client, actions, pending, run, demo, drawn }: {
       </div>
 
       {drawn ? (
-        <div className="relative">
+        <div ref={screenRef} className={clsx('relative', full && 'flex items-center justify-center bg-black [&>div:first-child]:max-h-full [&>div:first-child]:w-auto [&>div:first-child]:h-full')}>
           {drawn}
           {working && step && (
             <div className="pointer-events-none absolute right-3 top-10 flex max-w-[70%] items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] glass">
@@ -190,7 +202,7 @@ function LiveScreen({ client, actions, pending, run, demo, drawn }: {
           )}
         </div>
       ) : client.viewer_url && show ? (
-        <div className="relative aspect-[16/10] w-full bg-black">
+        <div ref={screenRef} className="relative aspect-[16/10] w-full bg-black">
           <iframe title={`${client.name} browser`} src={href ?? undefined} className="absolute inset-0 h-full w-full border-0" allow="clipboard-read; clipboard-write; fullscreen" />
           {working && step && (
             <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] glass">
@@ -291,6 +303,7 @@ function Chats({ data, client, pending, run }: {
           </li>
         ))}
       </ul>
+      {client && <ChatPeople data={data} client={client} pending={pending} run={run} />}
       {client && <Accounts data={data} client={client} pending={pending} run={run} />}
       {client && <Posting data={data} client={client} pending={pending} run={run} />}
       {adding && client && (

@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import { Plus, Radar } from 'lucide-react';
 import { btn, inputCls } from '@/components/clients/ui';
 import { ACCOUNT_KINDS, ago, type OperatorClientRow, type OperatorHomeData, type SweepKind } from '@/lib/operatorView';
-import { addAccountAction, requestSendTestAction, setAccountEnabledAction, setEmailModeAction, setEmailTargetsAction, setPostingAction, type OperatorResult } from '@/app/operator-actions';
+import { addAccountAction, requestSendTestAction, setAccountEnabledAction, setChatPeopleAction, setEmailModeAction, setEmailTargetsAction, setPostingAction, type OperatorResult } from '@/app/operator-actions';
 
 type Run = (fn: () => Promise<OperatorResult>, done: string) => void;
 
@@ -147,6 +147,22 @@ function EmailTargets({ data, client, pending, run }: { data: OperatorHomeData; 
         </span>
       </div>
       {mode === 'pick' && <p className="text-xs text-[var(--color-dim)]">Telegram lists their new emails with a number; tap Open (or send /open 2) and the draft reply comes back for your \u2705.</p>}
+    </div>
+  );
+}
+
+/** Watched chats: the people whose messages get drafts. Everyone else is kept as history (context), never drafted. */
+export function ChatPeople({ data, client, pending, run }: { data: OperatorHomeData; client: OperatorClientRow; pending: boolean; run: Run }) {
+  const current = data.chatPeople.filter((p) => p.client_slug === client.slug).map((p) => p.name);
+  const [text, setText] = useState(current.join('\n'));
+  const changed = text.trim() !== current.join('\n').trim();
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-lg bg-[var(--color-panel-2)] p-3">
+      <label htmlFor="op-chat-people" className="text-[13px] font-medium">People to watch</label>
+      <p className="text-xs text-[var(--color-muted)]">One name per line (part of a name works: \u201criley\u201d matches Riley Chen; a WhatsApp number works too). Only their messages get a draft; everyone else is kept as history so the operator has the context. Empty = everyone.</p>
+      <textarea id="op-chat-people" className={clsx(inputCls, 'min-h-[72px] py-2 text-[12px]')} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Alex\nRiley Chen'} disabled={data.demo} />
+      {changed && !data.demo && <button className={clsx(btn.small, 'self-start')} disabled={pending} onClick={() => run(() => setChatPeopleAction(client.slug, text), current.length || text.trim() ? 'Saved: only these people get drafts' : 'Saved: everyone gets drafts')}>Save people</button>}
+      {!changed && current.length > 0 && <p className="text-xs text-[var(--color-dim)]">Watching {current.length} {current.length === 1 ? 'person' : 'people'}.</p>}
     </div>
   );
 }

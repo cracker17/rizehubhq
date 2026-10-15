@@ -144,6 +144,12 @@ export async function setEmailTargetsAction(slug: string, text: string): Promise
   return call('operator_set_email_targets', { p_client: slug, p_patterns: parseTargets(String(text ?? '')) });
 }
 
+/** Chats: the people whose messages get drafts (one per line; empty = everyone). Others are kept as history. */
+export async function setChatPeopleAction(slug: string, text: string): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  return call('operator_set_chat_people', { p_client: slug, p_names: parseTargets(String(text ?? '')) });
+}
+
 export async function setEmailModeAction(slug: string, mode: 'pick' | 'auto'): Promise<OperatorResult> {
   if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
   if (mode !== 'pick' && mode !== 'auto') return { ok: false, error: 'Unknown mode.' };

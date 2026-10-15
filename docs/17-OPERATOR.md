@@ -467,6 +467,12 @@ email. Two modes per client:
 
 Replies to email are posted by you ("Post this yourself") until Gmail passes its send test and you switch posting on.
 
+### People to watch, full-screen live screen (`20261017090000_operator_chat_people.sql`)
+
+Watched chats → **People to watch**: one name per line (part of a name works; a WhatsApp number works too). Only their
+chat messages get drafts; everyone else is still stored (history the drafter reads for context) but stays FYI. Empty
+= everyone. Gmail keeps its own sender list. The live screen has **Full screen** (Esc to leave).
+
 ### Demo (`/operator` without Supabase, or `/operator?demo=1` on the live dashboard)
 
 A scripted LvlUp morning plays on the real Operator page with fake data (`lib/operatorDemo.ts`, tested): Alex asks in
