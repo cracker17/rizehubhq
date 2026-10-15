@@ -110,12 +110,13 @@ export class JobBrowser {
     return this.withCtx(async (ctx) => {
       const p = await this.page(ctx);
       this.refs.clear();
-      let main: { title: string; url: string; text: string; items: SnapItem[] } | null = null;
+      type Snap = { title: string; url: string; text: string; items: SnapItem[] };
+      let main: Snap | null = null;
       const all: SnapItem[] = [];
       const frames = p.frames().slice(0, 8);
       for (let i = 0; i < frames.length; i++) {
         const f = frames[i]!;
-        const r = await f.evaluate(`(${SNAPSHOT_SOURCE})(${JSON.stringify(i === 0 ? '' : `f${i}-`)})`).catch(() => null) as typeof main;
+        const r = await f.evaluate(`(${SNAPSHOT_SOURCE})(${JSON.stringify(i === 0 ? '' : `f${i}-`)})`).catch(() => null) as Snap | null;
         if (!r) continue;
         for (const it of r.items) { this.refs.set(it.ref, { frame: f, item: it }); all.push(it); }
         if (i === 0) main = r;
