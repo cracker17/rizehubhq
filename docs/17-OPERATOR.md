@@ -68,6 +68,15 @@ Live screen (the client's real browser through the viewer, with an "AI is workin
 back), "What it's doing" (each step as it happens), the inbox with each message's draft and outcome (decide in
 Approvals), and watched chats (add with name + chat.google.com address, stop/watch). Demo data without Supabase.
 
+## Live wall (`/wall`)
+
+Every AI worker's screen at once, like a CCTV wall: the six HQ agents (from `agent_screens` + `activity_log`, live
+over realtime) and one camera per Operator client (from `operator_actions`). Each camera shows the worker's app
+(a screenshot when the agent saved one, else a rendering of its editor / browser / doc / sheet / chat), a Claude-style
+cursor moving to what it works on with a highlight box and click ripple, the current step as a caption, REC + clock.
+Click a camera for the big view with its recording: drag the scrubber (or pick a step) to replay what it did. The
+cursor is a visual of the steps HQ records, not a video; the Operator's real screen is the live screen on `/operator`.
+
 ## Workspace (browsers)
 
 `deploy/workspace/docker-compose.yml`: one `lscr.io/linuxserver/chromium` container per client (headful Chromium in

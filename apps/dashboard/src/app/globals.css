@@ -56,5 +56,14 @@ body {
 .scroll-thin { scrollbar-width: thin; scrollbar-color: var(--color-line) transparent; }
 /* /brain: activity rows fade in as they arrive */
 @keyframes brain-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+/* /wall: CCTV screens with a Claude-style cursor */
+.wall-scan { background: repeating-linear-gradient(to bottom, rgb(255 255 255 / .025) 0 1px, transparent 1px 3px); mix-blend-mode: screen; }
+@keyframes wall-blink { 50% { opacity: 0; } }
+.wall-caret { animation: wall-blink 1s steps(1) infinite; color: #d97757; }
+.wall-rec { animation: wall-blink 1.4s steps(1) infinite; }
+@keyframes wall-box-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.wall-box { outline: 2px solid #d97757; background: rgb(217 119 87 / .12); box-shadow: 0 0 0 4px rgb(217 119 87 / .15); animation: wall-box-in .35s .7s ease-out both; }
+@keyframes wall-ripple { from { opacity: .7; transform: scale(.3); } to { opacity: 0; transform: scale(1.6); } }
+.wall-ripple { border: 2px solid #d97757; animation: wall-ripple .6s .85s ease-out both; }
 :focus-visible { outline: 2px solid var(--color-line-active); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
