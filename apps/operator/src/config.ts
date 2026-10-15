@@ -20,6 +20,8 @@
 //                                    The terminal exists only when agent commands are isolated (AGENT_UID / DEV_SANDBOX_PREFIX)
 //   OPERATOR_WEBFLOW_TOKEN_<CLIENT>  fallback API tokens when none is linked in the Client Vault (jobs/apis.ts)
 //   OPERATOR_AIRTABLE_TOKEN_<CLIENT>
+//   OPERATOR_HOOK_PORT               internal webhook listener (WhatsApp; default 4200; only with OPERATOR_WHATSAPP_APP_SECRET)
+//   OPERATOR_WHATSAPP_*              WhatsApp Business (whatsapp.ts)
 //   OPERATOR_SLACK_SELECTORS / OPERATOR_TEAMS_SELECTORS / OPERATOR_GMAIL_SELECTORS   JSON overrides for the watchers
 //                                    of those channels (browser/watchers.ts)
 import { MODEL_ROLES, type ModelRole } from '@rizehubhq/shared';
@@ -39,6 +41,7 @@ export interface OperatorConfig {
   maxUsdPerJobRun: number;
   loginCheckMs: number;
   workspacesDir: string;
+  hookPort: number;
   watchOverrides: Record<'gmail' | 'slack' | 'teams', Record<string, string>>;
 }
 
@@ -79,6 +82,7 @@ export function loadOperatorConfig(env: Env): OperatorConfig {
     maxUsdPerJobRun: Number.isFinite(jobUsd) && jobUsd > 0 ? jobUsd : 2,
     loginCheckMs: int(env.OPERATOR_LOGIN_CHECK_MS, 6 * 3600_000, 600_000),
     workspacesDir: env.OPERATOR_WORKSPACES_DIR?.trim() || '/tmp/operator-jobs',
+    hookPort: int(env.OPERATOR_HOOK_PORT, 4200, 1024),
     watchOverrides: {
       gmail: jsonSelectors(env.OPERATOR_GMAIL_SELECTORS, 'OPERATOR_GMAIL_SELECTORS'),
       slack: jsonSelectors(env.OPERATOR_SLACK_SELECTORS, 'OPERATOR_SLACK_SELECTORS'),

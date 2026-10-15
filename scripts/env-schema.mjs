@@ -190,6 +190,12 @@ export const VARS = [
   S({ key: 'OPERATOR_GCHAT_SELECTORS', group: 'Operator', svc: ['operator'], check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } }),
   ...['OPERATOR_SLACK_SELECTORS', 'OPERATOR_TEAMS_SELECTORS', 'OPERATOR_GMAIL_SELECTORS'].map((key) => S({ key, group: 'Operator', svc: ['operator'],
     check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } })),
+  S({ key: 'OPERATOR_HOOK_PORT', group: 'Operator', svc: ['operator'], check: intIn(1024, 65535) }),
+  S({ key: 'OPERATOR_HOOK_URL', group: 'Operator', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL like http://hq-operator:4200'), note: 'where the dashboard relays the WhatsApp webhook' }),
+  S({ key: 'OPERATOR_WHATSAPP_APP_SECRET', group: 'Operator', svc: ['operator'], secret: true, check: (v) => (v.length >= 16 ? null : 'too short: the Meta app secret') }),
+  S({ key: 'OPERATOR_WHATSAPP_VERIFY_TOKEN', group: 'Operator', svc: ['operator'], secret: true, check: (v) => (v.length >= 16 ? null : 'too short: openssl rand -hex 16') }),
+  S({ key: 'OPERATOR_WHATSAPP_TOKEN', group: 'Operator', svc: ['operator'], secret: true }),
+  S({ key: 'OPERATOR_WHATSAPP_GRAPH_VERSION', group: 'Operator', svc: ['operator'], check: (v) => (/^v\d{1,3}\.\d$/.test(v) ? null : 'must look like v23.0') }),
   S({ key: 'OPERATOR_JOBS', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
   S({ key: 'OPERATOR_JOB_TICK_MS', group: 'Operator', svc: ['operator'], check: intIn(2_000) }),
   S({ key: 'OPERATOR_MAX_USD_PER_JOB_RUN', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),
@@ -235,7 +241,7 @@ export function belongsTo(key, svc) {
   const v = BY_KEY.get(key);
   if (!v) {
     if (/^OPERATOR_CDP_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // one browser endpoint per client profile
-    if (/^OPERATOR_(WEBFLOW|AIRTABLE)_TOKEN_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // job API tokens (fallback to the Client Vault)
+    if (/^OPERATOR_(WEBFLOW|AIRTABLE|WHATSAPP)_TOKEN_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // job API tokens (fallback to the Client Vault)
     return svc === 'worker' && !/^(NEXT_PUBLIC_|TELEGRAM_|BACKUP_)/.test(key);
   }
   return v.svc.includes(svc);

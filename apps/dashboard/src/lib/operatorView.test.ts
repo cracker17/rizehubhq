@@ -88,3 +88,9 @@ test('channel addresses per kind (mirrors operator_channel_url_ok)', async () =>
   assert.equal(channelUrl('teams', 'http://teams.microsoft.com/x'), null);
   assert.equal(channelUrl('google_chat', 'https://chat.google.com/room/A'), 'https://chat.google.com/room/A');
 });
+
+test('WhatsApp numbers become wa.me addresses', async () => {
+  const { channelUrl } = await import('./operatorView');
+  assert.equal(channelUrl('whatsapp', '+63 917 555 0101'), 'https://wa.me/639175550101');
+  assert.equal(channelUrl('whatsapp', '12'), null);
+});

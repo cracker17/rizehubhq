@@ -5,7 +5,7 @@ export type Tone = 'brand' | 'info' | 'success' | 'warning' | 'danger' | 'muted'
 export interface OperatorClientRow {
   slug: string; name: string; profile: string; paused: boolean; enabled: boolean; viewer_url: string | null; brain_project: string | null;
 }
-export type ChannelKind = 'google_chat' | 'gmail' | 'slack' | 'teams';
+export type ChannelKind = 'google_chat' | 'gmail' | 'slack' | 'teams' | 'whatsapp';
 export interface OperatorChannelRow {
   id: string; client_slug: string; kind?: ChannelKind; name: string; url: string; enabled: boolean; last_polled_at: string | null; last_error: string | null;
 }
@@ -244,18 +244,20 @@ export const CHANNEL_KINDS: { kind: ChannelKind; label: string; placeholder: str
   { kind: 'google_chat', label: 'Google Chat', placeholder: 'https://chat.google.com/room/…', sends: true, hint: 'Open the chat in the client’s browser, copy the address bar.' },
   { kind: 'slack', label: 'Slack', placeholder: 'https://app.slack.com/client/T…/C…', sends: false, hint: 'Open the channel or DM in Slack in the browser, copy the address bar.' },
   { kind: 'teams', label: 'Teams', placeholder: 'https://teams.microsoft.com/…', sends: false, hint: 'Open the chat in Teams on the web, copy the address bar (or "Copy link").' },
+  { kind: 'whatsapp', label: 'WhatsApp Business', placeholder: '+63 917 123 4567', sends: true, hint: 'The business number customers write to, and its phone number ID from Meta (WhatsApp → API setup). Messages arrive by webhook; replies go out by the API within 24 h of the customer’s last message.' },
   { kind: 'gmail', label: 'Gmail', placeholder: 'https://mail.google.com/mail/u/0/#label/Client', sends: false, hint: 'A label or a search (e.g. #search/from:client.com): each new thread or reply is read.' },
 ];
 
 /** An address for that kind of channel (mirrors operator_channel_url_ok); null when the operator can't watch it. */
 export function channelUrl(kind: ChannelKind, v: string): string | null {
   const u = v.trim();
-  if (!/^https:\/\/\S+$/.test(u)) return null;
+  if (kind !== 'whatsapp' && !/^https:\/\/\S+$/.test(u)) return null;
   switch (kind) {
     case 'google_chat': return chatUrl(u);
     case 'gmail': return /^https:\/\/mail\.google\.com\/mail\//.test(u) ? u : null;
     case 'slack': return /^https:\/\/app\.slack\.com\/client\//.test(u) || /^https:\/\/[a-z0-9-]+\.slack\.com\/(archives|messages)\//.test(u) ? u : null;
     case 'teams': return /^https:\/\/teams\.(microsoft|live|cloud\.microsoft)\.com\//.test(u) || /^https:\/\/teams\.cloud\.microsoft\//.test(u) ? u : null;
+    case 'whatsapp': { const d = u.replace(/\D/g, ''); return /^\d{6,15}$/.test(d) ? `https://wa.me/${d}` : null; }
     default: return null;
   }
 }

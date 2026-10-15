@@ -171,9 +171,10 @@ export class Operator {
       this.log(`[operator] ${client.slug}: reply to ${row.sender_name} ${r.sent ? 'posted' : 'not posted'} (${row.mode})`);
       return outcome;
     } catch (e) {
-      const final = e instanceof MaybeSentError;
-      this.log(`[operator] ${client.slug}: send failed${final ? ' (may have posted; not retried)' : ''}: ${errMsg(e)}`);
-      return this.d.db.sendDone(row.id, false, errMsg(e), { may_have_posted: final }, final);
+      const maybe = e instanceof MaybeSentError;
+      const final = maybe || (e as { final?: boolean } | null)?.final === true;
+      this.log(`[operator] ${client.slug}: send failed${maybe ? ' (may have posted; not retried)' : final ? ' (not retried)' : ''}: ${errMsg(e)}`);
+      return this.d.db.sendDone(row.id, false, errMsg(e), { may_have_posted: maybe }, final);
     }
   }
 }

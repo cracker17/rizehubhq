@@ -143,6 +143,7 @@ services:
       MODELS_FILE: /app/config/models.yaml
     volumes:
       - ./config:/app/config:ro
+    expose: ["4200"]                           # internal webhook listener (WhatsApp), reached by the dashboard only
     networks: [default, operator-ws]
     read_only: true
     tmpfs: [/tmp]                              # Claude Code's throwaway HOME per call

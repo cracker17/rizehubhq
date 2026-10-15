@@ -248,6 +248,7 @@ function Chats({ data, client, pending, run }: {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [kind, setKind] = useState<ChannelKind>('google_chat');
+  const [phoneId, setPhoneId] = useState('');
   const meta = CHANNEL_KINDS.find((k) => k.kind === kind)!;
   const chats = data.channels.filter((c) => !client || c.client_slug === client.slug);
   return (
@@ -279,13 +280,14 @@ function Chats({ data, client, pending, run }: {
       {adding && client && (
         <form className="mt-3 flex flex-col gap-2" onSubmit={(e) => {
           e.preventDefault();
-          run(async () => { const r = await addChannelAction(client.slug, name, url, kind); if (r.ok) { setAdding(false); setName(''); setUrl(''); } return r; }, `Watching ${name}`);
+          run(async () => { const r = await addChannelAction(client.slug, name, url, kind, phoneId); if (r.ok) { setAdding(false); setName(''); setUrl(''); setPhoneId(''); } return r; }, `Watching ${name}`);
         }}>
           <select className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as ChannelKind)} aria-label="Kind of chat">
             {CHANNEL_KINDS.map((k) => <option key={k.kind} value={k.kind}>{k.label}{k.sends ? '' : ' (read + draft; you post)'}</option>)}
           </select>
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder='Name, e.g. "Alex, Riley"' aria-label="Chat name" />
-          <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={meta.placeholder} inputMode="url" aria-label="Chat address" />
+          <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={meta.placeholder} inputMode={kind === 'whatsapp' ? 'tel' : 'url'} aria-label={kind === 'whatsapp' ? 'Business number' : 'Chat address'} />
+          {kind === 'whatsapp' && <input className={inputCls} value={phoneId} onChange={(e) => setPhoneId(e.target.value)} placeholder="Phone number ID (Meta)" inputMode="numeric" aria-label="Phone number ID" />}
           <div className="flex gap-2">
             <button className={btn.primary} disabled={pending}>Watch this chat</button>
             <button type="button" className={btn.ghost} onClick={() => setAdding(false)}>Cancel</button>

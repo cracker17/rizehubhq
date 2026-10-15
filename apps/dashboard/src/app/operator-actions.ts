@@ -45,7 +45,7 @@ export async function setClientPausedAction(slug: string, paused: boolean): Prom
   return call('operator_set_client_paused', { p_client: slug, p_paused: paused === true, p_via: 'dashboard' });
 }
 
-export async function addChannelAction(slug: string, name: string, url: string, kind: ChannelKind = 'google_chat'): Promise<OperatorResult> {
+export async function addChannelAction(slug: string, name: string, url: string, kind: ChannelKind = 'google_chat', phoneId = ''): Promise<OperatorResult> {
   if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
   const k = CHANNEL_KINDS.find((c) => c.kind === kind);
   if (!k) return { ok: false, error: 'Unknown kind of channel.' };
@@ -53,6 +53,11 @@ export async function addChannelAction(slug: string, name: string, url: string, 
   const u = channelUrl(k.kind, String(url ?? ''));
   if (!n) return { ok: false, error: 'Give it a name, e.g. "Alex, Riley".' };
   if (!u) return { ok: false, error: `Paste the ${k.label} address (${k.placeholder}). ${k.hint}` };
+  if (k.kind === 'whatsapp') {
+    const pid = String(phoneId ?? '').trim();
+    if (!/^\d{6,30}$/.test(pid)) return { ok: false, error: 'Paste the phone number ID from Meta (WhatsApp → API setup): a long number.' };
+    return call('operator_add_whatsapp', { p_client: slug, p_name: n, p_number: u.replace(/^https:\/\/wa\.me\//, ''), p_phone_id: pid });
+  }
   // Google Chat keeps its phase 1 function; the other kinds need 20261017020000_operator_watchers.sql.
   return k.kind === 'google_chat' ? call('operator_add_channel', { p_client: slug, p_name: n, p_url: u })
     : call('operator_add_watch', { p_client: slug, p_kind: k.kind, p_name: n, p_url: u });

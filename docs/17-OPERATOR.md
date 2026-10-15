@@ -353,6 +353,32 @@ Their markup is not public and changes: tune with the probe
 `OPERATOR_SLACK_SELECTORS` / `OPERATOR_TEAMS_SELECTORS` / `OPERATOR_GMAIL_SELECTORS` (JSON, keys as in
 `apps/operator/src/browser/watchers.ts`). A signed-out app shows as "can't read …" on Telegram, like Google Chat.
 
+### WhatsApp Business (`20261017030000_operator_whatsapp.sql`)
+
+A client's WhatsApp **Business** number through Meta's Cloud API (personal WhatsApp numbers are not supported). Every
+customer message arrives by webhook, is drafted with the project memory and follows the reply rules like any chat;
+approved replies are **sent by the API**, quoting the customer's message.
+
+```
+ Meta ──POST──► https://hq.rizehub.ph/api/operator/whatsapp ──relay──► hq-operator:4200/hooks/whatsapp
+                (dashboard, public)                                   (internal; checks X-Hub-Signature-256,
+                                                                       operator_whatsapp_ingest → inbox)
+ approved reply ──► operator_claim_send ──► 24 h window? ──► /pause check ──► POST graph.facebook.com/<ver>/<phone id>/messages
+```
+
+- **24 h rule**: free-form replies only within 24 h of the customer's last message. Later, the send fails once with
+  "outside WhatsApp's 24 h window" (a template is needed; reply yourself in WhatsApp Manager). Never retried.
+- A network error after the request left = "may have been sent", never retried (same rule as the browser).
+- The app secret, verify token and access tokens live only in `.env.operator`; the dashboard only relays bytes.
+
+Setup: Meta Business → WhatsApp → API setup: note the **phone number ID**; create a system-user **access token**
+(`whatsapp_business_messaging`). App → Webhooks: callback `https://hq.rizehub.ph/api/operator/whatsapp`, verify token =
+`OPERATOR_WHATSAPP_VERIFY_TOKEN`, subscribe to `messages`. `.env`: `OPERATOR_WHATSAPP_APP_SECRET`,
+`OPERATOR_WHATSAPP_VERIFY_TOKEN`, `OPERATOR_WHATSAPP_TOKEN` (or `_<CLIENT>`), then `deploy/update.sh --force` (the
+operator logs "WhatsApp webhook listening"). `/operator` → Add chat → WhatsApp Business: the number + phone number ID.
+Check: send the number a message from your phone → it shows on `/operator` and a draft reaches Telegram; ✅ Send →
+the reply arrives on the phone, quoting the message.
+
 ## Phase 3+ (not built yet)
 
-WhatsApp Business.
+Unread discovery across each client's accounts (see the plan in the vault: operator-phase3 session).

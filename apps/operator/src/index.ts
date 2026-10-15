@@ -23,6 +23,9 @@ import { BrowserPool, chatPage } from './browser/cdp';
 import { selectors } from './browser/chatDom';
 import { readChat, sendReply } from './browser/googleChat';
 import { readWatched, watchSelectors } from './browser/watchers';
+import { startHookServer } from './hooks';
+import { sendWhatsApp } from './whatsapp';
+import { MaybeSentError } from './browser/googleChat';
 import { Operator, type ChatDriver } from './operator';
 import { createSupabaseJobDb } from './jobs/db';
 import { JobLoop } from './jobs/loop';
@@ -54,17 +57,32 @@ async function main() {
   const pool = new BrowserPool((profile) => cdpEndpointFor(profile, workerEnv()));
 
   const chat: ChatDriver = {
-    read: (client, ch) => pool.with(client.profile, async (ctx) => {
+    read: (client, ch) => (ch.kind === 'whatsapp' ? Promise.resolve({ title: ch.name, messages: [] }) : pool.with(client.profile, async (ctx) => {
       const { page } = await chatPage(ctx, ch.url);
-      return ch.kind === 'google_chat' ? readChat(page, sel, client.my_names) : readWatched(page, ch.kind, watchSelectors(ch.kind, cfg.watchOverrides[ch.kind]), client.my_names);
-    }),
-    send: (client, ch, input, steps) => pool.with(client.profile, async (ctx) => {
+      const kind = ch.kind;
+      if (kind === 'google_chat') return readChat(page, sel, client.my_names);
+      if (kind === 'whatsapp') return { title: ch.name, messages: [] };
+      return readWatched(page, kind, watchSelectors(kind, cfg.watchOverrides[kind]), client.my_names);
+    })),
+    send: (client, ch, input, steps) => (ch.kind === 'whatsapp'
+      // WhatsApp Business: the Cloud API, not the browser (whatsapp.ts). threadKey = the customer, externalId = their wamid.
+      ? sendWhatsApp({
+        env: workerEnv(), client: client.slug, phoneId: ch.wa_phone_id ?? '', to: input.threadKey, text: input.text,
+        replyTo: input.quote ? input.externalId : null, fetch: (...a) => fetch(...a), maySent: (m) => new MaybeSentError(m),
+        lastCheck: steps.lastCheck,
+        lastInbound: async () => {
+          const { data, error } = await sb.rpc('operator_whatsapp_last_inbound', { p_channel: ch.id, p_wa: input.threadKey });
+          if (error) throw new Error(error.message);
+          return (data as string | null) ?? null;
+        },
+      })
+      : pool.with(client.profile, async (ctx) => {
       // SQL only hands out sendable channels (operator_channel_sends); this is the second lock.
       if (ch.kind !== 'google_chat') throw new Error(`the operator does not post in ${ch.kind}: approved replies there are posted by you`);
       const { page } = await chatPage(ctx, ch.url);
       await steps.step?.('browser.open', { channel: ch.name });
       return sendReply(page, sel, input, steps);
-    }),
+    })),
   };
 
   // One gate for both paid paths; only the per-call cap differs (a message vs a run of a job).
@@ -81,6 +99,20 @@ async function main() {
     gate: gateFor(cfg.maxUsdPerMessage),
     classify: (o) => classifyMessage({ ...o, env: workerEnv() }),
   });
+
+  // ---------- WhatsApp Business webhook (internal listener; the dashboard forwards Meta's calls) ----------
+  const waSecret = workerEnv().OPERATOR_WHATSAPP_APP_SECRET?.trim();
+  const hookServer = waSecret ? startHookServer({
+    appSecret: waSecret,
+    verifyToken: workerEnv().OPERATOR_WHATSAPP_VERIFY_TOKEN?.trim() || null,
+    ingest: async (m) => {
+      const { data, error } = await sb.rpc('operator_whatsapp_ingest', { p_phone_id: m.phoneId, p_msg: m.msg });
+      if (error) throw new Error(error.message);
+      return (data as string | null) ?? null;
+    },
+    log: console.log,
+  }, cfg.hookPort) : null;
+  if (hookServer) console.log(`[operator] WhatsApp webhook listening on :${cfg.hookPort} (internal; Meta → dashboard /api/operator/whatsapp → here)`);
 
   // ---------- worker mode (jobs) ----------
   const jobDb = createSupabaseJobDb(sb);
@@ -171,6 +203,7 @@ async function main() {
       stopping = true;
       for (const s of stops) s();
       pool.forgetAll();
+      hookServer?.close();
       setTimeout(() => process.exit(0), 500).unref();
     });
   }

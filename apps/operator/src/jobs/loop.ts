@@ -247,8 +247,9 @@ export class JobLoop {
       });
       return this.d.db.updateDone(o.id, r.sent, r.sent ? null : 'not sent', r);
     } catch (e) {
-      const final = e instanceof MaybeSentError;
-      return this.d.db.updateDone(o.id, false, errMsg(e), { may_have_posted: final }, final);
+      const maybe = e instanceof MaybeSentError;
+      const final = maybe || (e as { final?: boolean } | null)?.final === true;
+      return this.d.db.updateDone(o.id, false, errMsg(e), { may_have_posted: maybe }, final);
     }
   }
 }
