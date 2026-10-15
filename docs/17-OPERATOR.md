@@ -400,6 +400,21 @@ with the logins in that client's browser and the linked API tokens; replies in S
 it" until that app passes a send test (next milestone). The sweep's list selectors are best guesses: probe and tune
 with `OPERATOR_DISCOVER_SELECTORS` ({"slack": {"item": "…", "unread": "…"}}).
 
+### Posting in Slack, Teams and Gmail (`20261017050000_operator_posting.sql`)
+
+Replies there stay "you post it" until, **per client and per app**, a send test passed and you switched posting on:
+`/operator` → Watched chats → **Posting** → Send test: paste a DM to yourself / a test channel (Gmail: an email thread
+with yourself). The operator opens it in that client's browser, types a unique "HQ operator send test …" message,
+checks the composer holds exactly that text, sends it, and reads the conversation back to find it. Telegram says
+"🧪 … send test passed / failed". Only then does the switch work (`operator_set_posting` refuses without a pass not
+older than 30 days); a failed test turns posting off. SQL decides per client in the claim functions
+(`operator_channel_posts`); a test runs only while `OPERATOR_SENDS` is on.
+
+How it posts (`apps/operator/src/browser/compose.ts`): a fresh tab on the conversation (Gmail: the message's thread,
+then Reply), type the approved text, compare the composer with it, ask the database once more (pauses), press the
+send key (Gmail: Ctrl/⌘+Enter). Once the key is pressed it is never retried. @mentions are plain text there. Tune
+with the `composeBox` / `composeOpen` / `composeSendKey` keys of `OPERATOR_<APP>_SELECTORS`, then test again.
+
 ## Phase 3+ (not built yet)
 
-Posting in Slack / Teams / Gmail after a send test; an Add client flow with a setup checklist.
+An Add client flow with a setup wizard (logins, APIs, sessions).

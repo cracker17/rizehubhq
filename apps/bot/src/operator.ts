@@ -165,7 +165,7 @@ export interface OperatorNotice {
 /** Notice kinds sent to Telegram (mirrors the operator_actions_notify index of 20261016000000_operator_worker.sql). */
 export const NOTICE_ACTIONS = ['send.done', 'send.failed', 'send.blocked', 'message.classify_failed', 'watch.failed',
   'update.done', 'update.failed', 'update.blocked', 'job.started', 'job.done', 'job.escalated', 'job.failed',
-  'action.done', 'action.failed', 'login.lost', 'login.restored', 'reply.manual', 'update.manual'] as const;
+  'action.done', 'action.failed', 'login.lost', 'login.restored', 'reply.manual', 'update.manual', 'posting.tested'] as const;
 
 /** Every posted reply is announced (you always know the client got an answer); classify failures only after 3 tries. */
 export function shouldNotify(n: Pick<OperatorNotice, 'action' | 'operator_inbox' | 'detail'>): boolean {
@@ -227,6 +227,16 @@ export function formatOperatorNotice(n: OperatorNotice, dashboardUrl?: string): 
       return truncate(`📋 <b>Post this yourself</b> in ${esc(app)} · ${client}${d.channel ? ` · ${esc(d.channel)}` : ''}
 Your approved ${what} (the operator only reads ${esc(app)}):
 <pre>${esc(clip(d.text, 3000))}</pre>${chatLink(d.url)}`);
+    }
+    case 'posting.tested': {
+      const app = APP_NAME[String(d.kind)] ?? String(d.kind ?? 'the app');
+      return truncate(n.ok
+        ? `🧪 <b>${esc(app)} send test passed</b> · ${client}
+${esc(clip(d.detail, 200))}
+Switch posting on for ${esc(app)} on /operator (Unread sweep → Posting) when you're ready.`
+        : `🧪 <b>${esc(app)} send test failed</b> · ${client}
+${esc(clip(d.detail, 300))}
+Replies there stay "you post it".`);
     }
     case 'login.restored':
       return truncate(`🔓 <b>Logged in again: ${esc(d.label ?? d.site ?? 'site')}</b> · ${client}`);

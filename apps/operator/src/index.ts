@@ -24,6 +24,7 @@ import { selectors } from './browser/chatDom';
 import { readChat, sendReply } from './browser/googleChat';
 import { isSignedOut, readWatched, watchSelectors, WatchSignedOutError } from './browser/watchers';
 import { listSelectors, readUnreadList } from './browser/discover';
+import { composeSelectors, composeSend, composeUrl, sendTestText, testSeen } from './browser/compose';
 import { SignedOutError } from './browser/googleChat';
 import type { BrowserContext, Page } from 'playwright-core';
 import type { OperatorAccount, OperatorChannel, OperatorClient } from './db';
@@ -113,12 +114,40 @@ async function main() {
         },
       })
       : pool.with(client.profile, async (ctx) => {
-      // SQL only hands out sendable channels (operator_channel_sends); this is the second lock.
-      if (ch.kind !== 'google_chat') throw new Error(`the operator does not post in ${ch.kind}: approved replies there are posted by you`);
-      const { page } = await chatPage(ctx, ch.url);
-      await steps.step?.('browser.open', { channel: ch.name });
-      return sendReply(page, sel, input, steps);
+      // SQL hands out Slack / Teams / Gmail rows only with a passed send test + posting on (operator_channel_posts).
+      const kind = ch.kind;
+      if (kind === 'whatsapp') throw new Error('WhatsApp is sent by the API');
+      if (kind === 'google_chat') {
+        const { page } = await chatPage(ctx, ch.url);
+        await steps.step?.('browser.open', { channel: ch.name });
+        return sendReply(page, sel, input, steps);
+      }
+      const url = composeUrl(kind, ch.url, input.threadKey);
+      if (!url) throw new Error(`no ${kind} thread to reply in (the message has no thread id): post it yourself`);
+      const page = await ctx.newPage();
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+        if (isSignedOut(kind, page.url())) throw new WatchSignedOutError(kind);
+        await page.waitForTimeout(3000);
+        await steps.step?.('browser.open', { channel: ch.name, kind });
+        return await composeSend(page, kind, composeSelectors(kind, cfg.watchOverrides[kind]), input, steps);
+      } finally { await page.close().catch(() => undefined); }
     })),
+    sendTest: (client, kind, url) => pool.with(client.profile, async (ctx) => {
+      const page = await ctx.newPage();
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+        if (isSignedOut(kind, page.url())) return { ok: false, detail: `signed out of ${kind}: log in through the viewer` };
+        await page.waitForTimeout(3000);
+        const text = sendTestText();
+        const r = await composeSend(page, kind, composeSelectors(kind, cfg.watchOverrides[kind]), { text }, { lastCheck: async () => null });
+        if (!r.sent) return { ok: false, detail: 'not sent' };
+        await page.waitForTimeout(4000);
+        if (kind === 'gmail') return { ok: true, detail: 'sent from the Gmail composer (check the thread)' };
+        const back = await readWatched(page, kind, watchSelectors(kind, cfg.watchOverrides[kind]), client.my_names, 4);
+        return testSeen(back.messages, text) ? { ok: true, detail: 'posted and read back' } : { ok: false, detail: 'sent, but the reader did not find it: tune the reader selectors' };
+      } finally { await page.close().catch(() => undefined); }
+    }),
   };
 
   // One gate for both paid paths; only the per-call cap differs (a message vs a run of a job).
@@ -211,6 +240,7 @@ async function main() {
     loop('sweep', Math.min(cfg.pollMs, 15_000), () => op.sweepTick()),
     loop('classify', cfg.tickMs, () => op.classifyTick()),
     loop('send', cfg.tickMs, () => op.sendTick()),
+    loop('send-test', cfg.tickMs, () => op.sendTestTick()),
     ...(cfg.jobs ? [
       loop('job', cfg.jobTickMs, () => jobs.jobTick()),
       loop('action', cfg.tickMs, () => jobs.actionTick()),

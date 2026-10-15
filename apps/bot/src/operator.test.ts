@@ -283,3 +283,10 @@ test('read-only channels: approved replies and client updates come back as "Post
   assert.match(u, /in Gmail · lvlup · LvlUp mail\nYour approved client update for “Pricing check”/);
   assert.equal(shouldNotify({ action: 'reply.manual', detail: {}, operator_inbox: null }), true);
 });
+
+test('send test results come back on Telegram', () => {
+  const ok = formatOperatorNotice(notice({ action: 'posting.tested', inbox_id: null, operator_inbox: null, detail: { kind: 'slack', ok: true, detail: 'posted and read back' } }));
+  assert.match(ok, /Slack send test passed<\/b> · lvlup\nposted and read back\nSwitch posting on/);
+  const bad = formatOperatorNotice(notice({ action: 'posting.tested', ok: false, inbox_id: null, operator_inbox: null, detail: { kind: 'teams', ok: false, detail: 'no teams composer found' } }));
+  assert.match(bad, /Teams send test failed<\/b>[\s\S]*no teams composer found[\s\S]*you post it/);
+});

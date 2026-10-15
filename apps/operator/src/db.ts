@@ -104,6 +104,9 @@ export interface OperatorDb {
   accounts(): Promise<OperatorAccount[]>;
   discover(accountId: string, name: string, url: string, direct: boolean): Promise<{ channel_id: string; created: boolean; enabled: boolean }>;
   accountSwept(accountId: string, found: number, error: string | null): Promise<void>;
+  // ---------- send tests (20261017050000_operator_posting.sql) ----------
+  claimSendTest(): Promise<{ client_slug: string; kind: 'gmail' | 'slack' | 'teams'; test_url: string } | null>;
+  sendTestDone(client: string, kind: string, ok: boolean, detail: string): Promise<string>;
 }
 
 export interface OperatorAccount { id: string; client_slug: string; kind: 'google_chat' | 'gmail' | 'slack' | 'teams'; label: string; home_url: string; enabled: boolean; last_swept_at: string | null; last_error: string | null }
@@ -190,5 +193,11 @@ export function createSupabaseOperatorDb(sb: SupabaseClient): OperatorDb {
     },
     discover: (accountId, name, url, direct) => rpc('operator_discover', { p_account: accountId, p_name: name, p_url: url, p_direct: direct }),
     accountSwept: async (accountId, found, error) => { await rpc('operator_account_swept', { p_account: accountId, p_found: found, p_error: error }); },
+    claimSendTest: async () => {
+      const r = await rpc<unknown>('operator_claim_send_test');
+      const row = (Array.isArray(r) ? r[0] : r) as { client_slug?: string | null; kind: 'gmail' | 'slack' | 'teams'; test_url: string } | null;
+      return row?.client_slug ? (row as { client_slug: string; kind: 'gmail' | 'slack' | 'teams'; test_url: string }) : null;
+    },
+    sendTestDone: (client, kind, ok, detail) => rpc('operator_send_test_done', { p_client: client, p_kind: kind, p_ok: ok, p_detail: detail }),
   };
 }

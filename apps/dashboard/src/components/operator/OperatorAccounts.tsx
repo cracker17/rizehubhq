@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import { Plus, Radar } from 'lucide-react';
 import { btn, inputCls } from '@/components/clients/ui';
 import { ACCOUNT_KINDS, ago, type OperatorClientRow, type OperatorHomeData, type SweepKind } from '@/lib/operatorView';
-import { addAccountAction, setAccountEnabledAction, type OperatorResult } from '@/app/operator-actions';
+import { addAccountAction, requestSendTestAction, setAccountEnabledAction, setPostingAction, type OperatorResult } from '@/app/operator-actions';
 
 type Run = (fn: () => Promise<OperatorResult>, done: string) => void;
 
@@ -63,6 +63,58 @@ export function Accounts({ data, client, pending, run }: { data: OperatorHomeDat
           <div className="flex gap-2">
             <button className={btn.primary} disabled={pending}>Check for unread chats</button>
             <button type="button" className={btn.ghost} onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+const POST_KINDS = [['slack', 'Slack'], ['teams', 'Teams'], ['gmail', 'Gmail']] as const;
+const TEST_LABEL = { none: 'Not tested', requested: 'Test queued…', running: 'Testing…', passed: 'Test passed', failed: 'Test failed' } as const;
+
+/** Posting in Slack / Teams / Gmail: a send test on this client's browser, then the switch (SQL refuses without a pass). */
+export function Posting({ data, client, pending, run }: { data: OperatorHomeData; client: OperatorClientRow; pending: boolean; run: Run }) {
+  const [testing, setTesting] = useState<'gmail' | 'slack' | 'teams' | null>(null);
+  const [url, setUrl] = useState('');
+  return (
+    <div className="mt-4 border-t border-[var(--color-line)] pt-3">
+      <h3 className="mb-1 text-[13px] font-semibold">Posting</h3>
+      <p className="mb-2 text-xs text-[var(--color-muted)]">Google Chat and WhatsApp post by themselves. Slack, Teams and Gmail post only after a send test passes here and you switch them on; until then you post approved replies yourself.</p>
+      <ul className="flex flex-col gap-1.5">
+        {POST_KINDS.map(([k, label]) => {
+          const p = data.posting.find((x) => x.client_slug === client.slug && x.kind === k);
+          const st = p?.test_state ?? 'none';
+          return (
+            <li key={k} className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--color-panel-2)]">
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px]">{label}</span>
+                <span className={clsx('block truncate text-[11px]', st === 'failed' ? 'text-[#ff9a9d]' : 'text-[var(--color-dim)]')}>
+                  {TEST_LABEL[st]}{p?.tested_at && st === 'passed' ? ` ${ago(p.tested_at)}` : ''}{st === 'failed' && p?.test_detail ? `: ${p.test_detail}` : ''}
+                </span>
+              </span>
+              {!data.demo && <button className={btn.small} disabled={pending || st === 'requested' || st === 'running'} onClick={() => { setTesting(k); setUrl(p?.test_url ?? ''); }}>Send test</button>}
+              <button role="switch" aria-checked={!!p?.enabled} aria-label={`Post in ${label}`} disabled={pending || data.demo || st !== 'passed'}
+                title={st !== 'passed' ? 'Run a send test first' : undefined}
+                onClick={() => run(() => setPostingAction(client.slug, k, !p?.enabled), p?.enabled ? `${label}: you post replies yourself` : `${label}: the operator posts approved replies`)}
+                className={clsx('relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40', p?.enabled ? 'bg-[var(--color-success)]' : 'bg-[var(--color-panel-2)]')}>
+                <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', p?.enabled ? 'translate-x-[22px]' : 'translate-x-0.5')} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {testing && (
+        <form className="mt-2 flex flex-col gap-2" onSubmit={(e) => {
+          e.preventDefault();
+          run(async () => { const r = await requestSendTestAction(client.slug, testing, url); if (r.ok) setTesting(null); return r; }, 'Send test queued: Telegram tells you the result');
+        }}>
+          <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" aria-label="Test conversation address"
+            placeholder={testing === 'gmail' ? 'An email thread with yourself (https://mail.google.com/mail/u/0/#inbox/…)' : 'A DM to yourself or a test channel'} />
+          <p className="text-xs text-[var(--color-dim)]">The operator types a short &quot;HQ operator send test&quot; message there in {client.name}&apos;s browser, sends it and reads it back.</p>
+          <div className="flex gap-2">
+            <button className={btn.primary} disabled={pending}>Run send test</button>
+            <button type="button" className={btn.ghost} onClick={() => setTesting(null)}>Cancel</button>
           </div>
         </form>
       )}

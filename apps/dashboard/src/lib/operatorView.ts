@@ -39,6 +39,11 @@ export interface OperatorAccountRow {
   id: string; client_slug: string; kind: SweepKind; label: string; home_url: string; enabled: boolean; last_swept_at: string | null; last_found: number; last_error: string | null;
 }
 
+export interface OperatorPostingRow {
+  client_slug: string; kind: 'gmail' | 'slack' | 'teams'; test_url: string | null; test_state: 'none' | 'requested' | 'running' | 'passed' | 'failed';
+  test_detail: string | null; tested_at: string | null; enabled: boolean;
+}
+
 export interface OperatorHomeData {
   clients: OperatorClientRow[];
   channels: OperatorChannelRow[];
@@ -50,6 +55,8 @@ export interface OperatorHomeData {
   autonomy: OperatorAutonomyRow[];
   /** Phase 3 unread sweep: the app accounts in each client's browser (empty before the migration). */
   accounts: OperatorAccountRow[];
+  /** Phase 3: posting in Slack / Teams / Gmail per client (a passed send test + the switch). */
+  posting: OperatorPostingRow[];
   /** Telegram digest times 'HH:MM' (null = off); settings.operator_digest_times. */
   digestTimes: { morning: string | null; evening: string | null };
   killSwitch: boolean;

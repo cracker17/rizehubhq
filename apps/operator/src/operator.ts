@@ -24,6 +24,8 @@ export interface ChatDriver {
   /** Unread sweep (phase 3): the unread conversations on an app's home, and reading one of them in the account's tab. */
   sweep?(client: OperatorClient, account: OperatorAccount): Promise<Discovered[]>;
   readAt?(client: OperatorClient, account: OperatorAccount, channel: OperatorChannel): Promise<ReadResult>;
+  /** Send test (phase 3): post a unique test message in that conversation and read it back. */
+  sendTest?(client: OperatorClient, kind: 'gmail' | 'slack' | 'teams', url: string): Promise<{ ok: boolean; detail: string }>;
   send(client: OperatorClient, channel: OperatorChannel, input: SendInput, steps: SendSteps): Promise<{ sent: boolean } & Record<string, unknown>>;
 }
 
@@ -136,6 +138,25 @@ export class Operator {
       }
     }
     return stored;
+  }
+
+  // ---------- send tests ----------
+
+  /** Runs at most one requested send test (only with OPERATOR_SENDS on: a test posts a real message). */
+  async sendTestTick(): Promise<string | null> {
+    if (!this.d.sends || !this.d.chat.sendTest) return null;
+    const t = await this.d.db.claimSendTest();
+    if (!t) return null;
+    const { clients } = await this.lookups();
+    const client = clients.get(t.client_slug);
+    let r: { ok: boolean; detail: string };
+    try {
+      r = client ? await this.d.chat.sendTest(client, t.kind, t.test_url) : { ok: false, detail: 'client is disabled' };
+    } catch (e) {
+      r = { ok: false, detail: errMsg(e) };
+    }
+    this.log(`[operator] ${t.client_slug}: ${t.kind} send test ${r.ok ? 'passed' : `failed: ${r.detail}`}`);
+    return this.d.db.sendTestDone(t.client_slug, t.kind, r.ok, r.detail);
   }
 
   // ---------- classify + draft ----------

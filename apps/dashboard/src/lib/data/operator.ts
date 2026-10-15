@@ -5,7 +5,7 @@ import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
 import { digestTimes } from '@/lib/operatorView';
 import type {
-  OperatorAccountRow, OperatorActionRow, OperatorAutonomyRow, OperatorChannelRow, OperatorClientRow, OperatorHomeData, OperatorInboxRow, OperatorJobActionRow, OperatorJobRow,
+  OperatorAccountRow, OperatorActionRow, OperatorPostingRow, OperatorAutonomyRow, OperatorChannelRow, OperatorClientRow, OperatorHomeData, OperatorInboxRow, OperatorJobActionRow, OperatorJobRow,
 } from '@/lib/operatorView';
 
 export interface Loaded<T> { data: T; error?: string }
@@ -15,7 +15,7 @@ const on = (v: unknown) => v === true || v === 'true';
 export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
   if (!supabaseEnv()) return { data: demoOperator() };
   const db = await createSupabaseServer();
-  const empty: OperatorHomeData = { clients: [], channels: [], inbox: [], actions: [], jobs: [], jobActions: [], autonomy: [], accounts: [], digestTimes: { morning: '08:00', evening: '18:00' }, killSwitch: false, officePaused: false, autoSend: false, heartbeatAt: null, demo: false };
+  const empty: OperatorHomeData = { clients: [], channels: [], inbox: [], actions: [], jobs: [], jobActions: [], autonomy: [], accounts: [], posting: [], digestTimes: { morning: '08:00', evening: '18:00' }, killSwitch: false, officePaused: false, autoSend: false, heartbeatAt: null, demo: false };
   if (!db) return { data: empty, error: 'Supabase is not configured.' };
   try {
     const [clients, channels, inbox, actions, settings] = await Promise.all([
@@ -33,11 +33,12 @@ export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
     }
     // Phase 2+ tables: missing before 20261016000000_operator_worker.sql is applied; the page still works without them.
     const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
-    const [jobs, autonomy, accounts] = await Promise.all([
+    const [jobs, autonomy, accounts, posting] = await Promise.all([
       db.from('operator_jobs').select('id,client_slug,source,title,brief,status,runs,max_runs,cost_usd,error,feedback,created_at,updated_at,result,qa')
         .or(`status.in.(queued,running,waiting,verifying),updated_at.gt.${weekAgo}`).order('updated_at', { ascending: false }).limit(60),
       db.from('operator_autonomy').select('client_slug,action_type,mode'),
       db.from('operator_accounts').select('id,client_slug,kind,label,home_url,enabled,last_swept_at,last_found,last_error').order('created_at'),
+      db.from('operator_posting').select('client_slug,kind,test_url,test_state,test_detail,tested_at,enabled'),
     ]);
     const jobRows = (jobs.error ? [] : jobs.data ?? []) as OperatorJobRow[];
     const jobActions = jobRows.length
@@ -54,6 +55,7 @@ export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
         jobActions: (jobActions.error ? [] : jobActions.data ?? []) as OperatorJobActionRow[],
         autonomy: (autonomy.error ? [] : autonomy.data ?? []) as OperatorAutonomyRow[],
         accounts: (accounts.error ? [] : accounts.data ?? []) as OperatorAccountRow[],
+        posting: (posting.error ? [] : posting.data ?? []) as OperatorPostingRow[],
         digestTimes: digestTimes(s.operator_digest_times),
         killSwitch: on(s.operator_paused), officePaused: on(s.paused), autoSend: on(s.operator_auto_send),
         heartbeatAt: (s.operator_heartbeat as { at?: string } | undefined)?.at ?? null,
@@ -126,6 +128,7 @@ export function demoOperator(now = Date.now()): OperatorHomeData {
       { id: 'demo-a1', client_slug: 'lvlup', kind: 'slack', label: 'LvlUp Slack', home_url: 'https://app.slack.com/client/T0LVLUP', enabled: true, last_swept_at: t(1), last_found: 2, last_error: null },
       { id: 'demo-a2', client_slug: 'lvlup', kind: 'gmail', label: 'LvlUp mail', home_url: 'https://mail.google.com/mail/u/0/#search/is%3Aunread+in%3Ainbox', enabled: true, last_swept_at: t(1), last_found: 1, last_error: null },
     ],
+    posting: [{ client_slug: 'lvlup', kind: 'slack', test_url: 'https://app.slack.com/client/T0LVLUP/D0JULEV', test_state: 'passed', test_detail: 'posted and read back', tested_at: t(300), enabled: false }],
     digestTimes: { morning: '08:00', evening: '18:00' },
     killSwitch: false, officePaused: false, autoSend: true, heartbeatAt: t(0.5), demo: true,
   };

@@ -21,7 +21,7 @@ import { useOperatorLive, type LiveState } from './useOperatorLive';
 import { Pill } from './Pill';
 import { OperatorJobs } from './OperatorJobs';
 import { OperatorRules } from './OperatorRules';
-import { Accounts } from './OperatorAccounts';
+import { Accounts, Posting } from './OperatorAccounts';
 
 const KIND_ICON = { read: MessageSquareText, think: Sparkles, type: Keyboard, send: Send, you: UserRound, warn: TriangleAlert } as const;
 /** The kill switch: the one red solid button (destructive = red; it only ever stops sends). */
@@ -280,6 +280,7 @@ function Chats({ data, client, pending, run }: {
         ))}
       </ul>
       {client && <Accounts data={data} client={client} pending={pending} run={run} />}
+      {client && <Posting data={data} client={client} pending={pending} run={run} />}
       {adding && client && (
         <form className="mt-3 flex flex-col gap-2" onSubmit={(e) => {
           e.preventDefault();

@@ -46,9 +46,9 @@ export const EXTRACT_SOURCE = `(sel) => {
     const ts = tsEl ? ((sel.timestampAttr ? attr(tsEl, sel.timestampAttr) : '') || tsEl.getAttribute('data-absolute-timestamp') || tsEl.getAttribute('datetime') || '') : '';
     const textEl = n.querySelector(sel.text);
     const text = ((textEl ? textEl.innerText : n.innerText) || '').trim();
-    const topic = sel.thread ? n.closest(sel.thread) : null;
+    const topic = sel.threadChild ? n.querySelector(sel.threadChild) : sel.thread ? n.closest(sel.thread) : null;
     const idEl = sel.idSelector ? (n.querySelector(sel.idSelector) || n) : n;
-    out.push({ id: attr(idEl, sel.messageIdAttr), sender, ts, text, thread: topic ? (topic.getAttribute(sel.threadIdAttr) || '') : '' });
+    out.push({ id: attr(idEl, sel.messageIdAttr), sender, ts, text, thread: topic ? attr(topic, sel.threadIdAttr) : '' });
   }
   if (sel.newestFirst) out.reverse();
   const t = document.querySelector(sel.spaceTitle);

@@ -122,6 +122,20 @@ export async function setAccountEnabledAction(id: string, enabled: boolean): Pro
   return call('operator_set_account_enabled', { p_account: id, p_enabled: enabled === true });
 }
 
+/** Send test: the operator posts a unique test message in this conversation and reads it back. */
+export async function requestSendTestAction(slug: string, kind: 'gmail' | 'slack' | 'teams', url: string): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  if (!['gmail', 'slack', 'teams'].includes(kind)) return { ok: false, error: 'Send tests are for Slack, Teams and Gmail.' };
+  const u = channelUrl(kind, String(url ?? ''));
+  if (!u) return { ok: false, error: kind === 'gmail' ? 'Paste the address of an email thread with yourself (open it, copy the address bar).' : 'Paste the address of a DM to yourself or a test channel.' };
+  return call('operator_request_send_test', { p_client: slug, p_kind: kind, p_url: u });
+}
+
+export async function setPostingAction(slug: string, kind: 'gmail' | 'slack' | 'teams', on: boolean): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  return call('operator_set_posting', { p_client: slug, p_kind: kind, p_on: on === true });
+}
+
 export async function setReplyWhenAction(slug: string, mode: 'addressed' | 'all'): Promise<OperatorResult> {
   if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
   if (mode !== 'addressed' && mode !== 'all') return { ok: false, error: 'Unknown rule.' };
