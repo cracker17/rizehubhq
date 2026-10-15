@@ -77,3 +77,14 @@ test('digest times: defaults, off, junk', async () => {
   assert.deepEqual(digestTimes({ morning: '07:30', evening: 'off' }), { morning: '07:30', evening: null });
   assert.deepEqual(digestTimes({ morning: '7:30' }), { morning: null, evening: '18:00' });
 });
+
+test('channel addresses per kind (mirrors operator_channel_url_ok)', async () => {
+  const { channelUrl } = await import('./operatorView');
+  assert.equal(channelUrl('slack', ' https://app.slack.com/client/T01/C02 '), 'https://app.slack.com/client/T01/C02');
+  assert.equal(channelUrl('slack', 'https://lvlup.slack.com/archives/C02'), 'https://lvlup.slack.com/archives/C02');
+  assert.equal(channelUrl('slack', 'https://chat.google.com/room/A'), null);
+  assert.equal(channelUrl('gmail', 'https://mail.google.com/mail/u/0/#label/LvlUp'), 'https://mail.google.com/mail/u/0/#label/LvlUp');
+  assert.equal(channelUrl('teams', 'https://teams.microsoft.com/l/chat/19:abc/0'), 'https://teams.microsoft.com/l/chat/19:abc/0');
+  assert.equal(channelUrl('teams', 'http://teams.microsoft.com/x'), null);
+  assert.equal(channelUrl('google_chat', 'https://chat.google.com/room/A'), 'https://chat.google.com/room/A');
+});

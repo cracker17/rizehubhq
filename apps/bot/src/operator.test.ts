@@ -270,3 +270,16 @@ test('operator digests: sent like the other reports, with per-client lines; quie
   assert.equal(r.reports, 1);
   assert.match(sender.sent[0]!.text, /Operator · evening/);
 });
+
+test('read-only channels: approved replies and client updates come back as "Post this yourself" with the exact text', () => {
+  const r = formatOperatorNotice(notice({ action: 'reply.manual', inbox_id: 'i9', operator_inbox: null,
+    detail: { kind: 'slack', channel: '#general', sender: 'Alex', url: 'https://app.slack.com/client/T01/C02', text: 'Checking it now, <@Alex>.' } }));
+  assert.match(r, /📋 <b>Post this yourself<\/b> in Slack · lvlup · #general/);
+  assert.match(r, /approved reply to Alex \(the operator only reads Slack\)/);
+  assert.match(r, /<pre>Checking it now, &lt;@Alex&gt;.<\/pre>/);
+  assert.match(r, /href="https:\/\/app.slack.com\/client\/T01\/C02">Open the chat/);
+  const u = formatOperatorNotice(notice({ action: 'update.manual', inbox_id: null, operator_inbox: null, job_id: 'j1', job_title: 'Pricing check',
+    detail: { kind: 'gmail', channel: 'LvlUp mail', text: 'All good.' } }));
+  assert.match(u, /in Gmail · lvlup · LvlUp mail\nYour approved client update for “Pricing check”/);
+  assert.equal(shouldNotify({ action: 'reply.manual', detail: {}, operator_inbox: null }), true);
+});

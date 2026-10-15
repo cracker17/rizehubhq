@@ -335,6 +335,24 @@ Check: open `https://ws.rizehub.ph/` in a private window → it sends you to the
 loads with no password prompt. To end every viewer session at once, change the secret. Without the secret the
 dashboard links to the viewer directly (phase 1: basic auth only).
 
+### More channels: Gmail, Slack, Teams (`20261017020000_operator_watchers.sql`)
+
+`/operator` → Watched chats → Add chat → pick **Google Chat, Slack, Teams or Gmail** and paste the address from the
+client's workspace browser (log in to that app there once, like Google Chat). The operator reads them on the same poll,
+classifies and drafts with the project memory, and the same reply rules apply. Gmail watches a **label or a search**
+(`#label/LvlUp`, `#search/from:lvlup.vc`): every new thread or reply in that list is one message (subject + snippet).
+
+**It only posts in Google Chat.** Slack, Teams and Gmail are read + draft: when you approve a reply there (or a rule
+clears it), nothing is typed; the row becomes **You post it** and Telegram sends "📋 Post this yourself" with the exact
+text and a link to the chat. Job client updates for those chats work the same. SQL enforces it
+(`operator_channel_sends`: the claim functions never hand a read-only channel to the browser sender) and the sender
+refuses any non-Google-Chat channel as a second lock.
+
+Their markup is not public and changes: tune with the probe
+(`docker compose exec operator ./node_modules/.bin/tsx src/probe.ts lvlup <address> --kind slack`) and override with
+`OPERATOR_SLACK_SELECTORS` / `OPERATOR_TEAMS_SELECTORS` / `OPERATOR_GMAIL_SELECTORS` (JSON, keys as in
+`apps/operator/src/browser/watchers.ts`). A signed-out app shows as "can't read …" on Telegram, like Google Chat.
+
 ## Phase 3+ (not built yet)
 
-Gmail / Slack / Teams / WhatsApp Business watchers.
+WhatsApp Business.

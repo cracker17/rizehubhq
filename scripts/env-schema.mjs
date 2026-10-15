@@ -188,6 +188,8 @@ export const VARS = [
   S({ key: 'OPERATOR_MAX_USD_PER_MESSAGE', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),
   S({ key: 'OPERATOR_CDP_URL', group: 'Operator', svc: ['operator'], check: (v) => (isUrl(v) ? null : 'must be a URL like http://ws-lvlup:9223') }),
   S({ key: 'OPERATOR_GCHAT_SELECTORS', group: 'Operator', svc: ['operator'], check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } }),
+  ...['OPERATOR_SLACK_SELECTORS', 'OPERATOR_TEAMS_SELECTORS', 'OPERATOR_GMAIL_SELECTORS'].map((key) => S({ key, group: 'Operator', svc: ['operator'],
+    check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } })),
   S({ key: 'OPERATOR_JOBS', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
   S({ key: 'OPERATOR_JOB_TICK_MS', group: 'Operator', svc: ['operator'], check: intIn(2_000) }),
   S({ key: 'OPERATOR_MAX_USD_PER_JOB_RUN', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),

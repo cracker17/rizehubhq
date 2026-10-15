@@ -20,6 +20,8 @@
 //                                    The terminal exists only when agent commands are isolated (AGENT_UID / DEV_SANDBOX_PREFIX)
 //   OPERATOR_WEBFLOW_TOKEN_<CLIENT>  fallback API tokens when none is linked in the Client Vault (jobs/apis.ts)
 //   OPERATOR_AIRTABLE_TOKEN_<CLIENT>
+//   OPERATOR_SLACK_SELECTORS / OPERATOR_TEAMS_SELECTORS / OPERATOR_GMAIL_SELECTORS   JSON overrides for the watchers
+//                                    of those channels (browser/watchers.ts)
 import { MODEL_ROLES, type ModelRole } from '@rizehubhq/shared';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -37,10 +39,22 @@ export interface OperatorConfig {
   maxUsdPerJobRun: number;
   loginCheckMs: number;
   workspacesDir: string;
+  watchOverrides: Record<'gmail' | 'slack' | 'teams', Record<string, string>>;
 }
 
 const truthy = (v: string | undefined) => ['1', 'true', 'on', 'yes'].includes((v ?? '').trim().toLowerCase());
 const falsy = (v: string | undefined) => ['0', 'false', 'off', 'no'].includes((v ?? '').trim().toLowerCase());
+
+function jsonSelectors(raw: string | undefined, name: string): Record<string, string> {
+  if (!raw?.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === 'string' && v.trim())) as Record<string, string>;
+    }
+  } catch { /* below */ }
+  throw new Error(`${name} must be a JSON object of selector strings`);
+}
 
 function int(v: string | undefined, fallback: number, min: number): number {
   const n = Number(v);
@@ -51,15 +65,7 @@ export function loadOperatorConfig(env: Env): OperatorConfig {
   const role = (env.OPERATOR_MODEL_ROLE ?? '').trim() as ModelRole;
   const usd = Number(env.OPERATOR_MAX_USD_PER_MESSAGE);
   const jobUsd = Number(env.OPERATOR_MAX_USD_PER_JOB_RUN);
-  let selectorOverrides: Record<string, string> = {};
-  if (env.OPERATOR_GCHAT_SELECTORS?.trim()) {
-    try {
-      const parsed = JSON.parse(env.OPERATOR_GCHAT_SELECTORS) as unknown;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        selectorOverrides = Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === 'string' && v.trim())) as Record<string, string>;
-      }
-    } catch { throw new Error('OPERATOR_GCHAT_SELECTORS must be a JSON object of selector strings'); }
-  }
+  const selectorOverrides = jsonSelectors(env.OPERATOR_GCHAT_SELECTORS, 'OPERATOR_GCHAT_SELECTORS');
   return {
     enabled: truthy(env.OPERATOR_ENABLED),
     pollMs: int(env.OPERATOR_POLL_MS, 120_000, 30_000),
@@ -73,6 +79,11 @@ export function loadOperatorConfig(env: Env): OperatorConfig {
     maxUsdPerJobRun: Number.isFinite(jobUsd) && jobUsd > 0 ? jobUsd : 2,
     loginCheckMs: int(env.OPERATOR_LOGIN_CHECK_MS, 6 * 3600_000, 600_000),
     workspacesDir: env.OPERATOR_WORKSPACES_DIR?.trim() || '/tmp/operator-jobs',
+    watchOverrides: {
+      gmail: jsonSelectors(env.OPERATOR_GMAIL_SELECTORS, 'OPERATOR_GMAIL_SELECTORS'),
+      slack: jsonSelectors(env.OPERATOR_SLACK_SELECTORS, 'OPERATOR_SLACK_SELECTORS'),
+      teams: jsonSelectors(env.OPERATOR_TEAMS_SELECTORS, 'OPERATOR_TEAMS_SELECTORS'),
+    },
   };
 }
 

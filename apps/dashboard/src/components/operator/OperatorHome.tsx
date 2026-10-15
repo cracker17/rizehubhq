@@ -11,8 +11,8 @@ import {
 import { useHq } from '@/lib/data/store';
 import { btn, inputCls } from '@/components/clients/ui';
 import {
-  ago, describeAction, INBOX_STATUS, isOnline, sendState, TONE_CLASS, visibleInbox,
-  type OperatorActionRow, type OperatorClientRow, type OperatorHomeData, type Tone,
+  ago, CHANNEL_KINDS, describeAction, INBOX_STATUS, isOnline, sendState, TONE_CLASS, visibleInbox,
+  type ChannelKind, type OperatorActionRow, type OperatorClientRow, type OperatorHomeData, type Tone,
 } from '@/lib/operatorView';
 import {
   addChannelAction, setChannelEnabledAction, setClientPausedAction, setOperatorPausedAction, setViewerUrlAction, type OperatorResult,
@@ -247,6 +247,8 @@ function Chats({ data, client, pending, run }: {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [kind, setKind] = useState<ChannelKind>('google_chat');
+  const meta = CHANNEL_KINDS.find((k) => k.kind === kind)!;
   const chats = data.channels.filter((c) => !client || c.client_slug === client.slug);
   return (
     <section aria-label="Watched chats" className="card min-w-0 p-4 sm:p-5">
@@ -254,12 +256,14 @@ function Chats({ data, client, pending, run }: {
         <h2 className="text-base font-semibold">Watched chats</h2>
         {client && !adding && !data.demo && <button className={btn.small} onClick={() => setAdding(true)}><Plus size={14} aria-hidden />Add chat</button>}
       </div>
-      {chats.length === 0 && !adding && <p className="py-3 text-sm text-[var(--color-muted)]">No chats yet. Add the Google Chat spaces and DMs the operator should read.</p>}
+      {chats.length === 0 && !adding && <p className="py-3 text-sm text-[var(--color-muted)]">No chats yet. Add the Google Chat, Slack or Teams chats and Gmail labels the operator should read.</p>}
       <ul className="flex flex-col gap-2">
         {chats.map((c) => (
           <li key={c.id} className="item flex items-center gap-2 px-3 py-2.5">
             <span className="min-w-0 flex-1">
-              <span className={clsx('block truncate text-[13px] font-medium', !c.enabled && 'text-[var(--color-dim)]')}>{c.name}</span>
+              <span className={clsx('block truncate text-[13px] font-medium', !c.enabled && 'text-[var(--color-dim)]')}>{c.name}
+                {c.kind && c.kind !== 'google_chat' && <span className="ml-1.5 text-[11px] font-normal text-[var(--color-dim)]">{CHANNEL_KINDS.find((k) => k.kind === c.kind)?.label} · read only</span>}
+              </span>
               <span className={clsx('block truncate text-[11px]', c.last_error ? 'text-[#ff9a9d]' : 'text-[var(--color-dim)]')}>
                 {c.last_error ? c.last_error : c.enabled ? `Read ${ago(c.last_polled_at)}` : 'Not watched'}
               </span>
@@ -275,15 +279,18 @@ function Chats({ data, client, pending, run }: {
       {adding && client && (
         <form className="mt-3 flex flex-col gap-2" onSubmit={(e) => {
           e.preventDefault();
-          run(async () => { const r = await addChannelAction(client.slug, name, url); if (r.ok) { setAdding(false); setName(''); setUrl(''); } return r; }, `Watching ${name}`);
+          run(async () => { const r = await addChannelAction(client.slug, name, url, kind); if (r.ok) { setAdding(false); setName(''); setUrl(''); } return r; }, `Watching ${name}`);
         }}>
+          <select className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as ChannelKind)} aria-label="Kind of chat">
+            {CHANNEL_KINDS.map((k) => <option key={k.kind} value={k.kind}>{k.label}{k.sends ? '' : ' (read + draft; you post)'}</option>)}
+          </select>
           <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder='Name, e.g. "Alex, Riley"' aria-label="Chat name" />
-          <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://chat.google.com/room/…" inputMode="url" aria-label="Chat address" />
+          <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={meta.placeholder} inputMode="url" aria-label="Chat address" />
           <div className="flex gap-2">
             <button className={btn.primary} disabled={pending}>Watch this chat</button>
             <button type="button" className={btn.ghost} onClick={() => setAdding(false)}>Cancel</button>
           </div>
-          <p className="text-xs text-[var(--color-dim)]">Open the chat in the client&apos;s browser, copy the address bar. The first read is stored as history; only newer messages get replies.</p>
+          <p className="text-xs text-[var(--color-dim)]">{meta.hint} The first read is stored as history; only newer messages get replies.{!meta.sends && ` The operator drafts replies for ${meta.label}; once you approve one, Telegram gives you the exact text to post.`}</p>
         </form>
       )}
     </section>

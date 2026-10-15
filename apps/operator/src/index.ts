@@ -22,6 +22,7 @@ import { createSupabaseOperatorDb } from './db';
 import { BrowserPool, chatPage } from './browser/cdp';
 import { selectors } from './browser/chatDom';
 import { readChat, sendReply } from './browser/googleChat';
+import { readWatched, watchSelectors } from './browser/watchers';
 import { Operator, type ChatDriver } from './operator';
 import { createSupabaseJobDb } from './jobs/db';
 import { JobLoop } from './jobs/loop';
@@ -53,8 +54,13 @@ async function main() {
   const pool = new BrowserPool((profile) => cdpEndpointFor(profile, workerEnv()));
 
   const chat: ChatDriver = {
-    read: (client, ch) => pool.with(client.profile, async (ctx) => readChat((await chatPage(ctx, ch.url)).page, sel, client.my_names)),
+    read: (client, ch) => pool.with(client.profile, async (ctx) => {
+      const { page } = await chatPage(ctx, ch.url);
+      return ch.kind === 'google_chat' ? readChat(page, sel, client.my_names) : readWatched(page, ch.kind, watchSelectors(ch.kind, cfg.watchOverrides[ch.kind]), client.my_names);
+    }),
     send: (client, ch, input, steps) => pool.with(client.profile, async (ctx) => {
+      // SQL only hands out sendable channels (operator_channel_sends); this is the second lock.
+      if (ch.kind !== 'google_chat') throw new Error(`the operator does not post in ${ch.kind}: approved replies there are posted by you`);
       const { page } = await chatPage(ctx, ch.url);
       await steps.step?.('browser.open', { channel: ch.name });
       return sendReply(page, sel, input, steps);

@@ -5,10 +5,11 @@ export type Tone = 'brand' | 'info' | 'success' | 'warning' | 'danger' | 'muted'
 export interface OperatorClientRow {
   slug: string; name: string; profile: string; paused: boolean; enabled: boolean; viewer_url: string | null; brain_project: string | null;
 }
+export type ChannelKind = 'google_chat' | 'gmail' | 'slack' | 'teams';
 export interface OperatorChannelRow {
-  id: string; client_slug: string; name: string; url: string; enabled: boolean; last_polled_at: string | null; last_error: string | null;
+  id: string; client_slug: string; kind?: ChannelKind; name: string; url: string; enabled: boolean; last_polled_at: string | null; last_error: string | null;
 }
-export type InboxStatus = 'new' | 'classifying' | 'fyi' | 'drafted' | 'approved' | 'sending' | 'sent' | 'skipped' | 'failed' | 'blocked';
+export type InboxStatus = 'new' | 'classifying' | 'fyi' | 'drafted' | 'approved' | 'sending' | 'sent' | 'skipped' | 'failed' | 'blocked' | 'manual';
 export interface OperatorInboxRow {
   id: string; client_slug: string; channel_id: string; sender_name: string; body: string; sent_at: string | null; created_at: string;
   status: InboxStatus; category: string | null; mode: string | null; draft: string | null; final_text: string | null; approval_id: string | null;
@@ -140,6 +141,7 @@ export const INBOX_STATUS: Record<InboxStatus, { label: string; tone: Tone }> = 
   skipped: { label: 'Skipped', tone: 'muted' },
   failed: { label: 'Failed', tone: 'danger' },
   blocked: { label: 'Blocked', tone: 'danger' },
+  manual: { label: 'You post it', tone: 'info' },
 };
 
 export const TONE_CLASS: Record<Tone, string> = {
@@ -215,6 +217,8 @@ export function describeAction(a: OperatorActionRow): { text: string; tone: Tone
     case 'action.requested': return { text: `Asked you: ${clip(str(d.summary), 100)}`, tone: 'warning', kind: 'think' };
     case 'action.done': return { text: `Did: ${clip(str(d.summary), 100)}`, tone: 'success', kind: 'send' };
     case 'update.done': return { text: 'Told the client it\'s done', tone: 'success', kind: 'send' };
+    case 'reply.manual': return { text: `Approved for ${str(d.channel) || 'the chat'}: you post it (${str(d.kind)} is read-only)`, tone: 'info', kind: 'you' };
+    case 'update.manual': return { text: `Client update ready for you to post in ${str(d.channel) || 'the chat'}`, tone: 'info', kind: 'you' };
     case 'qa.run': return { text: 'Checking the result (375 / 1366 px, console, links)', tone: 'brand', kind: 'think' };
     default: return { text: a.action.replace(/[._]/g, ' '), tone: a.ok ? 'muted' : 'danger', kind: a.ok ? 'read' : 'warn' };
   }
@@ -233,6 +237,27 @@ export function ago(iso: string | null, now = Date.now()): string {
 /** Inbox rows worth showing: everything except baseline history and your own messages, newest first. */
 export function visibleInbox(rows: OperatorInboxRow[]): OperatorInboxRow[] {
   return rows.filter((r) => !r.from_me && !(r.status === 'fyi' && !r.category)).sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+/** Channels the operator can watch; only Google Chat is posted in by the operator itself (the rest: you post). */
+export const CHANNEL_KINDS: { kind: ChannelKind; label: string; placeholder: string; sends: boolean; hint: string }[] = [
+  { kind: 'google_chat', label: 'Google Chat', placeholder: 'https://chat.google.com/room/…', sends: true, hint: 'Open the chat in the client’s browser, copy the address bar.' },
+  { kind: 'slack', label: 'Slack', placeholder: 'https://app.slack.com/client/T…/C…', sends: false, hint: 'Open the channel or DM in Slack in the browser, copy the address bar.' },
+  { kind: 'teams', label: 'Teams', placeholder: 'https://teams.microsoft.com/…', sends: false, hint: 'Open the chat in Teams on the web, copy the address bar (or "Copy link").' },
+  { kind: 'gmail', label: 'Gmail', placeholder: 'https://mail.google.com/mail/u/0/#label/Client', sends: false, hint: 'A label or a search (e.g. #search/from:client.com): each new thread or reply is read.' },
+];
+
+/** An address for that kind of channel (mirrors operator_channel_url_ok); null when the operator can't watch it. */
+export function channelUrl(kind: ChannelKind, v: string): string | null {
+  const u = v.trim();
+  if (!/^https:\/\/\S+$/.test(u)) return null;
+  switch (kind) {
+    case 'google_chat': return chatUrl(u);
+    case 'gmail': return /^https:\/\/mail\.google\.com\/mail\//.test(u) ? u : null;
+    case 'slack': return /^https:\/\/app\.slack\.com\/client\//.test(u) || /^https:\/\/[a-z0-9-]+\.slack\.com\/(archives|messages)\//.test(u) ? u : null;
+    case 'teams': return /^https:\/\/teams\.(microsoft|live|cloud\.microsoft)\.com\//.test(u) || /^https:\/\/teams\.cloud\.microsoft\//.test(u) ? u : null;
+    default: return null;
+  }
 }
 
 /** A Google Chat address as the CEO pasted it; null when it is not one the operator can watch. */

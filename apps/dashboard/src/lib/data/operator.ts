@@ -20,7 +20,7 @@ export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
   try {
     const [clients, channels, inbox, actions, settings] = await Promise.all([
       db.from('operator_clients').select('slug,name,profile,paused,enabled,viewer_url,brain_project').order('name'),
-      db.from('operator_channels').select('id,client_slug,name,url,enabled,last_polled_at,last_error').order('created_at'),
+      db.from('operator_channels').select('id,client_slug,kind,name,url,enabled,last_polled_at,last_error').order('created_at'),
       db.from('operator_inbox').select('id,client_slug,channel_id,sender_name,body,sent_at,created_at,status,category,mode,draft,final_text,approval_id,error,mentions_me,from_me,space_name')
         .order('created_at', { ascending: false }).limit(60),
       db.from('operator_actions').select('id,created_at,client_slug,inbox_id,actor,action,ok,detail').order('id', { ascending: false }).limit(120),

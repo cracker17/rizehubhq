@@ -18,7 +18,7 @@ export interface OperatorClient {
 export interface OperatorChannel {
   id: string;
   client_slug: string;
-  kind: 'google_chat';
+  kind: 'google_chat' | 'gmail' | 'slack' | 'teams';
   name: string;
   url: string;
   enabled: boolean;

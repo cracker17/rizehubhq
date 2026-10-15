@@ -41,14 +41,16 @@ export const EXTRACT_SOURCE = `(sel) => {
   for (const n of Array.from(document.querySelectorAll(sel.message))) {
     if (n.parentElement && n.parentElement.closest(sel.message)) continue;
     const senderEl = n.querySelector(sel.sender);
-    const sender = senderEl ? (senderEl.getAttribute('data-name') || senderEl.textContent || '').trim() : '';
+    const sender = senderEl ? (senderEl.getAttribute('data-name') || senderEl.getAttribute('name') || senderEl.textContent || '').trim() : '';
     const tsEl = n.querySelector(sel.timestamp);
-    const ts = tsEl ? (tsEl.getAttribute('data-absolute-timestamp') || tsEl.getAttribute('datetime') || '') : '';
+    const ts = tsEl ? ((sel.timestampAttr ? attr(tsEl, sel.timestampAttr) : '') || tsEl.getAttribute('data-absolute-timestamp') || tsEl.getAttribute('datetime') || '') : '';
     const textEl = n.querySelector(sel.text);
     const text = ((textEl ? textEl.innerText : n.innerText) || '').trim();
-    const topic = n.closest(sel.thread);
-    out.push({ id: attr(n, sel.messageIdAttr), sender, ts, text, thread: topic ? (topic.getAttribute(sel.threadIdAttr) || '') : '' });
+    const topic = sel.thread ? n.closest(sel.thread) : null;
+    const idEl = sel.idSelector ? (n.querySelector(sel.idSelector) || n) : n;
+    out.push({ id: attr(idEl, sel.messageIdAttr), sender, ts, text, thread: topic ? (topic.getAttribute(sel.threadIdAttr) || '') : '' });
   }
+  if (sel.newestFirst) out.reverse();
   const t = document.querySelector(sel.spaceTitle);
   return { title: ((t && t.textContent) || document.title || '').trim(), messages: out };
 }`;
@@ -67,6 +69,10 @@ export interface ChatMessage {
 export function parseTimestamp(ts: string): string | null {
   const s = ts.trim();
   if (!s) return null;
+  if (/^\d{9,11}\.\d+$/.test(s)) { // Slack: epoch seconds with a fraction ("1700000000.123456")
+    const d = new Date(Math.round(Number(s) * 1000));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
   if (/^\d+$/.test(s)) {
     let n = Number(s);
     if (s.length >= 15) n = Math.floor(n / 1000); // µs
@@ -83,7 +89,7 @@ const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function isMe(sender: string, myNames: readonly string[]): boolean {
   const s = lc(sender);
-  return s === 'you' || myNames.some((n) => lc(n) === s);
+  return s === 'you' || s === 'me' || myNames.some((n) => lc(n) === s); // Gmail lists your own mail as "me"
 }
 
 export function mentionsMe(text: string, myNames: readonly string[]): boolean {

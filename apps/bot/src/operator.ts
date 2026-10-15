@@ -131,6 +131,8 @@ export function operatorActionBody(ap: BotApproval): string[] {
   return lines;
 }
 
+const APP_NAME: Record<string, string> = { gmail: 'Gmail', slack: 'Slack', teams: 'Teams', google_chat: 'Google Chat', whatsapp: 'WhatsApp' };
+
 const MEMORY_KIND: Record<string, string> = { session_note: 'session note', decision: 'decision', next_step: 'next step' };
 
 /** A job's memory for the client's project (an HQ Brain proposal, or kept by the operator until the Brain has it). */
@@ -163,7 +165,7 @@ export interface OperatorNotice {
 /** Notice kinds sent to Telegram (mirrors the operator_actions_notify index of 20261016000000_operator_worker.sql). */
 export const NOTICE_ACTIONS = ['send.done', 'send.failed', 'send.blocked', 'message.classify_failed', 'watch.failed',
   'update.done', 'update.failed', 'update.blocked', 'job.started', 'job.done', 'job.escalated', 'job.failed',
-  'action.done', 'action.failed', 'login.lost', 'login.restored'] as const;
+  'action.done', 'action.failed', 'login.lost', 'login.restored', 'reply.manual', 'update.manual'] as const;
 
 /** Every posted reply is announced (you always know the client got an answer); classify failures only after 3 tries. */
 export function shouldNotify(n: Pick<OperatorNotice, 'action' | 'operator_inbox' | 'detail'>): boolean {
@@ -183,7 +185,7 @@ const usd = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && 
 export function formatOperatorNotice(n: OperatorNotice, dashboardUrl?: string): string {
   const d = (n.detail ?? {}) as { error?: string; reason?: string; channel?: string; action_types?: string[]; mode?: string; text?: string; url?: string;
     title?: string; summary?: string; links?: unknown; qa?: { pass?: boolean; errors?: unknown }; cost_usd?: unknown; may_have_posted?: boolean;
-    kind?: string; label?: string; site?: string; detail?: string };
+    kind?: string; label?: string; site?: string; detail?: string; sender?: string };
   const who = n.operator_inbox?.sender_name ? ` to ${esc(n.operator_inbox.sender_name)}` : '';
   const client = esc(n.client_slug ?? 'operator');
   const job = esc(clip(n.job_title ?? d.title ?? 'a job', 160));
@@ -219,6 +221,13 @@ export function formatOperatorNotice(n: OperatorNotice, dashboardUrl?: string): 
       return truncate(`⚠️ <b>Action failed: ${esc(ACTION_KIND[String(d.kind)] ?? 'action')}</b> · ${client}\n${esc(clip(d.summary, 300))}\n${esc(clip(d.error, 400))}\nNot retried (it may have half-happened): check before asking again.`);
     case 'login.lost':
       return truncate(`🔑 <b>Signed out of ${esc(d.label ?? d.site ?? 'a site')}</b> · ${client}\n${esc(clip(d.detail, 200))}\nLog in once through the workspace viewer; jobs that need it wait meanwhile.`);
+    case 'reply.manual': case 'update.manual': {
+      const app = APP_NAME[String(d.kind)] ?? 'the chat';
+      const what = n.action === 'update.manual' ? `client update for “${job}”` : `reply${d.sender ? ` to ${esc(d.sender)}` : ''}`;
+      return truncate(`📋 <b>Post this yourself</b> in ${esc(app)} · ${client}${d.channel ? ` · ${esc(d.channel)}` : ''}
+Your approved ${what} (the operator only reads ${esc(app)}):
+<pre>${esc(clip(d.text, 3000))}</pre>${chatLink(d.url)}`);
+    }
     case 'login.restored':
       return truncate(`🔓 <b>Logged in again: ${esc(d.label ?? d.site ?? 'site')}</b> · ${client}`);
     case 'send.failed':
