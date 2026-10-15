@@ -290,3 +290,35 @@ test('send test results come back on Telegram', () => {
   const bad = formatOperatorNotice(notice({ action: 'posting.tested', ok: false, inbox_id: null, operator_inbox: null, detail: { kind: 'teams', ok: false, detail: 'no teams composer found' } }));
   assert.match(bad, /Teams send test failed<\/b>[\s\S]*no teams composer found[\s\S]*you post it/);
 });
+
+test('email picks: numbered summary with Open buttons; /open and /skipmail arguments; fallback notices', async () => {
+  const { emailItems, noticeMarkup, parseEmailCallback, parsePickArgs } = await import('./operator');
+  const id1 = '11111111-2222-3333-4444-555555555555'; const id2 = '66666666-7777-8888-9999-000000000000';
+  const n = notice({ action: 'email.summary', inbox_id: null, operator_inbox: null, detail: { count: 2, items: [
+    { inbox_id: id1, n: 1, sender: 'Alex Kim', email: 'alex@lvlup.vc', subject: 'Invoice question - can you resend the September invoice?', url: null },
+    { inbox_id: id2, n: 2, sender: 'Riley <Chen>', email: null, subject: 'Logos', url: null }] } });
+  const text = formatOperatorNotice(n);
+  assert.match(text, /2 new emails<\/b> · lvlup\n<b>1\.<\/b> Alex Kim: Invoice question/);
+  assert.match(text, /<b>2\.<\/b> Riley &lt;Chen&gt;: Logos/);
+  assert.match(text, /Tap Open \(or \/open N\)/);
+  assert.deepEqual(noticeMarkup(n)!.inline_keyboard, [[{ text: 'Open 1', callback_data: `eo:${id1}` }, { text: 'Open 2', callback_data: `eo:${id2}` }]]);
+  assert.ok(`eo:${id1}`.length <= 64);
+  assert.equal(noticeMarkup(notice({ action: 'job.done' })), undefined);
+  assert.equal(emailItems(notice({ action: 'job.done' })).length, 0);
+  assert.equal(parseEmailCallback(`eo:${id1.toUpperCase()}`), id1);
+  assert.equal(parseEmailCallback('ap:x:approve'), null);
+  assert.deepEqual(parsePickArgs(' 2 '), { client: null, n: 2 });
+  assert.deepEqual(parsePickArgs('LvlUp #12'), { client: 'lvlup', n: 12 });
+  assert.equal(parsePickArgs('two'), null);
+  assert.match(formatOperatorNotice(notice({ action: 'ai.fallback', inbox_id: null, operator_inbox: null, detail: { reason: 'credit balance too low', model: 'groq:openai/gpt-oss-120b', jobs: true } })),
+    /Claude is unavailable<\/b>: credit balance too low\nReplies and small jobs continue on groq:openai\/gpt-oss-120b/);
+
+  const db = new FakeBotDb();
+  db.held.push({ id: id1, client_slug: 'lvlup', pick_no: 1, sender_name: 'Alex', body: 'Invoice', status: 'held' });
+  assert.equal((await db.openPick(null, 1)).result, 'opened');
+  assert.equal(await db.openEmail(id1), 'already_new');
+  db.operatorNotices.push(n);
+  const sender = new FakeSender();
+  await notifierTick({ db, sender, chatId: 1, dashboardUrl: 'https://hq.rizehub.ph', names: () => new Map(), now: () => new Date('2026-10-15T06:00:00Z'), log: () => {} }, { lastDecisionSync: '2026-10-15T00:00:00Z' });
+  assert.equal(sender.sent.at(-1)!.markup?.inline_keyboard[0]![0]!.text, 'Open 1');
+});

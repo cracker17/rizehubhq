@@ -19,6 +19,8 @@ export interface WatchSelectors {
   text: string; thread: string; threadIdAttr: string; spaceTitle: string; newestFirst: string;
   /** A child element holding the thread id (Gmail rows); else `thread` is an ancestor. */
   threadChild: string;
+  /** Attribute of the sender element holding the address (Gmail: email). */
+  senderEmailAttr: string;
 }
 
 export const WATCH_SELECTORS: Record<WatchKind, WatchSelectors> = {
@@ -30,7 +32,7 @@ export const WATCH_SELECTORS: Record<WatchKind, WatchSelectors> = {
     timestamp: 'a.c-timestamp[data-ts], [data-ts]',
     timestampAttr: 'data-ts',
     text: '[data-qa="message-text"], .c-message_kit__blocks, .p-rich_text_section',
-    thread: '', threadIdAttr: '', threadChild: '',
+    thread: '', threadIdAttr: '', threadChild: '', senderEmailAttr: '',
     spaceTitle: '[data-qa="channel_name"], .p-view_header__channel_title, [data-qa="channel_header_title"]',
     newestFirst: '',
   },
@@ -42,7 +44,7 @@ export const WATCH_SELECTORS: Record<WatchKind, WatchSelectors> = {
     timestamp: 'time[datetime]',
     timestampAttr: 'datetime',
     text: '[id^="content-"], [data-tid="chat-pane-message"] [dir="auto"]',
-    thread: '', threadIdAttr: '', threadChild: '',
+    thread: '', threadIdAttr: '', threadChild: '', senderEmailAttr: '',
     spaceTitle: '[data-tid="chat-title"], [data-tid="channel-name"], h2',
     newestFirst: '',
   },
@@ -54,7 +56,7 @@ export const WATCH_SELECTORS: Record<WatchKind, WatchSelectors> = {
     timestamp: 'td.xW span[title], .xW [title]',
     timestampAttr: 'title',
     text: '.y6, .xT',
-    thread: '', threadIdAttr: 'data-legacy-thread-id,data-thread-id', threadChild: '[data-legacy-thread-id], [data-thread-id]',
+    thread: '', threadIdAttr: 'data-legacy-thread-id,data-thread-id', threadChild: '[data-legacy-thread-id], [data-thread-id]', senderEmailAttr: 'email',
     spaceTitle: 'title',
     newestFirst: '1',
   },

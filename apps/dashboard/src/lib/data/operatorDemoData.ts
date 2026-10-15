@@ -64,6 +64,7 @@ export function demoOperator(now = Date.now()): OperatorHomeData {
       { id: 'demo-a1', client_slug: 'lvlup', kind: 'slack', label: 'LvlUp Slack', home_url: 'https://app.slack.com/client/T0LVLUP', enabled: true, last_swept_at: t(1), last_found: 2, last_error: null },
       { id: 'demo-a2', client_slug: 'lvlup', kind: 'gmail', label: 'LvlUp mail', home_url: 'https://mail.google.com/mail/u/0/#search/is%3Aunread+in%3Ainbox', enabled: true, last_swept_at: t(1), last_found: 1, last_error: null },
     ],
+    emailTargets: [{ client_slug: 'lvlup', pattern: '@lvlup.vc' }, { client_slug: 'lvlup', pattern: 'riley chen' }],
     posting: [{ client_slug: 'lvlup', kind: 'slack', test_url: 'https://app.slack.com/client/T0LVLUP/D0JULEV', test_state: 'passed', test_detail: 'posted and read back', tested_at: t(300), enabled: false }],
     digestTimes: { morning: '08:00', evening: '18:00' },
     killSwitch: false, officePaused: false, autoSend: true, heartbeatAt: t(0.5), demo: true,

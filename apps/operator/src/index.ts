@@ -256,6 +256,11 @@ async function main() {
       }),
       loop('daily', 3600_000, daily),
     ] : []),
+    // Gmail picks (phase 3): the Telegram summary of targeted unread mail waiting for "/open N".
+    loop('email-summary', 60_000, async () => {
+      const { error } = await sb.rpc('operator_email_summary_tick');
+      if (error && !/operator_email_summary_tick/.test(error.message)) throw new Error(error.message);
+    }),
     // Morning / evening digests (phase 3): SQL decides whether one is due and saves it once; the bot sends it.
     loop('digest', 60_000, async () => {
       const { data, error } = await sb.rpc('operator_digest_tick');

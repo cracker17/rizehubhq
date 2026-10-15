@@ -36,3 +36,9 @@ test('watchers: Slack timestamps, Gmail "me", Gmail rows keyed by last message i
   assert.deepEqual(msgs.map((m) => [m.external_id, m.from_me]), [['18f1a', false], ['18f1b', true]]);
   assert.ok(msgs[0]!.sent_at?.startsWith('2026-10-15'));
 });
+
+test('gmail rows carry the sender address for the email target list', () => {
+  const [m] = normalizeMessages([{ id: '18a', sender: 'Alex Kim', ts: '', text: 'Invoice', thread: 't1', senderEmail: ' Alex@LvlUp.vc ' }], ['Julev']);
+  assert.equal(m!.sender_email, 'alex@lvlup.vc');
+  assert.equal(watchSelectors('gmail').senderEmailAttr, 'email');
+});

@@ -56,6 +56,11 @@ export interface BotDb {
   operatorLogins(client: string | null): Promise<OperatorLoginLite[]>;
   /** QA screenshots by id (decoded). */
   operatorEvidence(ids: number[]): Promise<{ id: number; label: string; jpeg: Buffer }[]>;
+  // ---------- email picks (20261017080000_operator_email.sql) ----------
+  openEmail(inboxId: string): Promise<string>;
+  openPick(client: string | null, n: number): Promise<{ result: string; client?: string; sender?: string; subject?: string; clients?: string[] }>;
+  dismissPick(client: string | null, n: number): Promise<string>;
+  heldEmails(limit: number): Promise<{ client_slug: string; pick_no: number | null; sender_name: string; body: string }[]>;
 }
 
 export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
@@ -156,6 +161,18 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
       if (client) q = q.eq('client_slug', client);
       return must<OperatorLoginLite[]>(await q.order('client_slug').order('site'), 'operator_logins');
     },
+    openEmail: async (id) => must<string>(await sb.rpc('operator_open_email', { p_inbox: id, p_via: 'telegram' }), 'operator_open_email'),
+    openPick: async (client, n) => must(await sb.rpc('operator_open_pick', { p_client: client, p_no: n, p_via: 'telegram' }), 'operator_open_pick'),
+    dismissPick: async (client, n) => {
+      let q = sb.from('operator_inbox').select('id,client_slug').eq('status', 'held').eq('pick_no', n);
+      if (client) q = q.eq('client_slug', client);
+      const rows = must<{ id: string; client_slug: string }[]>(await q.order('created_at', { ascending: false }).limit(5), 'operator_inbox');
+      if (!rows.length) return 'not_found';
+      if (new Set(rows.map((r) => r.client_slug)).size > 1) return 'ambiguous';
+      return must<string>(await sb.rpc('operator_dismiss_email', { p_inbox: rows[0]!.id, p_via: 'telegram' }), 'operator_dismiss_email');
+    },
+    heldEmails: async (limit) => must(await sb.from('operator_inbox').select('client_slug,pick_no,sender_name,body').eq('status', 'held')
+      .order('created_at', { ascending: false }).limit(limit), 'operator_inbox'),
     operatorEvidence: async (ids) => {
       const rows = must<{ id: number; label: string; data: string }[]>(await sb.from('operator_evidence').select('id,label,data').in('id', ids).order('id'), 'operator_evidence');
       // bytea comes back hex-encoded ("\\x...") through PostgREST

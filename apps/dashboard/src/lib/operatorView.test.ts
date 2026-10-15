@@ -94,3 +94,8 @@ test('WhatsApp numbers become wa.me addresses', async () => {
   assert.equal(channelUrl('whatsapp', '+63 917 555 0101'), 'https://wa.me/639175550101');
   assert.equal(channelUrl('whatsapp', '12'), null);
 });
+
+test('email senders box: one per line or comma, lowercase, no duplicates, no 1-letter junk', async () => {
+  const { parseTargets } = await import('./operatorView');
+  assert.deepEqual(parseTargets(' @LvlUp.vc \nRiley Chen, alex@lvlup.vc;@lvlup.vc\nx\n'), ['@lvlup.vc', 'riley chen', 'alex@lvlup.vc']);
+});

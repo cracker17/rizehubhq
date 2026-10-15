@@ -4,7 +4,7 @@ import type { BotDb } from './db';
 import { formatApproval, formatBudgetAlert, formatReport, isQuestion } from './format';
 import { approvalKeyboard, decidedKeyboard, type InlineMarkup } from './keyboard';
 import { inQuietHours, parseQuietHours, shouldSendApproval } from './quiet';
-import { formatOperatorNotice, noticeEvidence, operatorLabels, shouldNotify } from './operator';
+import { formatOperatorNotice, noticeEvidence, noticeMarkup, operatorLabels, shouldNotify } from './operator';
 import type { BotApproval } from './types';
 
 export interface Sender {
@@ -107,7 +107,7 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
   for (const n of notices) {
     try {
       if (shouldNotify(n)) {
-        await deps.sender.send(deps.chatId, formatOperatorNotice(n, deps.dashboardUrl));
+        await deps.sender.send(deps.chatId, formatOperatorNotice(n, deps.dashboardUrl), noticeMarkup(n));
         r.operatorNotices++;
         // QA screenshots of a finished job as an album; best effort (the text already went out).
         const ids = noticeEvidence(n);

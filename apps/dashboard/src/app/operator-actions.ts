@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
 import { ensureStepUp } from '@/lib/auth/mfaServer';
-import { ACCOUNT_KINDS, channelUrl, CHANNEL_KINDS, taskBrief, type ChannelKind, type SweepKind } from '@/lib/operatorView';
+import { ACCOUNT_KINDS, channelUrl, CHANNEL_KINDS, parseTargets, taskBrief, type ChannelKind, type SweepKind } from '@/lib/operatorView';
 
 export type OperatorResult = { ok: true } | { ok: false; error: string };
 type Db = NonNullable<Awaited<ReturnType<typeof createSupabaseServer>>>;
@@ -136,6 +136,18 @@ export async function requestSendTestAction(slug: string, kind: 'gmail' | 'slack
 export async function setPostingAction(slug: string, kind: 'gmail' | 'slack' | 'teams', on: boolean): Promise<OperatorResult> {
   if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
   return call('operator_set_posting', { p_client: slug, p_kind: kind, p_on: on === true });
+}
+
+/** Gmail: the senders to watch (one per line: an address, @domain or a name; empty = everyone). */
+export async function setEmailTargetsAction(slug: string, text: string): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  return call('operator_set_email_targets', { p_client: slug, p_patterns: parseTargets(String(text ?? '')) });
+}
+
+export async function setEmailModeAction(slug: string, mode: 'pick' | 'auto'): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  if (mode !== 'pick' && mode !== 'auto') return { ok: false, error: 'Unknown mode.' };
+  return call('operator_set_email_mode', { p_client: slug, p_mode: mode });
 }
 
 export async function setReplyWhenAction(slug: string, mode: 'addressed' | 'all'): Promise<OperatorResult> {

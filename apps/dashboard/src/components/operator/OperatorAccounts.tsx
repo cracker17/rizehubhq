@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import { Plus, Radar } from 'lucide-react';
 import { btn, inputCls } from '@/components/clients/ui';
 import { ACCOUNT_KINDS, ago, type OperatorClientRow, type OperatorHomeData, type SweepKind } from '@/lib/operatorView';
-import { addAccountAction, requestSendTestAction, setAccountEnabledAction, setPostingAction, type OperatorResult } from '@/app/operator-actions';
+import { addAccountAction, requestSendTestAction, setAccountEnabledAction, setEmailModeAction, setEmailTargetsAction, setPostingAction, type OperatorResult } from '@/app/operator-actions';
 
 type Run = (fn: () => Promise<OperatorResult>, done: string) => void;
 
@@ -46,6 +46,7 @@ export function Accounts({ data, client, pending, run }: { data: OperatorHomeDat
           </li>
         ))}
       </ul>
+      {(accounts.some((a) => a.kind === 'gmail') || data.channels.some((c) => c.client_slug === client.slug && c.kind === 'gmail')) && <EmailTargets data={data} client={client} pending={pending} run={run} />}
       {adding && (
         <form className="mt-2 flex flex-col gap-2" onSubmit={(e) => {
           e.preventDefault();
@@ -118,6 +119,34 @@ export function Posting({ data, client, pending, run }: { data: OperatorHomeData
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+/** Gmail: whose mail counts, and whether you pick from a Telegram summary or every email gets a draft. */
+function EmailTargets({ data, client, pending, run }: { data: OperatorHomeData; client: OperatorClientRow; pending: boolean; run: Run }) {
+  const current = data.emailTargets.filter((t) => t.client_slug === client.slug).map((t) => t.pattern);
+  const [text, setText] = useState(current.join('\n'));
+  const mode = client.email_mode ?? 'pick';
+  const changed = text.trim() !== current.join('\n').trim();
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-lg bg-[var(--color-panel-2)] p-3">
+      <label htmlFor="op-email-targets" className="text-[13px] font-medium">Gmail: whose emails count</label>
+      <p className="text-xs text-[var(--color-muted)]">One per line: an address (alex@lvlup.vc), a whole company (@lvlup.vc) or a name (Riley Chen). Everyone else is ignored and never stored. Empty = every unread email.</p>
+      <textarea id="op-email-targets" className={clsx(inputCls, 'min-h-[84px] py-2 font-mono text-[12px]')} value={text} onChange={(e) => setText(e.target.value)} placeholder={'@lvlup.vc\nriley chen'} disabled={data.demo} />
+      <div className="flex flex-wrap items-center gap-2">
+        {changed && !data.demo && <button className={btn.small} disabled={pending} onClick={() => run(() => setEmailTargetsAction(client.slug, text), 'Saved: only these senders count')}>Save senders</button>}
+        <span role="radiogroup" aria-label="What happens with their emails" className="ml-auto inline-flex rounded-lg bg-[var(--color-panel)] p-0.5">
+          {([['pick', 'Summary, I pick'], ['auto', 'Draft every one']] as const).map(([m, label]) => (
+            <button key={m} role="radio" aria-checked={mode === m} disabled={pending || data.demo || mode === m}
+              onClick={() => run(() => setEmailModeAction(client.slug, m), m === 'pick' ? 'Telegram sends a summary; you open the ones to answer' : 'Every email from them gets a draft')}
+              className={clsx('h-7 rounded-md px-2.5 text-xs font-medium active:scale-[.97] disabled:cursor-default', mode === m ? 'bg-[color-mix(in_oklab,var(--color-primary)_22%,transparent)] text-[#d6ccff]' : 'text-[var(--color-muted)] hover:text-white')}>
+              {label}
+            </button>
+          ))}
+        </span>
+      </div>
+      {mode === 'pick' && <p className="text-xs text-[var(--color-dim)]">Telegram lists their new emails with a number; tap Open (or send /open 2) and the draft reply comes back for your \u2705.</p>}
     </div>
   );
 }

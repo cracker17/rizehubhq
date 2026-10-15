@@ -452,6 +452,21 @@ Pull requests write if you want those actions; a Vercel token scoped to the team
 step; or `OPERATOR_GITHUB_TOKEN_<CLIENT>` / `OPERATOR_VERCEL_TOKEN_<CLIENT>`. Team projects on Vercel need the team id
 (wizard, or `OPERATOR_VERCEL_TEAM_<CLIENT>`). GitHub and Vercel are also login presets in the wizard.
 
+### Email: who counts, a Telegram summary, `/open` (`20261017080000_operator_email.sql`)
+
+Watched chats → Unread sweep → **Gmail: whose emails count**: one per line, an address (`alex@lvlup.vc`), a whole
+company (`@lvlup.vc`) or a name (`Riley Chen`). Mail from anyone else is **not stored at all**; empty = every unread
+email. Two modes per client:
+
+- **Summary, I pick** (default): their unread mail waits ("Pick on Telegram") with a short number. Every 15 minutes
+  (or at 5 emails) Telegram sends "📧 3 new emails · lvlup" with `1. Alex Kim: Invoice question…` and **Open** buttons.
+  Tap Open or send **`/open 2`** (`/open lvlup 2` when two clients have a 2): the email becomes a normal message,
+  drafted in your words with the project memory, and comes back as ✅ Send / ✏️ Edit like any reply. `/skipmail 2`
+  ignores one, `/mail` lists what waits. An email you opened always counts as meant for you.
+- **Draft every one**: every email from those senders is drafted right away.
+
+Replies to email are posted by you ("Post this yourself") until Gmail passes its send test and you switch posting on.
+
 ### Demo (`/operator` without Supabase, or `/operator?demo=1` on the live dashboard)
 
 A scripted LvlUp morning plays on the real Operator page with fake data (`lib/operatorDemo.ts`, tested): Alex asks in

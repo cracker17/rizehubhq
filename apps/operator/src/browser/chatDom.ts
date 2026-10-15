@@ -28,7 +28,7 @@ export function selectors(overrides: Record<string, string> = {}): Selectors {
   return out;
 }
 
-export interface RawMessage { id: string; sender: string; ts: string; text: string; thread: string }
+export interface RawMessage { id: string; sender: string; ts: string; text: string; thread: string; senderEmail?: string }
 export interface RawPage { title: string; messages: RawMessage[] }
 
 /**
@@ -48,7 +48,8 @@ export const EXTRACT_SOURCE = `(sel) => {
     const text = ((textEl ? textEl.innerText : n.innerText) || '').trim();
     const topic = sel.threadChild ? n.querySelector(sel.threadChild) : sel.thread ? n.closest(sel.thread) : null;
     const idEl = sel.idSelector ? (n.querySelector(sel.idSelector) || n) : n;
-    out.push({ id: attr(idEl, sel.messageIdAttr), sender, ts, text, thread: topic ? attr(topic, sel.threadIdAttr) : '' });
+    const senderEmail = senderEl && sel.senderEmailAttr ? (senderEl.getAttribute(sel.senderEmailAttr) || '') : '';
+    out.push({ id: attr(idEl, sel.messageIdAttr), sender, ts, text, thread: topic ? attr(topic, sel.threadIdAttr) : '', senderEmail });
   }
   if (sel.newestFirst) out.reverse();
   const t = document.querySelector(sel.spaceTitle);
@@ -63,6 +64,8 @@ export interface ChatMessage {
   sent_at: string | null;
   mentions_me: boolean;
   from_me: boolean;
+  /** Gmail: the sender's address (for the email target list). */
+  sender_email?: string | null;
 }
 
 /** Chat timestamps: epoch ms or µs (data-absolute-timestamp), epoch s, or ISO. null when unreadable. */
@@ -115,7 +118,7 @@ export function normalizeMessages(raw: RawMessage[], myNames: readonly string[])
     if (seen.has(id)) continue;
     seen.add(id);
     out.push({ external_id: id.slice(0, 300), thread_key: r.thread.trim() || null, sender_name: sender, body: body.slice(0, 20000),
-      sent_at: sentAt, mentions_me: mentionsMe(body, myNames), from_me: isMe(sender, myNames) });
+      sent_at: sentAt, mentions_me: mentionsMe(body, myNames), from_me: isMe(sender, myNames), sender_email: r.senderEmail?.trim().toLowerCase() || null });
   }
   return out;
 }

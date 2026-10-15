@@ -88,6 +88,21 @@ export class FakeBotDb implements BotDb {
   }
   async operatorJobs(client: string | null, limit: number) { return this.operatorJobRows.filter((j) => !client || j.client_slug === client).slice(0, limit); }
   async operatorLogins(client: string | null) { return this.operatorLoginRows.filter((l) => !client || l.client_slug === client); }
+  held: { id: string; client_slug: string; pick_no: number; sender_name: string; body: string; status: string }[] = [];
+  async openEmail(id: string) { const h = this.held.find((x) => x.id === id); if (!h) return 'unknown'; if (h.status !== 'held') return `already_${h.status}`; h.status = 'new'; return 'opened'; }
+  async openPick(client: string | null, n: number) {
+    const m = this.held.filter((h) => h.status === 'held' && h.pick_no === n && (!client || h.client_slug === client));
+    if (!m.length) return { result: 'not_found' };
+    if (new Set(m.map((h) => h.client_slug)).size > 1) return { result: 'ambiguous', clients: [...new Set(m.map((h) => h.client_slug))] };
+    m[0]!.status = 'new';
+    return { result: 'opened', client: m[0]!.client_slug, sender: m[0]!.sender_name, subject: m[0]!.body };
+  }
+  async dismissPick(client: string | null, n: number) {
+    const m = this.held.find((h) => h.status === 'held' && h.pick_no === n && (!client || h.client_slug === client));
+    if (!m) return 'not_found';
+    m.status = 'skipped'; return 'dismissed';
+  }
+  async heldEmails(limit: number) { return this.held.filter((h) => h.status === 'held').slice(0, limit); }
   async operatorEvidence(ids: number[]) { return ids.flatMap((id) => { const e = this.evidence.get(id); return e ? [{ id, ...e }] : []; }); }
   async unsentOperatorNotices(sinceIso: string) { return this.operatorNotices.filter((n) => !n.telegram_sent_at && n.created_at >= sinceIso); }
   async markOperatorNoticeSent(id: number) { const n = this.operatorNotices.find((x) => x.id === id); if (n && !n.telegram_sent_at) n.telegram_sent_at = this.now().toISOString(); }

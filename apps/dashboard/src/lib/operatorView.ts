@@ -6,12 +6,14 @@ export interface OperatorClientRow {
   slug: string; name: string; profile: string; paused: boolean; enabled: boolean; viewer_url: string | null; brain_project: string | null;
   /** Phase 3: 'addressed' = answer only messages meant for Julev (default); 'all' = anything that needs a reply. */
   reply_when?: 'addressed' | 'all';
+  /** Gmail: 'pick' = Telegram summary, you open the ones to answer; 'auto' = draft every targeted email. */
+  email_mode?: 'pick' | 'auto';
 }
 export type ChannelKind = 'google_chat' | 'gmail' | 'slack' | 'teams' | 'whatsapp';
 export interface OperatorChannelRow {
   id: string; client_slug: string; kind?: ChannelKind; name: string; direct?: boolean; auto_discovered?: boolean; url: string; enabled: boolean; last_polled_at: string | null; last_error: string | null;
 }
-export type InboxStatus = 'new' | 'classifying' | 'fyi' | 'drafted' | 'approved' | 'sending' | 'sent' | 'skipped' | 'failed' | 'blocked' | 'manual';
+export type InboxStatus = 'new' | 'classifying' | 'fyi' | 'drafted' | 'approved' | 'sending' | 'sent' | 'skipped' | 'failed' | 'blocked' | 'manual' | 'held';
 export interface OperatorInboxRow {
   id: string; client_slug: string; channel_id: string; sender_name: string; body: string; sent_at: string | null; created_at: string;
   status: InboxStatus; category: string | null; mode: string | null; draft: string | null; final_text: string | null; approval_id: string | null;
@@ -55,6 +57,8 @@ export interface OperatorHomeData {
   autonomy: OperatorAutonomyRow[];
   /** Phase 3 unread sweep: the app accounts in each client's browser (empty before the migration). */
   accounts: OperatorAccountRow[];
+  /** Phase 3: the Gmail senders to watch per client (empty = everyone). */
+  emailTargets: { client_slug: string; pattern: string }[];
   /** Phase 3: posting in Slack / Teams / Gmail per client (a passed send test + the switch). */
   posting: OperatorPostingRow[];
   /** Telegram digest times 'HH:MM' (null = off); settings.operator_digest_times. */
@@ -102,6 +106,11 @@ export function digestTimes(v: unknown): { morning: string | null; evening: stri
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
   const t = (x: unknown, d: string) => (x === undefined ? d : typeof x === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(x) ? x : null);
   return { morning: t(o.morning, '08:00'), evening: t(o.evening, '18:00') };
+}
+
+/** The senders box: one per line (or comma-separated) → lowercase patterns of 2-200 characters, no duplicates. */
+export function parseTargets(text: string): string[] {
+  return [...new Set(text.split(/[\n,;]+/).map((s) => s.trim().toLowerCase()).filter((s) => s.length >= 2 && s.length <= 200))].slice(0, 100);
 }
 
 /** A task as typed in "Add task": trimmed, 3 to 8000 characters. */
@@ -159,6 +168,7 @@ export const INBOX_STATUS: Record<InboxStatus, { label: string; tone: Tone }> = 
   failed: { label: 'Failed', tone: 'danger' },
   blocked: { label: 'Blocked', tone: 'danger' },
   manual: { label: 'You post it', tone: 'info' },
+  held: { label: 'Pick on Telegram', tone: 'warning' },
 };
 
 export const TONE_CLASS: Record<Tone, string> = {

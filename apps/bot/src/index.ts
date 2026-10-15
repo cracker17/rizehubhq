@@ -12,7 +12,7 @@ import type { InlineMarkup } from './keyboard';
 import { notifierTick, renderApproval, tzOf, type NotifierState, type Sender } from './notifier';
 import { createRequest, processText, type ChatIO, type IntakeDeps } from './intake';
 import { PendingNotes } from './pending';
-import { clientArg, formatJobs, formatLogins, formatOperatorStatus, parseTaskArgs } from './operator';
+import { clientArg, formatJobs, formatLogins, formatOperatorStatus, parseEmailCallback, parsePickArgs, parseTaskArgs } from './operator';
 import { handleVoice, telegramDownloader, type VoiceClip, type VoiceDeps } from './voice';
 
 const cfg = loadBotConfig(process.env);
@@ -67,6 +67,7 @@ const HELP = [
   '/task &lt;client&gt; &lt;what to do&gt; : give the operator a job (it reports start, done + QA screenshots)',
   '/jobs [client] : the operator\'s open and recent jobs',
   '/logins [client] : is each workspace site still logged in?',
+  '/mail : emails waiting for you to pick · /open N : draft a reply to email N · /skipmail N : ignore it',
   '/cancel : drop a pending change note',
   '/help : this list',
   `Dashboard: ${cfg.dashboardUrl}`,
@@ -188,6 +189,35 @@ bot.command('logins', async (ctx) => {
   catch (e) { return ctx.reply(`Couldn't read the logins: ${errText(e)}`); }
 });
 
+// ---------- email picks: /mail, /open N, /skipmail N (and the Open buttons) ----------
+bot.command('mail', async (ctx) => {
+  try {
+    const rows = await db.heldEmails(15);
+    if (!rows.length) return ctx.reply('\ud83d\udce7 No emails waiting for you.');
+    return ctx.reply(['\ud83d\udce7 <b>Waiting for you</b>', ...rows.map((r) => `<b>${r.pick_no ?? '?'}.</b> ${r.client_slug} \u00b7 ${escHtml(r.sender_name || 'Someone')}: ${escHtml(r.body.slice(0, 100))}`),
+      '', '/open N drafts a reply \u00b7 /skipmail N ignores it'].join('\n'), html());
+  } catch (e) { return ctx.reply(`Couldn't read the mail: ${errText(e)}`); }
+});
+bot.command('open', async (ctx) => {
+  const a = parsePickArgs(ctx.match);
+  if (!a) return ctx.reply('Usage: /open N (or /open <client> N), N from the email summary.');
+  try {
+    const r = await db.openPick(a.client, a.n);
+    if (r.result === 'ambiguous') return ctx.reply(`Two clients have email ${a.n}: /open ${r.clients?.[0]} ${a.n} or /open ${r.clients?.[1]} ${a.n}`);
+    if (r.result !== 'opened') return ctx.reply(`No email ${a.n} is waiting. /mail lists them.`);
+    return ctx.reply(`\u270d\ufe0f Opening ${r.sender ?? 'it'}'s email (${r.client}). The draft comes here in a minute for your \u2705.`);
+  } catch (e) { return ctx.reply(`Couldn't open it: ${errText(e)}`); }
+});
+bot.command('skipmail', async (ctx) => {
+  const a = parsePickArgs(ctx.match);
+  if (!a) return ctx.reply('Usage: /skipmail N (or /skipmail <client> N)');
+  try {
+    const r = await db.dismissPick(a.client, a.n);
+    return ctx.reply(r === 'dismissed' ? `Email ${a.n} ignored.` : r === 'ambiguous' ? `Two clients have email ${a.n}: add the client, e.g. /skipmail lvlup ${a.n}` : `No email ${a.n} is waiting.`);
+  } catch (e) { return ctx.reply(`Couldn't skip it: ${errText(e)}`); }
+});
+const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 bot.command('budget', async (ctx) => {
   const [rows, settings] = await Promise.all([db.spendRows(new Date(Date.now() - 32 * 86400_000).toISOString()), db.getSettings()]);
   const { monthly, daily } = budgetCaps(cfg, settings); // dashboard (Admin → API & AI) → .env → default, like the worker
@@ -198,6 +228,13 @@ bot.command('cancel', (ctx) => ctx.reply(pending.clear(ctx.chat.id) ? 'OK, no ch
 
 // ---------- approval buttons ----------
 bot.on('callback_query:data', async (ctx) => {
+  const emailId = parseEmailCallback(ctx.callbackQuery.data);
+  if (emailId) {
+    try {
+      const r = await db.openEmail(emailId);
+      return ctx.answerCallbackQuery({ text: r === 'opened' ? 'Opening: the draft comes here in a minute' : r === 'already_new' || r === 'already_classifying' ? 'Already opening' : 'Already handled' });
+    } catch (e) { return ctx.answerCallbackQuery({ text: `Couldn't open it: ${e instanceof Error ? e.message.slice(0, 120) : 'error'}`, show_alert: true }); }
+  }
   const cb = parseCallback(ctx.callbackQuery.data);
   const msg = ctx.callbackQuery.message;
   if (!cb || !msg) return ctx.answerCallbackQuery({ text: 'Unknown button' });

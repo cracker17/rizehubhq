@@ -166,12 +166,43 @@ export interface OperatorNotice {
 /** Notice kinds sent to Telegram (mirrors the operator_actions_notify index of 20261016000000_operator_worker.sql). */
 export const NOTICE_ACTIONS = ['send.done', 'send.failed', 'send.blocked', 'message.classify_failed', 'watch.failed',
   'update.done', 'update.failed', 'update.blocked', 'job.started', 'job.done', 'job.escalated', 'job.failed',
-  'action.done', 'action.failed', 'login.lost', 'login.restored', 'reply.manual', 'update.manual', 'posting.tested'] as const;
+  'action.done', 'action.failed', 'login.lost', 'login.restored', 'reply.manual', 'update.manual', 'posting.tested',
+  'email.summary', 'ai.fallback', 'ai.restored'] as const;
 
 /** Every posted reply is announced (you always know the client got an answer); classify failures only after 3 tries. */
 export function shouldNotify(n: Pick<OperatorNotice, 'action' | 'operator_inbox' | 'detail'>): boolean {
   if (n.action === 'message.classify_failed') return Number((n.detail as { attempts?: number } | null)?.attempts ?? 0) >= 3;
   return (NOTICE_ACTIONS as readonly string[]).includes(n.action);
+}
+
+export interface EmailItem { inbox_id: string; n: number | null; sender: string | null; email: string | null; subject: string; url: string | null }
+
+export function emailItems(n: Pick<OperatorNotice, 'action' | 'detail'>): EmailItem[] {
+  if (n.action !== 'email.summary') return [];
+  const items = (n.detail as { items?: unknown } | null)?.items;
+  return (Array.isArray(items) ? items : []).filter((i): i is EmailItem => !!i && typeof (i as EmailItem).inbox_id === 'string');
+}
+
+/** Open buttons under an email summary (eo:<inbox id>, at most 12, four per row). */
+export function noticeMarkup(n: Pick<OperatorNotice, 'action' | 'detail'>): { inline_keyboard: { text: string; callback_data: string }[][] } | undefined {
+  const items = emailItems(n).filter((i) => /^[0-9a-f-]{36}$/i.test(i.inbox_id)).slice(0, 12);
+  if (!items.length) return undefined;
+  const buttons = items.map((i) => ({ text: `Open ${i.n ?? ''}`.trim(), callback_data: `eo:${i.inbox_id}` }));
+  const rows: { text: string; callback_data: string }[][] = [];
+  for (let k = 0; k < buttons.length; k += 4) rows.push(buttons.slice(k, k + 4));
+  return { inline_keyboard: rows };
+}
+
+/** "eo:<uuid>" from an Open button. */
+export function parseEmailCallback(data: string | null | undefined): string | null {
+  const m = /^eo:([0-9a-f-]{36})$/i.exec(data ?? '');
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/** "/open 2", "/open lvlup 2" → { client, n }. */
+export function parsePickArgs(match: string | null | undefined): { client: string | null; n: number } | null {
+  const m = /^\s*(?:@?([a-z0-9][a-z0-9-]{0,63})\s+)?#?(\d{1,2})\s*$/i.exec(match ?? '');
+  return m ? { client: m[1]?.toLowerCase() ?? null, n: Number(m[2]) } : null;
 }
 
 /** QA screenshot ids of a job.done notice (sent as a photo album after the text). */
@@ -229,6 +260,18 @@ export function formatOperatorNotice(n: OperatorNotice, dashboardUrl?: string): 
 Your approved ${what} (the operator only reads ${esc(app)}):
 <pre>${esc(clip(d.text, 3000))}</pre>${chatLink(d.url)}`);
     }
+    case 'email.summary': {
+      const items = emailItems(n);
+      const lines = [`\ud83d\udce7 <b>${items.length} new email${items.length === 1 ? '' : 's'}</b> \u00b7 ${client}`];
+      for (const i of items.slice(0, 12)) lines.push(`<b>${i.n ?? '?'}.</b> ${esc(clip(i.sender || i.email || 'Someone', 40))}: ${esc(clip(i.subject, 110))}`);
+      if (items.length > 12) lines.push(`\u2026and ${items.length - 12} more (/mail)`);
+      lines.push('', 'Tap Open (or /open N) and I draft a reply in your words for your \u2705. /skipmail N ignores one.');
+      return truncate(lines.join('\n'));
+    }
+    case 'ai.fallback':
+      return truncate(`\ud83d\udd01 <b>Claude is unavailable</b>: ${esc(clip(d.reason, 200))}\nReplies${(d as { jobs?: boolean }).jobs ? ' and small jobs' : ''} continue on ${esc(String((d as { model?: string }).model ?? 'the fallback model'))} until it is back. Same approvals as always.`);
+    case 'ai.restored':
+      return truncate('\u2705 <b>Claude is back</b>: the operator uses it again.');
     case 'posting.tested': {
       const app = APP_NAME[String(d.kind)] ?? String(d.kind ?? 'the app');
       return truncate(n.ok
