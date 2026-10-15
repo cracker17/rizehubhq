@@ -153,9 +153,11 @@ function LiveScreen({ client, actions, pending, run, demo }: {
   const [editing, setEditing] = useState(false);
   const [url, setUrl] = useState(client.viewer_url ?? '');
   const step = activeStep(actions, client.slug, Date.now());
+  // Live: through HQ, which signs a short-lived viewer token for you (HQ login + 2FA); the viewer has no password prompt.
+  const href = demo || !client.viewer_url ? client.viewer_url : `/api/operator/viewer?client=${encodeURIComponent(client.slug)}`;
   const working = !!step && !client.paused;
   const takeOver = () => {
-    if (client.viewer_url) window.open(client.viewer_url, `ws-${client.slug}`, 'noopener');
+    if (href) window.open(href, `ws-${client.slug}`, 'noopener');
     run(() => setClientPausedAction(client.slug, true), `You have ${client.name}'s browser: the operator won't post there until you hand it back`);
   };
 
@@ -167,7 +169,7 @@ function LiveScreen({ client, actions, pending, run, demo }: {
         {client.paused ? <Pill tone="warning">You have control</Pill> : working ? <Pill tone="brand"><Dot on />AI is working</Pill> : <Pill tone="muted">Idle</Pill>}
         <div className="ml-auto flex flex-wrap gap-2">
           {client.viewer_url && <button className={btn.small} onClick={() => setShow((v) => !v)} aria-pressed={show}>{show ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}{show ? 'Hide' : 'Show'}</button>}
-          {client.viewer_url && <a className={btn.small} href={client.viewer_url} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} aria-hidden />New tab</a>}
+          {href && <a className={btn.small} href={href} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} aria-hidden />New tab</a>}
           {client.paused
             ? <button className={btn.small} disabled={pending} onClick={() => run(() => setClientPausedAction(client.slug, false), 'Handed back to the operator')}><Undo2 size={14} aria-hidden />Hand back</button>
             : <button className={btn.small} disabled={pending} onClick={takeOver}><Hand size={14} aria-hidden />Take over</button>}
@@ -176,7 +178,7 @@ function LiveScreen({ client, actions, pending, run, demo }: {
 
       {client.viewer_url && show ? (
         <div className="relative aspect-[16/10] w-full bg-black">
-          <iframe title={`${client.name} browser`} src={client.viewer_url} className="absolute inset-0 h-full w-full border-0" allow="clipboard-read; clipboard-write; fullscreen" />
+          <iframe title={`${client.name} browser`} src={href ?? undefined} className="absolute inset-0 h-full w-full border-0" allow="clipboard-read; clipboard-write; fullscreen" />
           {working && step && (
             <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] glass">
               <Sparkles size={15} className="text-[#c4b5ff]" aria-hidden />

@@ -320,6 +320,21 @@ as a `reports` row (`operator_morning` / `operator_evening`) the bot sends like 
 Change the times on `/operator` → Reply rules → Digests (empty = off), or
 `select operator_set_digest_times('07:30', null);`.
 
+### Viewer login (HQ login instead of a second password)
+
+The live screen (`ws.rizehub.ph`) opens only for the CEO signed in to HQ with 2FA. `/operator` (live screen, New tab,
+Take over) goes through `/api/operator/viewer?client=<slug>`: HQ checks the session, signs a 12 h token for that viewer
+host (HMAC with `OPERATOR_VIEWER_SECRET`, dashboard only) and hands it to the viewer's `/__hq/login`, which stores it
+as an HttpOnly cookie for that host. nginx then asks `/api/operator/viewer-check` (auth_request) before every request;
+no or a bad token → back to HQ (login if needed) → a fresh token. Tokens are bound to one viewer host. The browser
+container keeps its own basic auth as a second lock, injected by nginx so you never type it.
+
+Setup: set `OPERATOR_VIEWER_SECRET` (`openssl rand -hex 32`) in `.env`, `deploy/update.sh --force`; install the new
+`deploy/workspace/nginx-ws.rizehub.ph.conf` and its auth snippet (commands in the file header), `nginx -t`, reload.
+Check: open `https://ws.rizehub.ph/` in a private window → it sends you to the HQ login; from `/operator` the screen
+loads with no password prompt. To end every viewer session at once, change the secret. Without the secret the
+dashboard links to the viewer directly (phase 1: basic auth only).
+
 ## Phase 3+ (not built yet)
 
-Gmail / Slack / Teams / WhatsApp Business watchers, HQ-login gating for the viewer (today: its own basic auth + HTTPS).
+Gmail / Slack / Teams / WhatsApp Business watchers.

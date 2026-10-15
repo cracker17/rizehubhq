@@ -193,6 +193,8 @@ export const VARS = [
   S({ key: 'OPERATOR_MAX_USD_PER_JOB_RUN', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),
   S({ key: 'OPERATOR_LOGIN_CHECK_MS', group: 'Operator', svc: ['operator'], check: intIn(600_000) }),
   S({ key: 'OPERATOR_WORKSPACES_DIR', group: 'Operator', svc: ['operator'], check: (v) => (v.startsWith('/') ? null : 'must be an absolute path like /tmp/operator-jobs') }),
+  S({ key: 'OPERATOR_VIEWER_SECRET', group: 'Operator', svc: ['dashboard'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32'),
+    note: 'signs the workspace viewer tokens (HQ login for ws.rizehub.ph); dashboard only' }),
   S({ key: 'CLAUDE_MODEL_OPERATOR', group: 'Operator', svc: ['operator'], check: (v) => (/^(anthropic:)?claude-[\w.-]+$/.test(v) ? null : 'must be an Anthropic model id like claude-sonnet-5') }),
   // HQ Brain (docs/16-BRAIN.md): container hq-brain; the dashboard only gets the URL + internal secret
   S({ key: 'BRAIN_URL', group: 'Brain', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL'), note: 'docker-compose.yml overrides it with http://hq-brain:4100' }),

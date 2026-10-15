@@ -16,7 +16,8 @@ function env(name: string) {
 // /oauth/* and /.well-known/oauth-* + /mcp/brain are the Brain MCP connector (lib/brainConnector.ts): discovery
 // documents, OAuth endpoints and the MCP endpoint (the brain checks the access token); /oauth/authorize gates itself
 // (HQ sign-in + 2FA, CEO only).
-const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain'];
+// /api/operator/viewer-check is nginx's auth_request for the workspace viewer: it only verifies a signed token.
+const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain', '/api/operator/viewer-check'];
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');
