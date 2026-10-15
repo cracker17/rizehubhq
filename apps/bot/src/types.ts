@@ -26,7 +26,7 @@ export interface BotReport {
   id: string;
   agent_id: string | null;
   report_date: string;
-  kind: 'standup' | 'daily_digest' | 'morning_brief' | 'weekly';
+  kind: 'standup' | 'daily_digest' | 'morning_brief' | 'weekly' | 'operator_morning' | 'operator_evening';
   body_md: string | null;
   data: Record<string, unknown> | null;
   created_at: string;

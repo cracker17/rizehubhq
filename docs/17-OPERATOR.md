@@ -308,7 +308,18 @@ phase 1 and 2 ones).
   (`operator_set_autonomy` enforces the same, so SQL is the rule even outside the page). Every change is logged
   (`autonomy.changed`, `autosend.on/off`) and shows in "What it's doing".
 
+### Digests (`20261017010000_operator_digests.sql`)
+
+Two Telegram digests a day, built from the database only (no AI, no cost). **Morning** (08:00): everything since
+yesterday's evening digest plus what waits for you now. **Evening** (18:00): everything since the morning digest plus
+what is still open. Per client: messages in, replies sent (and how many auto), client updates, what waits for you,
+jobs done (with links), stuck and open, signed-out logins, failures; on top: kill switch / auto-send state, whether the
+operator is online, and its spend. The operator calls `operator_digest_tick()` every minute; SQL saves each digest once
+per local day (timezone setting), only within 3 hours of its time (a late restart never sends a stale morning digest),
+as a `reports` row (`operator_morning` / `operator_evening`) the bot sends like the CEO digest (held in quiet hours).
+Change the times on `/operator` → Reply rules → Digests (empty = off), or
+`select operator_set_digest_times('07:30', null);`.
+
 ## Phase 3+ (not built yet)
 
-Gmail / Slack / Teams / WhatsApp Business watchers, morning / evening digests, HQ-login gating for the viewer (today:
-its own basic auth + HTTPS).
+Gmail / Slack / Teams / WhatsApp Business watchers, HQ-login gating for the viewer (today: its own basic auth + HTTPS).

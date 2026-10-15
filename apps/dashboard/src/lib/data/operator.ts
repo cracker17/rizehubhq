@@ -3,6 +3,7 @@ import 'server-only';
 // (RLS: CEO select only). DEMO: a small believable LvlUp morning. Before the migration is applied the page says so.
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
+import { digestTimes } from '@/lib/operatorView';
 import type {
   OperatorActionRow, OperatorAutonomyRow, OperatorChannelRow, OperatorClientRow, OperatorHomeData, OperatorInboxRow, OperatorJobActionRow, OperatorJobRow,
 } from '@/lib/operatorView';
@@ -14,7 +15,7 @@ const on = (v: unknown) => v === true || v === 'true';
 export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
   if (!supabaseEnv()) return { data: demoOperator() };
   const db = await createSupabaseServer();
-  const empty: OperatorHomeData = { clients: [], channels: [], inbox: [], actions: [], jobs: [], jobActions: [], autonomy: [], killSwitch: false, officePaused: false, autoSend: false, heartbeatAt: null, demo: false };
+  const empty: OperatorHomeData = { clients: [], channels: [], inbox: [], actions: [], jobs: [], jobActions: [], autonomy: [], digestTimes: { morning: '08:00', evening: '18:00' }, killSwitch: false, officePaused: false, autoSend: false, heartbeatAt: null, demo: false };
   if (!db) return { data: empty, error: 'Supabase is not configured.' };
   try {
     const [clients, channels, inbox, actions, settings] = await Promise.all([
@@ -23,7 +24,7 @@ export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
       db.from('operator_inbox').select('id,client_slug,channel_id,sender_name,body,sent_at,created_at,status,category,mode,draft,final_text,approval_id,error,mentions_me,from_me,space_name')
         .order('created_at', { ascending: false }).limit(60),
       db.from('operator_actions').select('id,created_at,client_slug,inbox_id,actor,action,ok,detail').order('id', { ascending: false }).limit(120),
-      db.from('settings').select('key,value').in('key', ['operator_paused', 'paused', 'operator_auto_send', 'operator_heartbeat']),
+      db.from('settings').select('key,value').in('key', ['operator_paused', 'paused', 'operator_auto_send', 'operator_heartbeat', 'operator_digest_times']),
     ]);
     const err = clients.error ?? channels.error ?? inbox.error ?? actions.error ?? settings.error;
     if (err) {
@@ -51,6 +52,7 @@ export async function loadOperatorHome(): Promise<Loaded<OperatorHomeData>> {
         jobs: jobRows,
         jobActions: (jobActions.error ? [] : jobActions.data ?? []) as OperatorJobActionRow[],
         autonomy: (autonomy.error ? [] : autonomy.data ?? []) as OperatorAutonomyRow[],
+        digestTimes: digestTimes(s.operator_digest_times),
         killSwitch: on(s.operator_paused), officePaused: on(s.paused), autoSend: on(s.operator_auto_send),
         heartbeatAt: (s.operator_heartbeat as { at?: string } | undefined)?.at ?? null,
         demo: false,
@@ -118,6 +120,7 @@ export function demoOperator(now = Date.now()): OperatorHomeData {
       { client_slug: '*', action_type: 'credentials', mode: 'never' },
       { client_slug: 'lvlup', action_type: 'money', mode: 'never' },
     ],
+    digestTimes: { morning: '08:00', evening: '18:00' },
     killSwitch: false, officePaused: false, autoSend: true, heartbeatAt: t(0.5), demo: true,
   };
 }

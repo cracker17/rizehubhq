@@ -11,7 +11,7 @@ import {
   ACTION_TYPES, allowedModes, autonomyFor, MODE_LABEL,
   type AutonomyMode, type OperatorClientRow, type OperatorHomeData,
 } from '@/lib/operatorView';
-import { setAutonomyAction, setAutoSendAction, type OperatorResult } from '@/app/operator-actions';
+import { setAutonomyAction, setAutoSendAction, setDigestTimesAction, type OperatorResult } from '@/app/operator-actions';
 import { Pill } from './Pill';
 
 type Run = (fn: () => Promise<OperatorResult>, done: string) => void;
@@ -53,6 +53,8 @@ export function OperatorRules({ data, client, pending, run }: { data: OperatorHo
               <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', data.autoSend ? 'translate-x-[22px]' : 'translate-x-0.5')} />
             </button>
           </div>
+
+          <Digests data={data} pending={pending} run={run} />
 
           {client && (
             <div role="tablist" aria-label="Rules for" className="flex gap-1">
@@ -104,5 +106,28 @@ export function OperatorRules({ data, client, pending, run }: { data: OperatorHo
         </div>
       )}
     </section>
+  );
+}
+
+/** Morning / evening digest times on Telegram (empty = off). */
+function Digests({ data, pending, run }: { data: OperatorHomeData; pending: boolean; run: Run }) {
+  const [m, setM] = useState(data.digestTimes.morning ?? '');
+  const [e, setE] = useState(data.digestTimes.evening ?? '');
+  const changed = m !== (data.digestTimes.morning ?? '') || e !== (data.digestTimes.evening ?? '');
+  return (
+    <form className="item flex flex-wrap items-end gap-3 px-3 py-2.5"
+      onSubmit={(ev) => { ev.preventDefault(); run(() => setDigestTimesAction(m, e), 'Digest times saved'); }}>
+      <span className="min-w-[140px] flex-1 text-[13px]">
+        <span className="block font-medium">Digests on Telegram</span>
+        <span className="block text-xs text-[var(--color-muted)]">What came in, what was sent, jobs, what waits for you. Clear a time to turn it off.</span>
+      </span>
+      <label className="flex flex-col gap-1 text-xs text-[var(--color-muted)]" htmlFor="op-digest-m">Morning
+        <input id="op-digest-m" type="time" className="h-8 rounded-md bg-[var(--color-panel-2)] px-2 text-[13px] text-white" value={m} onChange={(x) => setM(x.target.value)} disabled={data.demo} />
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-[var(--color-muted)]" htmlFor="op-digest-e">Evening
+        <input id="op-digest-e" type="time" className="h-8 rounded-md bg-[var(--color-panel-2)] px-2 text-[13px] text-white" value={e} onChange={(x) => setE(x.target.value)} disabled={data.demo} />
+      </label>
+      {changed && !data.demo && <button className={btn.small} disabled={pending}>Save</button>}
+    </form>
   );
 }

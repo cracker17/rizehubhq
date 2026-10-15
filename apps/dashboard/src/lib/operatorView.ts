@@ -40,6 +40,8 @@ export interface OperatorHomeData {
   jobs: OperatorJobRow[];
   jobActions: OperatorJobActionRow[];
   autonomy: OperatorAutonomyRow[];
+  /** Telegram digest times 'HH:MM' (null = off); settings.operator_digest_times. */
+  digestTimes: { morning: string | null; evening: string | null };
   killSwitch: boolean;
   officePaused: boolean;
   autoSend: boolean;
@@ -76,6 +78,13 @@ export function usd(v: number | string | null | undefined): string {
 export const ACTION_KIND_LABEL: Record<string, string> = {
   webflow_cms: 'Webflow CMS change', webflow_publish: 'Publish (Webflow)', airtable_write: 'Airtable change', browser_click: 'Click in the browser', delete: 'Delete',
 };
+
+/** settings.operator_digest_times → 'HH:MM' or null (off); missing = the defaults. */
+export function digestTimes(v: unknown): { morning: string | null; evening: string | null } {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  const t = (x: unknown, d: string) => (x === undefined ? d : typeof x === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(x) ? x : null);
+  return { morning: t(o.morning, '08:00'), evening: t(o.evening, '18:00') };
+}
 
 /** A task as typed in "Add task": trimmed, 3 to 8000 characters. */
 export function taskBrief(v: string): string | null {

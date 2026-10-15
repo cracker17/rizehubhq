@@ -144,6 +144,12 @@ async function main() {
       loop('logins', cfg.loginCheckMs, loginCheck),
       loop('daily', 3600_000, daily),
     ] : []),
+    // Morning / evening digests (phase 3): SQL decides whether one is due and saves it once; the bot sends it.
+    loop('digest', 60_000, async () => {
+      const { data, error } = await sb.rpc('operator_digest_tick');
+      if (error) { if (!/operator_digest_tick/.test(error.message)) throw new Error(error.message); return; } // migration not applied yet: quiet
+      if (Array.isArray(data) && data.length) console.log(`[operator] digest saved: ${data.join(', ')}`);
+    }),
     // Heartbeat for /operator and /status: the dashboard shows "offline" when it is older than 3 minutes.
     loop('heartbeat', 60_000, async () => {
       await sb.from('settings').upsert({ key: 'operator_heartbeat', value: { at: new Date().toISOString(), sends: cfg.sends, poll_ms: cfg.pollMs } });

@@ -6,7 +6,7 @@ import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFac
 
 export const APPROVAL_COLS = '*, requests(priority,title,due_date,clients(name))';
 const REPORT_COLS = 'id,agent_id,report_date,kind,body_md,data,created_at,telegram_sent_at';
-export const BROADCAST_KINDS = ['daily_digest', 'morning_brief', 'weekly'] as const;
+export const BROADCAST_KINDS = ['daily_digest', 'morning_brief', 'weekly', 'operator_morning', 'operator_evening'] as const;
 
 export interface NewRequest { text: string; priority: string; dueDate: string | null; clientSlug: string | null }
 export interface NewVoiceNote { chatId: number; messageId: number; audio: Uint8Array; mediaType: string; seconds: number | null }

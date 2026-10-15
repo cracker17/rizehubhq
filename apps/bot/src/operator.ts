@@ -265,6 +265,50 @@ export function formatOperatorStatus(s: OperatorStatus, heartbeatAt: string | nu
   return lines.join('\n');
 }
 
+// ---------- morning / evening digests (reports kind operator_morning / operator_evening) ----------
+
+export interface OperatorDigestClient {
+  slug: string; name: string; paused: boolean; messages: number; replies_sent: number; auto_sent: number; updates_sent: number; waiting: number;
+  jobs_done: { title: string; links: string[]; cost_usd: number | string }[]; jobs_open: { title: string; status: string }[];
+  jobs_stuck: { title: string; status: string; why: string }[]; logins_bad: string[]; failures: number;
+}
+export interface OperatorDigestData {
+  kind: 'operator_morning' | 'operator_evening'; kill_switch: boolean; office_paused: boolean; auto_send: boolean; online: boolean;
+  spend_usd: number | string; clients: OperatorDigestClient[];
+}
+
+export function formatOperatorDigest(d: OperatorDigestData, dashboardUrl: string): string {
+  const morning = d.kind === 'operator_morning';
+  const head = morning ? '☀️ <b>Operator · morning</b>' : '🌙 <b>Operator · evening</b>';
+  const state = d.kill_switch ? '🛑 Sends stopped (kill switch)' : d.office_paused ? '⏸ Office paused: no sends'
+    : !d.online ? '⚪ The operator is offline' : d.auto_send ? '▶️ Live · auto-send on' : '▶️ Live · every reply asks';
+  const lines = [`${head} · ${state}${usd(d.spend_usd)}`];
+  const totalWaiting = d.clients.reduce((n, c) => n + Number(c.waiting || 0), 0);
+  if (totalWaiting) lines.push(`📥 <b>${totalWaiting} waiting for you</b> · /inbox · /approvals`);
+  for (const c of d.clients) {
+    const quiet = !c.messages && !c.replies_sent && !c.updates_sent && !c.jobs_done.length && !c.jobs_open.length && !c.jobs_stuck.length && !c.logins_bad.length && !c.failures && !c.waiting;
+    if (quiet) { lines.push(`\n<b>${esc(c.name)}</b>: quiet${morning ? ' overnight' : ' today'}.`); continue; }
+    const counts = [
+      `${c.messages} message${c.messages === 1 ? '' : 's'}`,
+      `${c.replies_sent} repl${c.replies_sent === 1 ? 'y' : 'ies'} sent${c.auto_sent ? ` (${c.auto_sent} auto)` : ''}`,
+      c.updates_sent ? `${c.updates_sent} client update${c.updates_sent === 1 ? '' : 's'}` : '',
+      c.waiting ? `${c.waiting} waiting for you` : '',
+    ].filter(Boolean).join(' · ');
+    lines.push(`\n<b>${esc(c.name)}</b>${c.paused ? ' (paused)' : ''}: ${counts}`);
+    for (const j of c.jobs_done.slice(0, 5)) {
+      const link = (j.links ?? []).find((l) => /^https:\/\//.test(l));
+      lines.push(`✅ ${esc(clip(j.title, 90))}${link ? ` · <a href="${esc(link)}">link</a>` : ''}`);
+    }
+    for (const j of c.jobs_stuck.slice(0, 3)) lines.push(`🙋 ${esc(clip(j.title, 80))}${j.why ? `: ${esc(clip(j.why, 120))}` : ''}`);
+    for (const j of c.jobs_open.slice(0, 4)) lines.push(`${JOB_ICON[j.status] ?? '•'} ${esc(clip(j.title, 90))} · ${esc(j.status)}`);
+    if (c.logins_bad.length) lines.push(`🔑 Signed out: ${c.logins_bad.map(esc).join(', ')}`);
+    if (c.failures) lines.push(`⚠️ ${c.failures} thing${c.failures === 1 ? '' : 's'} failed: /status ${esc(c.slug)}`);
+  }
+  if (!d.clients.length) lines.push('No operator clients are enabled.');
+  if (/^https:\/\//.test(dashboardUrl)) lines.push(`\n<a href="${esc(dashboardUrl.replace(/\/+$/, ''))}/operator">Open /operator</a>`);
+  return truncate(lines.join('\n'));
+}
+
 // ---------- /task, /jobs, /logins ----------
 
 /** "/task lvlup Add Sam to the team page" → { client, brief }; null when either part is missing. */

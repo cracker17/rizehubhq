@@ -1,6 +1,6 @@
 // Telegram message text (HTML parse mode). Pure functions; every dynamic string goes through esc().
 import type { SpendSummary } from './budget';
-import { isOperatorReply, operatorActionBody, operatorDecisionLine, operatorMemoryBody, operatorReplyBody, operatorUpdateBody } from './operator';
+import { formatOperatorDigest, isOperatorReply, operatorActionBody, type OperatorDigestData, operatorDecisionLine, operatorMemoryBody, operatorReplyBody, operatorUpdateBody } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, QuickFacts } from './types';
 
 export const TG_LIMIT = 4096;
@@ -145,6 +145,8 @@ export function mdToText(md: string): string {
 export function formatReport(r: BotReport, names: Names, dashboardUrl: string): string {
   const d = (r.data ?? {}) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const link = `${dashboardUrl.replace(/\/+$/, '')}/reports?date=${r.report_date}${r.kind === 'weekly' ? '&tab=weekly' : ''}`;
+  // Operator digests have their own layout (apps/bot/src/operator.ts).
+  if ((r.kind === 'operator_morning' || r.kind === 'operator_evening') && Array.isArray(d.clients)) return formatOperatorDigest(d as OperatorDigestData, dashboardUrl);
   let parts: string[];
   if (r.kind === 'daily_digest' && d.counts) {
     const qa = d.qa?.pass_rate === null || d.qa?.pass_rate === undefined ? 'no QA reviews' : `QA pass rate ${d.qa.pass_rate}% (${d.qa.passed}/${d.qa.reviews})`;

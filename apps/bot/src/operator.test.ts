@@ -232,3 +232,41 @@ test('fake db: /task queues for known clients only', async () => {
   await assert.rejects(db.addOperatorJob('nope', 'x y z'), /unknown client/);
   assert.equal((await db.operatorJobs('lvlup', 5))[0]!.status, 'queued');
 });
+
+// ---------- phase 3: digests ----------
+
+test('operator digests: sent like the other reports, with per-client lines; quiet clients get one line', async () => {
+  const { formatOperatorDigest } = await import('./operator');
+  const data = {
+    kind: 'operator_evening', kill_switch: false, office_paused: false, auto_send: false, online: true, spend_usd: 1.37,
+    clients: [
+      { slug: 'lvlup', name: 'LvlUp Ventures', paused: false, messages: 5, replies_sent: 3, auto_sent: 0, updates_sent: 1, waiting: 2,
+        jobs_done: [{ title: 'Add Sam to the team page', links: ['https://www.lvlup.vc/team'], cost_usd: 0.84 }],
+        jobs_open: [{ title: 'Check the fund page', status: 'running' }],
+        jobs_stuck: [{ title: 'New logos', status: 'escalated', why: 'Send the Kinetic and Ardent logos' }],
+        logins_bad: ['Webflow'], failures: 1 },
+      { slug: 'madam-muse', name: 'Madam Muse', paused: false, messages: 0, replies_sent: 0, auto_sent: 0, updates_sent: 0, waiting: 0,
+        jobs_done: [], jobs_open: [], jobs_stuck: [], logins_bad: [], failures: 0 },
+    ],
+  } as const;
+  const text = formatOperatorDigest(data as never, 'https://hq.rizehub.ph');
+  assert.match(text, /🌙 <b>Operator · evening<\/b> · ▶️ Live · every reply asks · \$1.37/);
+  assert.match(text, /📥 <b>2 waiting for you<\/b>/);
+  assert.match(text, /<b>LvlUp Ventures<\/b>: 5 messages · 3 replies sent · 1 client update · 2 waiting for you/);
+  assert.match(text, /✅ Add Sam to the team page · <a href="https:\/\/www.lvlup.vc\/team">link<\/a>/);
+  assert.match(text, /🙋 New logos: Send the Kinetic and Ardent logos/);
+  assert.match(text, /🛠 Check the fund page · running/);
+  assert.match(text, /🔑 Signed out: Webflow/);
+  assert.match(text, /⚠️ 1 thing failed: \/status lvlup/);
+  assert.match(text, /<b>Madam Muse<\/b>: quiet today\./);
+  assert.match(formatOperatorDigest({ ...data, kind: 'operator_morning', kill_switch: true } as never, 'http://localhost:3000'), /☀️ <b>Operator · morning<\/b> · 🛑 Sends stopped/);
+
+  const db = new FakeBotDb();
+  db.reports.push({ id: 'r1', agent_id: null, report_date: '2026-10-15', kind: 'operator_evening', body_md: 'Operator evening digest', data: data as never,
+    created_at: '2026-10-15T10:00:00Z', telegram_sent_at: null } as never);
+  const sender = new FakeSender();
+  const r = await notifierTick({ db, sender, chatId: 1, dashboardUrl: 'https://hq.rizehub.ph', names: () => new Map(), now: () => new Date('2026-10-15T10:01:00Z'), log: () => {} },
+    { lastDecisionSync: '2026-10-15T00:00:00Z' });
+  assert.equal(r.reports, 1);
+  assert.match(sender.sent[0]!.text, /Operator · evening/);
+});

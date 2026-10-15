@@ -70,3 +70,10 @@ test('autonomy: a client rule wins over the default; risky types cannot be auto;
   assert.deepEqual(allowedModes('credentials'), ['never']);
   assert.equal(describeAction(act('autonomy.changed', { action_type: 'money', now: 'never', client: 'lvlup' })).text, 'Rule changed: money → never');
 });
+
+test('digest times: defaults, off, junk', async () => {
+  const { digestTimes } = await import('./operatorView');
+  assert.deepEqual(digestTimes(undefined), { morning: '08:00', evening: '18:00' });
+  assert.deepEqual(digestTimes({ morning: '07:30', evening: 'off' }), { morning: '07:30', evening: null });
+  assert.deepEqual(digestTimes({ morning: '7:30' }), { morning: null, evening: '18:00' });
+});

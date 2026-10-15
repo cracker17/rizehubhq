@@ -89,6 +89,14 @@ export async function setAutoSendAction(on: boolean): Promise<OperatorResult> {
   return call('operator_set_auto_send', { p_on: on === true });
 }
 
+/** Telegram digest times; '' = that digest off. */
+export async function setDigestTimesAction(morning: string, evening: string): Promise<OperatorResult> {
+  const t = (v: string) => { const x = String(v ?? '').trim(); return x === '' ? null : /^([01]\d|2[0-3]):[0-5]\d$/.test(x) ? x : undefined; };
+  const m = t(morning), e = t(evening);
+  if (m === undefined || e === undefined) return { ok: false, error: 'Use a time like 08:00, or leave it empty to turn that digest off.' };
+  return call('operator_set_digest_times', { p_morning: m, p_evening: e });
+}
+
 export async function setViewerUrlAction(slug: string, url: string): Promise<OperatorResult> {
   if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
   const u = String(url ?? '').trim();
