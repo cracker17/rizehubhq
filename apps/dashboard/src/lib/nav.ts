@@ -1,6 +1,6 @@
 import {
   Building2, CheckCircle2, ListTodo, Inbox, FileBarChart, ShieldCheck, Target, Briefcase,
-  Users, Bot, Plug, CircleDollarSign, LockKeyhole, Cable, KeyRound, Sparkles, ListChecks, BrainCircuit, type LucideIcon,
+  Users, Bot, Plug, CircleDollarSign, LockKeyhole, Cable, KeyRound, Sparkles, ListChecks, BrainCircuit, Radar, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: LucideIcon; milestone?: string; description?: string }
@@ -11,6 +11,7 @@ export const PINNED_NAV: NavItem[] = [
   { href: '/', label: 'Office', icon: Building2 },
   { href: '/approvals', label: 'Approvals', icon: CheckCircle2, milestone: 'M5' },
   { href: '/brain', label: 'Brain', icon: BrainCircuit, milestone: 'M14' },
+  { href: '/operator', label: 'Operator', icon: Radar },
 ];
 
 /**

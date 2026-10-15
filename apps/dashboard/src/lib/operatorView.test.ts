@@ -1,0 +1,42 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { ago, chatUrl, describeAction, isOnline, sendState, visibleInbox, type OperatorActionRow, type OperatorInboxRow } from './operatorView';
+
+const act = (action: string, detail: Record<string, unknown> = {}, ok = true): OperatorActionRow =>
+  ({ id: 1, created_at: '2026-10-15T00:00:00Z', client_slug: 'lvlup', inbox_id: null, actor: 'operator', action, ok, detail });
+
+test('feed lines are plain words for every step the operator logs', () => {
+  assert.equal(describeAction(act('message.new', { sender: 'Alex', channel: 'Alex, Riley' })).text, 'New message from Alex in Alex, Riley');
+  assert.equal(describeAction(act('message.new', { baseline: true, channel: 'X' })).tone, 'muted');
+  assert.equal(describeAction(act('message.classified', { category: 'task', confidence: 0.82 })).text, 'Drafted a task reply · 82%');
+  assert.equal(describeAction(act('browser.typed', { chars: 40, mentions_linked: 2 })).text, 'Typed 40 characters with 2 @mention(s)');
+  assert.equal(describeAction(act('send.done')).kind, 'send');
+  assert.equal(describeAction(act('watch.failed', { channel: 'X', error: 'signed out' }, false)).tone, 'danger');
+  assert.equal(describeAction(act('something.new', {}, false)).tone, 'danger');
+});
+
+test('send state: kill switch beats office pause beats live', () => {
+  assert.equal(sendState({ killSwitch: true, officePaused: true, autoSend: true }).label, 'Sends stopped');
+  assert.equal(sendState({ killSwitch: false, officePaused: true, autoSend: true }).label, 'Office paused');
+  assert.equal(sendState({ killSwitch: false, officePaused: false, autoSend: false }).label, 'Live · every reply asks');
+});
+
+test('online = heartbeat within 3 minutes; ago reads naturally', () => {
+  const now = Date.parse('2026-10-15T01:00:00Z');
+  assert.equal(isOnline('2026-10-15T00:58:30Z', now), true);
+  assert.equal(isOnline('2026-10-15T00:56:00Z', now), false);
+  assert.equal(isOnline(null, now), false);
+  assert.equal(ago('2026-10-15T00:50:00Z', now), '10 min ago');
+  assert.equal(ago(null, now), 'never');
+});
+
+test('inbox hides baseline history and your own messages; chat addresses are checked', () => {
+  const row = (id: string, p: Partial<OperatorInboxRow>): OperatorInboxRow => ({ id, client_slug: 'lvlup', channel_id: 'c', sender_name: 'A', body: 'b', sent_at: null,
+    created_at: `2026-10-15T00:0${id}:00Z`, status: 'fyi', category: null, mode: null, draft: null, final_text: null, approval_id: null, error: null,
+    mentions_me: false, from_me: false, space_name: null, ...p });
+  const v = visibleInbox([row('1', {}), row('2', { status: 'fyi', category: 'fyi' }), row('3', { from_me: true }), row('4', { status: 'drafted', category: 'reply' })]);
+  assert.deepEqual(v.map((r) => r.id), ['4', '2']);
+  assert.equal(chatUrl(' https://chat.google.com/room/AAQA '), 'https://chat.google.com/room/AAQA');
+  assert.equal(chatUrl('https://mail.google.com/chat/u/0/#chat/space/AAQA'), 'https://mail.google.com/chat/u/0/#chat/space/AAQA');
+  assert.equal(chatUrl('https://evil.example/chat.google.com/'), null);
+});
