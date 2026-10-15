@@ -18,15 +18,14 @@ import {
   addChannelAction, setChannelEnabledAction, setClientPausedAction, setOperatorPausedAction, setViewerUrlAction, type OperatorResult,
 } from '@/app/operator-actions';
 import { useOperatorLive, type LiveState } from './useOperatorLive';
+import { Pill } from './Pill';
+import { OperatorJobs } from './OperatorJobs';
+import { OperatorRules } from './OperatorRules';
 
 const KIND_ICON = { read: MessageSquareText, think: Sparkles, type: Keyboard, send: Send, you: UserRound, warn: TriangleAlert } as const;
 /** The kill switch: the one red solid button (destructive = red; it only ever stops sends). */
 const STOP_BTN = 'inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[var(--color-danger)] px-4 text-sm font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/.15)] transition-transform hover:bg-[#f0585d] active:scale-[.97] disabled:opacity-50';
 const LIVE_LABEL: Record<LiveState, string> = { demo: 'Demo', connecting: 'Connecting…', live: 'Live', polling: 'Refreshing every 10 s' };
-
-function Pill({ tone, children, className }: { tone: Tone; children: React.ReactNode; className?: string }) {
-  return <span className={clsx('inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium', TONE_CLASS[tone], className)}>{children}</span>;
-}
 
 function Dot({ on }: { on: boolean }) {
   const c = on ? '#34d399' : '#6e6a9e';
@@ -98,6 +97,8 @@ export function OperatorHome({ data, error }: { data: OperatorHomeData; error?: 
           {client ? <LiveScreen client={client} actions={actions} pending={pending} run={run} demo={data.demo} />
             : <section className="card p-6 text-sm text-[var(--color-muted)]">No client is set up yet. LvlUp Ventures is added by the migration; others are added by SQL for now (docs/17).</section>}
 
+          {client && <OperatorJobs data={data} client={client} pending={pending} run={run} />}
+
           <section aria-label="Inbox" className="card min-w-0 p-4 sm:p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="text-base font-semibold">Inbox</h2>
@@ -137,6 +138,7 @@ export function OperatorHome({ data, error }: { data: OperatorHomeData; error?: 
         <div className="flex min-w-0 flex-col gap-4 lg:gap-5">
           <Feed actions={actions} live={live} client={client?.slug ?? null} />
           <Chats data={data} client={client} pending={pending} run={run} />
+          <OperatorRules data={data} client={client} pending={pending} run={run} />
         </div>
       </div>
     </div>

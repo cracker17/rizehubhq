@@ -290,7 +290,25 @@ work. Worker mode already covers what it would add (browser + QA + APIs + memory
 for hands-on debugging, use it yourself through the viewer while the client is on **Take over** (sends paused), sign
 it out afterwards, and never leave it running unattended.
 
+## Phase 3
+
+Built milestone by milestone on `feat/operator-phase3`; each part lists its migration (apply them in order, after the
+phase 1 and 2 ones).
+
+### Jobs and reply rules on `/operator` (`20261017000000_operator_dashboard.sql`)
+
+- **Jobs** (under the live screen): open jobs first (Queued, Working, Needs your OK, Checking), then the last week's
+  finished ones. Each shows where it came from, runs used, cost, why it needs you, its summary, links and QA result,
+  and every change it asked for (with **Decide** → Approvals). **Add task** queues a job (same as `/task`) and can
+  name the chat the client update goes to; without one the result only goes to Telegram. **Cancel job** stops it and
+  its waiting changes.
+- **Reply rules** (right column): the auto-send master switch, and per reply type **Auto / Ask / Never** for the
+  selected client or for all clients (the default). A client's own rule wins; **Default** removes it. Deadlines,
+  commitments, publishing, money, new people and deleting can never be Auto; logins and keys are always Never
+  (`operator_set_autonomy` enforces the same, so SQL is the rule even outside the page). Every change is logged
+  (`autonomy.changed`, `autosend.on/off`) and shows in "What it's doing".
+
 ## Phase 3+ (not built yet)
 
-Gmail / Slack / Teams / WhatsApp Business watchers, morning / evening digests, per-client autonomy editing and a jobs
-list + "Add task" on `/operator`, HQ-login gating for the viewer (today: its own basic auth + HTTPS).
+Gmail / Slack / Teams / WhatsApp Business watchers, morning / evening digests, HQ-login gating for the viewer (today:
+its own basic auth + HTTPS).

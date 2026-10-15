@@ -5,7 +5,7 @@
 import { revalidatePath } from 'next/cache';
 import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
-import { chatUrl } from '@/lib/operatorView';
+import { chatUrl, taskBrief } from '@/lib/operatorView';
 
 export type OperatorResult = { ok: true } | { ok: false; error: string };
 type Db = NonNullable<Awaited<ReturnType<typeof createSupabaseServer>>>;
@@ -57,6 +57,36 @@ export async function addChannelAction(slug: string, name: string, url: string):
 export async function setChannelEnabledAction(id: string, enabled: boolean): Promise<OperatorResult> {
   if (!ID.test(id)) return { ok: false, error: 'Unknown chat.' };
   return call('operator_set_channel_enabled', { p_channel: id, p_enabled: enabled === true });
+}
+
+// ---------- jobs (phase 2 functions; the job runs in the operator container) ----------
+
+/** Add task: queues a job for the client. `channelId` = the chat the client update goes to (optional). */
+export async function addJobAction(slug: string, brief: string, channelId: string | null): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  const b = taskBrief(String(brief ?? ''));
+  if (!b) return { ok: false, error: 'Describe the task in a few words.' };
+  if (channelId && !ID.test(channelId)) return { ok: false, error: 'Unknown chat.' };
+  return call('operator_add_job', { p_client: slug, p_brief: b, p_channel: channelId || null, p_via: 'dashboard' });
+}
+
+export async function cancelJobAction(id: string): Promise<OperatorResult> {
+  if (!ID.test(id)) return { ok: false, error: 'Unknown job.' };
+  return call('operator_cancel_job', { p_job: id, p_via: 'dashboard' });
+}
+
+// ---------- autonomy ----------
+
+/** One rule: client slug or '*' (all clients), an action type, auto | approve | never | inherit. SQL enforces the limits. */
+export async function setAutonomyAction(client: string, actionType: string, mode: string): Promise<OperatorResult> {
+  if (client !== '*' && !SLUG.test(client)) return { ok: false, error: 'Unknown client.' };
+  if (!/^[a-z_]{2,20}$/.test(actionType)) return { ok: false, error: 'Unknown action type.' };
+  if (!['auto', 'approve', 'never', 'inherit'].includes(mode)) return { ok: false, error: 'Unknown rule.' };
+  return call('operator_set_autonomy', { p_client: client, p_action: actionType, p_mode: mode });
+}
+
+export async function setAutoSendAction(on: boolean): Promise<OperatorResult> {
+  return call('operator_set_auto_send', { p_on: on === true });
 }
 
 export async function setViewerUrlAction(slug: string, url: string): Promise<OperatorResult> {

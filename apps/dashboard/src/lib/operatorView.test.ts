@@ -40,3 +40,33 @@ test('inbox hides baseline history and your own messages; chat addresses are che
   assert.equal(chatUrl('https://mail.google.com/chat/u/0/#chat/space/AAQA'), 'https://mail.google.com/chat/u/0/#chat/space/AAQA');
   assert.equal(chatUrl('https://evil.example/chat.google.com/'), null);
 });
+
+test('jobs: open first (oldest first), then finished newest first; money formatting; task text', async () => {
+  const { sortJobs, usd, taskBrief, JOB_STATUS } = await import('./operatorView');
+  const j = (id: string, status: string, created: string, updated: string) => ({ id, status, created_at: created, updated_at: updated }) as never;
+  const out = sortJobs([j('done-old', 'done', '01', '02'), j('run', 'running', '05', '06'), j('q', 'queued', '03', '03'), j('done-new', 'escalated', '04', '09')]);
+  assert.deepEqual(out.map((x: { id: string }) => x.id), ['q', 'run', 'done-new', 'done-old']);
+  assert.equal(usd('0.4'), '$0.40');
+  assert.equal(usd(0), '$0');
+  assert.equal(taskBrief('  ok '), null);
+  assert.equal(taskBrief('  Fix the footer '), 'Fix the footer');
+  assert.equal(JOB_STATUS.waiting.label, 'Needs your OK');
+});
+
+test('autonomy: a client rule wins over the default; risky types cannot be auto; credentials only never', async () => {
+  const { autonomyFor, allowedModes } = await import('./operatorView');
+  const rows = [
+    { client_slug: '*', action_type: 'ack', mode: 'auto' as const },
+    { client_slug: '*', action_type: 'money', mode: 'approve' as const },
+    { client_slug: 'lvlup', action_type: 'money', mode: 'never' as const },
+  ];
+  const lv = autonomyFor(rows, 'lvlup');
+  assert.deepEqual(lv.find((r) => r.type === 'money'), { type: 'money', mode: 'never', own: true });
+  assert.deepEqual(lv.find((r) => r.type === 'ack'), { type: 'ack', mode: 'auto', own: false });
+  assert.equal(lv.find((r) => r.type === 'reply')!.mode, 'approve', 'no row anywhere = approve');
+  assert.equal(autonomyFor(rows, '*').find((r) => r.type === 'money')!.mode, 'approve');
+  assert.deepEqual(allowedModes('ack'), ['auto', 'approve', 'never']);
+  assert.deepEqual(allowedModes('publish'), ['approve', 'never']);
+  assert.deepEqual(allowedModes('credentials'), ['never']);
+  assert.equal(describeAction(act('autonomy.changed', { action_type: 'money', now: 'never', client: 'lvlup' })).text, 'Rule changed: money → never');
+});
