@@ -1,4 +1,5 @@
 #!/usr/bin/with-contenv bash
+# shellcheck shell=bash
 # Runs at container start (linuxserver custom-cont-init.d). Chromium leaves Singleton* lock files in its profile; after
 # a crash or a VPS reboot a stale lock makes it refuse to open the profile. Nothing is running yet at this point, so the
 # locks are always stale here. Logins (cookies) are untouched.
