@@ -60,8 +60,10 @@ jobs:
           cp .env.example .env
           node scripts/split-env.mjs
           docker network create rizehub-internal >/dev/null 2>&1 || true
+          docker network create operator-ws >/dev/null 2>&1 || true
           docker compose config --quiet
-          rm .env .env.dashboard .env.bot .env.worker .env.brain
+          docker compose -f deploy/workspace/docker-compose.yml --env-file deploy/workspace/.env.example config --quiet
+          rm .env .env.dashboard .env.bot .env.worker .env.brain .env.operator
 
   # Builds the three production images exactly as the VPS does (no push). Catches Dockerfile / lockfile drift.
   images:
@@ -69,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [dashboard, worker, bot, brain]
+        app: [dashboard, worker, bot, brain, operator]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -100,3 +102,9 @@ jobs:
           out="$(docker run --rm rizehubhq-bot:ci 2>&1 || true)"
           echo "$out" | tail -5
           echo "$out" | grep -q "TELEGRAM_BOT_TOKEN is required"
+      - name: Smoke-test the operator image (idles without config, proving deps + tsx load)
+        if: matrix.app == 'operator'
+        run: |
+          out="$(timeout 20 docker run --rm rizehubhq-operator:ci 2>&1 || true)"
+          echo "$out" | tail -5
+          echo "$out" | grep -q "nothing to do"

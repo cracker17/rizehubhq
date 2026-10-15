@@ -1,0 +1,71 @@
+# Operator workspace (docs/17-OPERATOR.md "Workspace"): one persistent, headful Chromium per client, viewable and
+# controllable in a browser tab (Selkies web desktop of lscr.io/linuxserver/chromium), driven by hq-operator over CDP.
+#
+#   ws-<client>    the browser + web viewer. Profile in ./profiles/<client> (logins survive restarts and image updates).
+#                  Viewer: https://127.0.0.1:<port> on this host ONLY (reverse proxy or SSH tunnel; basic auth always on).
+#   cdp-<client>   socat sidecar in ws-<client>'s network namespace: Chrome's DevTools port listens on 127.0.0.1:9222
+#                  inside the container; the sidecar exposes it as ws-<client>:9223 on network operator-ws, which only
+#                  hq-operator joins. CDP is never published on a public interface.
+#
+# Same box as HQ (now):   docker network create operator-ws   (deploy/update.sh does it), then
+#                         docker compose -f deploy/workspace/docker-compose.yml --env-file deploy/workspace/.env up -d
+# Separate workspace VPS: add -f deploy/workspace/docker-compose.remote.yml (CDP on the WireGuard address only).
+#
+# Add a client: copy the ws-lvlup + cdp-lvlup pair, rename, give the viewer its own port, set OPERATOR_CDP_<CLIENT> on HQ.
+name: rizehub-workspace
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-browser: &browser
+  image: lscr.io/linuxserver/chromium:${CHROMIUM_TAG:-latest}
+  environment: &browser-env
+    PUID: ${PUID:-1000}
+    PGID: ${PGID:-1000}
+    TZ: ${TZ:-Asia/Manila}
+    CUSTOM_USER: ${WS_VIEWER_USER:?set WS_VIEWER_USER in deploy/workspace/.env}
+    PASSWORD: ${WS_VIEWER_PASSWORD:?set WS_VIEWER_PASSWORD in deploy/workspace/.env}
+    # An explicit, non-default profile dir: Chrome 136+ ignores --remote-debugging-port on its default profile.
+    # The DevTools port binds to 127.0.0.1 inside the container; only the cdp-* sidecar can reach it.
+    CHROME_CLI: >-
+      --user-data-dir=/config/hq-profile --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1
+      --remote-allow-origins=* --no-first-run --no-default-browser-check --disable-features=Translate
+  volumes:
+    - ./init:/custom-cont-init.d:ro          # clears stale profile locks after a crash or reboot
+  shm_size: 1gb
+  security_opt: ["seccomp=unconfined"]       # Chromium's sandbox needs it in this image (linuxserver docs)
+  restart: unless-stopped
+  mem_limit: ${WS_MEM_LIMIT:-1536m}
+  logging: *logging
+
+x-cdp: &cdp
+  image: alpine/socat:${SOCAT_TAG:-1.8.0.3}
+  command: ["tcp-listen:9223,fork,reuseaddr", "tcp-connect:127.0.0.1:9222"]
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  mem_limit: 32m
+  logging: *logging
+
+services:
+  ws-lvlup:
+    <<: *browser
+    container_name: ws-lvlup
+    hostname: ws-lvlup
+    volumes:
+      - ./profiles/lvlup:/config
+      - ./init:/custom-cont-init.d:ro
+    ports: ["${VIEWER_BIND:-127.0.0.1}:3101:3001"]   # viewer (HTTPS, basic auth). Never 0.0.0.0 without the firewall rules.
+    networks: [operator-ws]
+
+  cdp-lvlup:
+    <<: *cdp
+    container_name: cdp-lvlup
+    network_mode: "service:ws-lvlup"         # same network namespace: reachable as ws-lvlup:9223 on operator-ws
+    depends_on: [ws-lvlup]
+
+networks:
+  operator-ws:
+    external: true                           # docker network create operator-ws

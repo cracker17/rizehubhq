@@ -79,6 +79,9 @@ else usermod -aG docker "$HQ_USER"; ok "added ${HQ_USER} to the docker group"; f
 say "Docker network rizehub-internal"
 if docker network inspect rizehub-internal >/dev/null 2>&1; then ok "exists"
 else docker network create rizehub-internal >/dev/null; ok "created (attach RizeHub's app service to it too: docs/12)"; fi
+say "Docker network operator-ws"
+if docker network inspect operator-ws >/dev/null 2>&1; then ok "exists"
+else docker network create operator-ws >/dev/null; ok "created (the operator reaches the workspace browsers on it: docs/17)"; fi
 
 # ---------- 4. code ----------
 say "Code in ${APP_DIR}"
@@ -177,7 +180,7 @@ if ! node_run ro scripts/check-env.mjs --file .env --production; then
 fi
 say "Per-service env files (.env.dashboard / .env.bot / .env.worker)"
 node_run rw scripts/split-env.mjs --in .env
-for f in .env.dashboard .env.bot .env.worker .env.brain; do chown "$HQ_USER:$HQ_USER" "${APP_DIR}/${f}"; chmod 600 "${APP_DIR}/${f}"; done
+for f in .env.dashboard .env.bot .env.worker .env.brain .env.operator; do chown "$HQ_USER:$HQ_USER" "${APP_DIR}/${f}"; chmod 600 "${APP_DIR}/${f}"; done
 # Hard stop: a server secret in the dashboard file (service-role key, vault key) must never be deployed.
 node_run ro scripts/check-env.mjs --split --production --file .env || die "per-service env files failed the check (see ✗ above)"
 
