@@ -49,7 +49,7 @@ export function OperatorRules({ data, client, pending, run }: { data: OperatorHo
             </span>
             <button role="switch" aria-checked={data.autoSend} aria-label="Auto-send" disabled={pending || readOnly}
               onClick={() => run(() => setAutoSendAction(!data.autoSend), data.autoSend ? 'Auto-send off: every reply asks' : 'Auto-send on')}
-              className={clsx('relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50', data.autoSend ? 'bg-[var(--color-success)]' : 'bg-[var(--color-panel-2)]')}>
+              className={clsx('relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50', data.autoSend ? 'bg-[var(--color-success)]' : 'bg-[var(--color-panel-2)] ring-1 ring-inset ring-[var(--color-line-active)]')}>
               <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', data.autoSend ? 'translate-x-[22px]' : 'translate-x-0.5')} />
             </button>
           </div>

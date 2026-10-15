@@ -97,7 +97,7 @@ export function Posting({ data, client, pending, run }: { data: OperatorHomeData
               <button role="switch" aria-checked={!!p?.enabled} aria-label={`Post in ${label}`} disabled={pending || data.demo || st !== 'passed'}
                 title={st !== 'passed' ? 'Run a send test first' : undefined}
                 onClick={() => run(() => setPostingAction(client.slug, k, !p?.enabled), p?.enabled ? `${label}: you post replies yourself` : `${label}: the operator posts approved replies`)}
-                className={clsx('relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40', p?.enabled ? 'bg-[var(--color-success)]' : 'bg-[var(--color-panel-2)]')}>
+                className={clsx('relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40', p?.enabled ? 'bg-[var(--color-success)]' : 'bg-[var(--color-panel-2)] ring-1 ring-inset ring-[var(--color-line-active)]')}>
                 <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', p?.enabled ? 'translate-x-[22px]' : 'translate-x-0.5')} />
               </button>
             </li>

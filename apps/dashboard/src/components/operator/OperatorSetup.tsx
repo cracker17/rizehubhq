@@ -39,9 +39,9 @@ export function OperatorSetup({ data, error, initialStep }: { data: OperatorSetu
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      <Link href="/operator" className={clsx(btn.ghost, 'self-start')}><ArrowLeft size={16} aria-hidden />Operator</Link>
       <div className="flex flex-wrap items-end gap-3">
-        <Link href="/operator" className={btn.ghost}><ArrowLeft size={16} aria-hidden />Operator</Link>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[240px]">
           <h1 className="text-2xl font-semibold">{c ? `Set up ${c.name}` : 'Add a client'}</h1>
           <p className="text-sm text-[var(--color-muted)]">Each client gets its own browser: its logins and sessions stay there, so you log in once.</p>
         </div>
