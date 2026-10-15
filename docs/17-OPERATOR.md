@@ -98,7 +98,7 @@ mkdir -p deploy/workspace/profiles/lvlup
 docker compose -f deploy/workspace/docker-compose.yml --env-file deploy/workspace/.env up -d
 ```
 
-Viewer: DNS `ws.rizehub.ph` → the VPS, then `deploy/workspace/nginx-ws.rizehub.ph.conf` + certbot (header of that
+Viewer: DNS `ws.rizehub.ph` → the VPS, then `deploy/workspace/nginx-viewer.conf` + certbot (header of that
 file). Or, with no DNS yet, an SSH tunnel from your PC: `ssh -L 3101:127.0.0.1:3101 rizehq@76.13.222.107` and open
 `https://localhost:3101` (accept the self-signed certificate). Set the page's live screen to
 `https://ws.rizehub.ph/` (Operator → Add live screen address). Each further client gets its own hostname.

@@ -245,7 +245,8 @@ export function checkProxy(r, compose) {
   };
   walk('deploy');
   for (const m of read('docker-compose.yml').matchAll(/\b([a-z0-9-]+\.)*rizehub\.[a-z]{2,}\b/gi)) hosts.add(m[0].toLowerCase());
-  const odd = [...hosts].filter((h) => h !== DOMAIN && h !== 'rizehub.ph');
+  // Operator workspace viewers (deploy/workspace, docs/17): ws.rizehub.ph, ws-<client>.rizehub.ph.
+  const odd = [...hosts].filter((h) => h !== DOMAIN && h !== 'rizehub.ph' && !/^ws(-[a-z0-9-]+)?\.rizehub\.ph$/.test(h));
   r.check(G, !odd.length, `deploy kit names no other rizehub host than ${DOMAIN}`, `deploy kit mentions unexpected host(s): ${odd.join(', ')}`);
 }
 
