@@ -14,7 +14,8 @@ export interface JobActionRow {
 }
 export interface MemoryNote { kind: string; text: string; status: string; created_at: string }
 
-export const ACTION_KINDS = ['webflow_cms', 'webflow_publish', 'airtable_write', 'browser_click', 'delete', 'other'] as const;
+export const ACTION_KINDS = ['webflow_cms', 'webflow_publish', 'airtable_write', 'browser_click', 'delete', 'other',
+  'github_issue', 'github_comment', 'github_merge', 'vercel_redeploy', 'vercel_promote'] as const;
 
 /** finish() arguments (validated; the job's result). */
 export const FinishShape = {
@@ -44,6 +45,10 @@ How you work:
      the tool and must be proposed with request_action.
    - webflow / airtable: read through the APIs. Writes (CMS items, records), publishing and deletes are request_action
      with an exact spec: Julev approves on Telegram and the operator runs exactly that spec.
+   - github / vercel: read repos, issues, PRs, commits, CI runs and files; Vercel projects, deployments and build logs
+     (use them to explain a failed deploy or to find the preview URL to QA). New issues, comments, merging a PR,
+     redeploying or promoting to production are request_action. Code changes themselves are HQ's dev agents' work:
+     say so in finish (needs_from_julev) instead of trying.
    - fetch_url / check_links: read public pages (the scraper). terminal (when available): one command in a sandbox.
    - qa_check on every page you changed: screenshots at 375 and 1366 px, console errors, failed requests, broken links.
      Fix what it finds when it is yours to fix.

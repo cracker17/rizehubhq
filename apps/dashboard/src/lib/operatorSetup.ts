@@ -59,6 +59,8 @@ export const LOGIN_PRESETS: { site: string; label: string; url: string }[] = [
   { site: 'webflow', label: 'Webflow', url: 'https://webflow.com/dashboard' },
   { site: 'airtable', label: 'Airtable', url: 'https://airtable.com/account' },
   { site: 'shopify', label: 'Shopify admin', url: 'https://admin.shopify.com/' },
+  { site: 'github', label: 'GitHub', url: 'https://github.com/settings/profile' },
+  { site: 'vercel', label: 'Vercel', url: 'https://vercel.com/dashboard' },
 ];
 
 export interface SetupState {
@@ -69,6 +71,8 @@ export interface SetupState {
   whatsapp: boolean;
   webflowLinked: boolean;
   airtableLinked: boolean;
+  githubLinked?: boolean;
+  vercelLinked?: boolean;
   online: boolean;
 }
 
@@ -91,5 +95,7 @@ export function setupChecklist(s: SetupState): { label: string; done: boolean; s
     { label: 'Something to watch (an app for the unread sweep, a chat, or WhatsApp)', done: s.accounts + s.channels > 0 || s.whatsapp, step: 'apps' },
     { label: 'Webflow API token linked', done: s.webflowLinked, step: 'apis', optional: true },
     { label: 'Airtable API token linked', done: s.airtableLinked, step: 'apis', optional: true },
+    { label: 'GitHub token linked', done: !!s.githubLinked, step: 'apis', optional: true },
+    { label: 'Vercel token linked', done: !!s.vercelLinked, step: 'apis', optional: true },
   ];
 }

@@ -432,6 +432,26 @@ with the `composeBox` / `composeOpen` / `composeSendKey` keys of `OPERATOR_<APP>
 5. **APIs**: link the client's Webflow / Airtable tokens from the Client Vault (2FA code when 2FA is on).
 6. **Ready?**: a checklist with a **Fix** button per missing item.
 
+### GitHub and Vercel (`20261017070000_operator_github_vercel.sql`)
+
+Jobs read a client's **GitHub** (repos, issues, pull requests, commits, CI workflow runs, files) and **Vercel**
+(projects, deployments, build logs, domains), e.g. "the deploy failed: `Module not found: ./Footer` in commit …",
+or the preview URL to run QA on. Changes are approvals like Webflow / Airtable, run exactly as approved:
+
+| kind | spec | |
+|---|---|---|
+| `github_issue` | `{repo, title, body, labels?}` | open an issue |
+| `github_comment` | `{repo, number, body}` | comment on an issue / PR |
+| `github_merge` ⚠️ | `{repo, number, method?, expected_head?}` | merge a PR (squash by default) |
+| `vercel_redeploy` | `{deployment_id, target?}` | rebuild that deployment |
+| `vercel_promote` ⚠️ | `{project, deployment_id}` | make a deployment production |
+
+Writing code stays with HQ's dev agents (their own branch + PR rules). Env variables and domains on Vercel: by hand.
+Tokens: Client Vault credentials of platform `github` / `vercel` (fine-grained GitHub token with read access + Issues /
+Pull requests write if you want those actions; a Vercel token scoped to the team), linked in the setup wizard's APIs
+step; or `OPERATOR_GITHUB_TOKEN_<CLIENT>` / `OPERATOR_VERCEL_TOKEN_<CLIENT>`. Team projects on Vercel need the team id
+(wizard, or `OPERATOR_VERCEL_TEAM_<CLIENT>`). GitHub and Vercel are also login presets in the wizard.
+
 ## Phase 4+ (ideas, not built)
 
 Per-client autonomy presets, a weekly operator report, and moving the workspace browsers to their own VPS once there

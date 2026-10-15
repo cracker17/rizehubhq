@@ -139,6 +139,7 @@ export function demoOperator(now = Date.now()): OperatorHomeData {
 export interface OperatorSetupClient {
   slug: string; name: string; brain_project: string | null; my_names: string[]; rules: string; viewer_url: string | null;
   client_id: string | null; webflow_credential: string | null; airtable_credential: string | null;
+  github_credential?: string | null; vercel_credential?: string | null; vercel_team?: string | null;
 }
 export interface OperatorSetupData {
   home: OperatorHomeData;
@@ -165,7 +166,7 @@ export async function loadOperatorSetup(slug: string | null): Promise<Loaded<Ope
   const [logins, creds] = await Promise.all([
     db.from('operator_logins').select('site,label,check_url,enabled,state,last_checked_at,detail').eq('client_slug', row.slug).order('site'),
     row.client_id
-      ? db.from('client_credentials').select('id,label,platform,secret_type,status').eq('client_id', row.client_id).in('platform', ['webflow', 'airtable', 'Webflow', 'Airtable'])
+      ? db.from('client_credentials').select('id,label,platform,secret_type,status').eq('client_id', row.client_id).in('platform', ['webflow', 'airtable', 'github', 'vercel', 'Webflow', 'Airtable', 'GitHub', 'Github', 'Vercel'])
       : Promise.resolve({ data: [], error: null }),
   ]);
   return {

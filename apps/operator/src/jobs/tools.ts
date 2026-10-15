@@ -6,6 +6,7 @@ import { webFetch } from 'worker/src/research/fetch';
 import { checkLinks, formatLinkReport } from 'worker/src/research/linkcheck';
 import type { NetEnv } from 'worker/src/research/net';
 import { airtableRead, AIRTABLE_READS, webflowRead, WEBFLOW_READS, type ApiEnv } from './apis';
+import { githubRead, GITHUB_READS, vercelRead, VERCEL_READS } from './devapis';
 import type { JobBrowser, WithContext } from './browser';
 import { ACTION_KINDS, FinishSchema, FinishShape, type FinishArgs, type JobRow } from './prompt';
 import { qaFeedback, qaVerdict, runQa } from './qa';
@@ -106,6 +107,14 @@ export class JobToolbox {
         shape: { op: z.string().max(40), base_id: z.string().max(40).optional(), table: z.string().max(200).optional(), record_id: z.string().max(40).optional(),
           view: z.string().max(200).optional(), filter: z.string().max(2000).optional(), max_records: z.number().int().min(1).max(100).optional(), offset: z.string().max(200).optional() },
         run: this.safe('airtable', (a) => airtableRead(this.d.api, this.d.client.slug, a)) },
+      { name: 'github', description: `GitHub, read only: ${GITHUB_READS.join(', ')}. repo = "owner/name"; number = issue / PR number; get_file needs path (+ ref). New issues, comments, merges: request_action.`,
+        shape: { op: z.string().max(40), repo: z.string().max(201).optional(), number: z.number().int().min(1).optional(), state: z.enum(['open', 'closed', 'all']).optional(),
+          path: z.string().max(400).optional(), ref: z.string().max(200).optional(), limit: z.number().int().min(1).max(50).optional() },
+        run: this.safe('github', (a) => githubRead(this.d.api, this.d.client.slug, a)) },
+      { name: 'vercel', description: `Vercel, read only: ${VERCEL_READS.join(', ')}. project = id or name; build_logs / get_deployment need deployment_id (dpl_…). Redeploy / promote: request_action.`,
+        shape: { op: z.string().max(40), project: z.string().max(100).optional(), deployment_id: z.string().max(100).optional(), limit: z.number().int().min(1).max(50).optional(),
+          target: z.enum(['production', 'preview']).optional() },
+        run: this.safe('vercel', (a) => vercelRead(this.d.api, this.d.client.slug, a)) },
       { name: 'memory_search', description: 'Search this client\'s project memory (HQ Brain) for facts, decisions, earlier sessions.',
         shape: { query: z.string().min(2).max(200) }, run: this.safe('memory_search', (a) => this.d.memorySearch(a.query)) },
       { name: 'report_progress', description: 'One line for Julev\'s live view of what you are doing now (call at each real step).',
@@ -115,6 +124,8 @@ export class JobToolbox {
           + 'webflow_publish {site_id, custom_domain_ids?, webflow_subdomain?} or {collection_id, item_ids}; '
           + 'airtable_write {base_id, table, op:"create"|"update", records:[{id?, fields}], typecast?} (≤100); '
           + 'delete {platform:"webflow", collection_id, item_ids} | {platform:"airtable", base_id, table, record_ids}; '
+          + 'github_issue {repo, title, body, labels?}; github_comment {repo, number, body}; github_merge {repo, number, method?: "squash"|"merge"|"rebase", expected_head?}; '
+          + 'vercel_redeploy {deployment_id, target?: "production"}; vercel_promote {project, deployment_id}; '
           + 'browser_click {url, selector, text, type_text?, press?} (the refusal of a click gives you this spec); '
           + 'other {description} (Julev does it by hand). summary: one plain sentence of what changes, for Julev.',
         shape: { kind: z.enum(ACTION_KINDS), summary: z.string().min(3).max(1000), spec: z.record(z.unknown()) },

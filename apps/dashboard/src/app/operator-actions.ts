@@ -169,15 +169,23 @@ export async function setLoginSiteAction(slug: string, site: string, label: stri
   return call('operator_set_login_site', { p_client: slug, p_site: site, p_label: String(label ?? site).slice(0, 80), p_url: String(url).trim(), p_enabled: enabled === true });
 }
 
+/** The client's Vercel team (id team_... or slug) for team projects; empty = the token's own account. */
+export async function setVercelTeamAction(slug: string, team: string): Promise<OperatorResult> {
+  if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
+  const t = String(team ?? '').trim();
+  if (t && !/^[A-Za-z0-9_-]{2,64}$/.test(t)) return { ok: false, error: 'Paste the team id (team_...) or its slug from the Vercel URL.' };
+  return call('operator_set_vercel_team', { p_client: slug, p_team: t || null });
+}
+
 export async function requestLoginCheckAction(slug: string): Promise<OperatorResult> {
   if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
   return call('operator_request_login_check', { p_client: slug });
 }
 
 /** Link (or unlink with null) a Client Vault API token for the operator. Needs your 2FA code when 2FA is on. */
-export async function linkCredentialAction(slug: string, platform: 'webflow' | 'airtable', credentialId: string | null, totp?: string | null): Promise<OperatorResult & { stepUp?: boolean }> {
+export async function linkCredentialAction(slug: string, platform: 'webflow' | 'airtable' | 'github' | 'vercel', credentialId: string | null, totp?: string | null): Promise<OperatorResult & { stepUp?: boolean }> {
   if (!SLUG.test(slug)) return { ok: false, error: 'Unknown client.' };
-  if (platform !== 'webflow' && platform !== 'airtable') return { ok: false, error: 'Unknown platform.' };
+  if (!['webflow', 'airtable', 'github', 'vercel'].includes(platform)) return { ok: false, error: 'Unknown platform.' };
   if (credentialId && !ID.test(credentialId)) return { ok: false, error: 'Unknown credential.' };
   const c = await ceoDb();
   if ('error' in c) return { ok: false, error: c.error };

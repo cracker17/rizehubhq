@@ -241,7 +241,7 @@ export function belongsTo(key, svc) {
   const v = BY_KEY.get(key);
   if (!v) {
     if (/^OPERATOR_CDP_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // one browser endpoint per client profile
-    if (/^OPERATOR_(WEBFLOW|AIRTABLE|WHATSAPP)_TOKEN_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // job API tokens (fallback to the Client Vault)
+    if (/^OPERATOR_(WEBFLOW|AIRTABLE|WHATSAPP|GITHUB|VERCEL)_TOKEN_[A-Z0-9_]+$/.test(key) || /^OPERATOR_VERCEL_TEAM_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // job API tokens (fallback to the Client Vault)
     return svc === 'worker' && !/^(NEXT_PUBLIC_|TELEGRAM_|BACKUP_)/.test(key);
   }
   return v.svc.includes(svc);

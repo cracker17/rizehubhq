@@ -109,14 +109,15 @@ export function operatorUpdateBody(ap: BotApproval): string[] {
 }
 
 const ACTION_KIND: Record<string, string> = { webflow_cms: 'Webflow CMS change', webflow_publish: 'Publish (Webflow)', airtable_write: 'Airtable change',
-  browser_click: 'Click in the browser', delete: 'Delete' };
+  browser_click: 'Click in the browser', delete: 'Delete', github_issue: 'New GitHub issue', github_comment: 'GitHub comment',
+  github_merge: 'Merge pull request', vercel_redeploy: 'Redeploy on Vercel', vercel_promote: 'Promote to production' };
 
 /** An outside-world change a job wants to make: nothing happens before ✅. */
 export function operatorActionBody(ap: BotApproval): string[] {
   const p = (ap.payload ?? {}) as { client?: string; client_name?: string; job_title?: string; action_kind?: string; spec?: Record<string, unknown> };
   const kind = String(p.action_kind ?? '');
   const lines = [
-    `🚀 <b>${esc(ACTION_KIND[kind] ?? 'Action')}</b> · ${esc(p.client_name ?? p.client ?? 'client')}${kind === 'delete' || kind === 'webflow_publish' ? ' ⚠️' : ''}`,
+    `🚀 <b>${esc(ACTION_KIND[kind] ?? 'Action')}</b> · ${esc(p.client_name ?? p.client ?? 'client')}${['delete', 'webflow_publish', 'github_merge', 'vercel_promote'].includes(kind) ? ' ⚠️' : ''}`,
     `Job: ${esc(clip(p.job_title, 160))}`,
     esc(clip(ap.summary ?? ap.title, 800)),
   ];

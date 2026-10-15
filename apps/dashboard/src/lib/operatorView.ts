@@ -94,6 +94,7 @@ export function usd(v: number | string | null | undefined): string {
 
 export const ACTION_KIND_LABEL: Record<string, string> = {
   webflow_cms: 'Webflow CMS change', webflow_publish: 'Publish (Webflow)', airtable_write: 'Airtable change', browser_click: 'Click in the browser', delete: 'Delete',
+  github_issue: 'New GitHub issue', github_comment: 'GitHub comment', github_merge: 'Merge pull request', vercel_redeploy: 'Redeploy on Vercel', vercel_promote: 'Promote to production',
 };
 
 /** settings.operator_digest_times → 'HH:MM' or null (off); missing = the defaults. */

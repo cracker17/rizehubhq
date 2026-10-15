@@ -194,6 +194,7 @@ async function main() {
     qa: (urls, withCtx) => runQa(urls, { withCtx, net }),
     api: {
       http: { fetch: (...a) => fetch(...a), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) },
+      vercelTeam: async (slug) => ((await db.clients()).find((c) => c.slug === slug) as { vercel_team?: string | null } | undefined)?.vercel_team ?? null,
       tokens: tokenSource({ vaultToken: (c, p, k) => jobDb.vaultToken(c, p, k), keyring: () => loadKeyring(workerEnv()), env: workerEnv, log: console.log }),
       env: workerEnv(),
     },

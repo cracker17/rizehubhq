@@ -13,12 +13,13 @@ import { ago, isOnline, type OperatorClientRow } from '@/lib/operatorView';
 import { LOGIN_PRESETS, serverSetup, setupChecklist, slugify, STEPS, viewerHostFor, viewerPort, type StepKey } from '@/lib/operatorSetup';
 import type { OperatorSetupData } from '@/lib/data/operator';
 import {
-  addChannelAction, linkCredentialAction, requestLoginCheckAction, saveClientAction, setLoginSiteAction, setViewerUrlAction, type OperatorResult,
+  addChannelAction, linkCredentialAction, requestLoginCheckAction, saveClientAction, setLoginSiteAction, setVercelTeamAction, setViewerUrlAction, type OperatorResult,
 } from '@/app/operator-actions';
 import { Pill } from './Pill';
 import { Accounts, Posting } from './OperatorAccounts';
 
 type Run = (fn: () => Promise<OperatorResult>, done: string) => void;
+const NAMES = { webflow: 'Webflow', airtable: 'Airtable', github: 'GitHub', vercel: 'Vercel' } as const;
 
 export function OperatorSetup({ data, error, initialStep }: { data: OperatorSetupData; error?: string; initialStep?: string }) {
   const { toast } = useHq();
@@ -33,7 +34,7 @@ export function OperatorSetup({ data, error, initialStep }: { data: OperatorSetu
     client: c, logins: data.logins, accounts: data.home.accounts.filter((a) => a.client_slug === c?.slug).length,
     channels: data.home.channels.filter((x) => x.client_slug === c?.slug && x.kind !== 'whatsapp').length,
     whatsapp: data.home.channels.some((x) => x.client_slug === c?.slug && x.kind === 'whatsapp'),
-    webflowLinked: !!c?.webflow_credential, airtableLinked: !!c?.airtable_credential, online: isOnline(data.home.heartbeatAt),
+    webflowLinked: !!c?.webflow_credential, airtableLinked: !!c?.airtable_credential, githubLinked: !!c?.github_credential, vercelLinked: !!c?.vercel_credential, online: isOnline(data.home.heartbeatAt),
   }), [c, data]);
   const missing = checklist.filter((i) => !i.done && !i.optional).length;
 
@@ -251,17 +252,19 @@ function ApisStep({ data, pending }: { data: OperatorSetupData; pending: boolean
   const [code, setCode] = useState('');
   const [askCode, setAskCode] = useState(false);
   const c = data.client!;
-  const link = (platform: 'webflow' | 'airtable', id: string | null) => start(async () => {
+  const link = (platform: 'webflow' | 'airtable' | 'github' | 'vercel', id: string | null) => start(async () => {
     const r = await linkCredentialAction(c.slug, platform, id, code || null);
     if (!r.ok) { if (r.stepUp) setAskCode(true); toast(r.error, 'error'); return; }
     setCode(''); setAskCode(false);
-    toast(id ? `${platform === 'webflow' ? 'Webflow' : 'Airtable'} token linked` : 'Unlinked', 'success');
+    toast(id ? `${NAMES[platform]} token linked` : 'Unlinked', 'success');
   });
-  const rows: ['webflow' | 'airtable', string, string | null][] = [['webflow', 'Webflow', c.webflow_credential], ['airtable', 'Airtable', c.airtable_credential]];
+  const rows: ['webflow' | 'airtable' | 'github' | 'vercel', string, string | null][] = [['webflow', 'Webflow', c.webflow_credential], ['airtable', 'Airtable', c.airtable_credential],
+    ['github', 'GitHub', c.github_credential ?? null], ['vercel', 'Vercel', c.vercel_credential ?? null]];
+  const [team, setTeam] = useState(c.vercel_team ?? '');
   return (
     <div className="flex flex-col gap-3">
       <h2 className="text-base font-semibold">APIs</h2>
-      <p className="text-[13px] text-[var(--color-muted)]">With an API token the operator reads Webflow and Airtable directly (faster, and no browser session to flag), and proposes changes there for your ✅. Tokens stay encrypted in the Client Vault; the AI never sees them.</p>
+      <p className="text-[13px] text-[var(--color-muted)]">With an API token the operator reads Webflow, Airtable, GitHub and Vercel directly (faster, and no browser session to flag), and proposes changes there for your ✅. Tokens stay encrypted in the Client Vault; the AI never sees them.</p>
       {!c.client_id && <p className="text-xs text-[#fcd34d]">This operator client is not linked to a client in HQ (Clients), so there are no vault tokens to pick. Add the client in HQ with the same short name, or use the env fallback (docs/17).</p>}
       {rows.map(([p, label, linked]) => {
         const options = data.credentials.filter((x) => x.platform.toLowerCase() === p && x.status !== 'revoked');
@@ -277,6 +280,11 @@ function ApisStep({ data, pending }: { data: OperatorSetupData; pending: boolean
           </div>
         );
       })}
+      <form className="item flex flex-wrap items-center gap-2 px-3 py-2.5" onSubmit={(e) => { e.preventDefault(); start(async () => { const r = await setVercelTeamAction(c.slug, team); toast(r.ok ? 'Vercel team saved' : r.error, r.ok ? 'success' : 'error'); }); }}>
+        <label htmlFor="su-vteam" className="min-w-0 flex-1 text-[13px]">Vercel team <span className="text-xs text-[var(--color-dim)]">id (team_...) or slug; empty = personal account</span></label>
+        <input id="su-vteam" className={clsx(inputCls, 'sm:max-w-[200px]')} value={team} onChange={(e) => setTeam(e.target.value)} placeholder="team_..." />
+        <button className={btn.small} disabled={busy || data.home.demo || team === (c.vercel_team ?? '')}>Save</button>
+      </form>
       {askCode && (
         <label className="flex items-center gap-2 text-[13px]" htmlFor="su-totp">Your 2FA code
           <input id="su-totp" className={clsx(inputCls, 'max-w-[140px]')} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} inputMode="numeric" autoComplete="one-time-code" />

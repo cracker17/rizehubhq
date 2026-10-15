@@ -10,8 +10,9 @@ import { apiError, httpRequest, Redactor, truncate, type HttpEnv, type HttpRes }
 import type { DevEnv } from 'worker/src/dev/env';
 import type { Token } from 'worker/src/dev/creds';
 import { envSlug } from 'worker/src/dev/env';
+import { executeGithub, executeVercel } from './devapis';
 
-export type Platform = 'webflow' | 'airtable';
+export type Platform = 'webflow' | 'airtable' | 'github' | 'vercel';
 export type TokenSource = (client: string, platform: Platform) => Promise<Token | null>;
 
 export const WEBFLOW_READS = ['list_sites', 'list_collections', 'get_collection', 'list_items', 'get_item', 'list_pages', 'get_page', 'get_page_content'] as const;
@@ -19,14 +20,18 @@ export const AIRTABLE_READS = ['list_bases', 'list_tables', 'list_records', 'get
 const AIRTABLE = 'https://api.airtable.com/v0';
 
 export class ApiRefusal extends Error {}
-const refuse = (m: string): never => { throw new ApiRefusal(m); };
+export const refuse = (m: string): never => { throw new ApiRefusal(m); };
 
 /** env fallback name for a client's token: OPERATOR_WEBFLOW_TOKEN_LVLUP. */
 export const envTokenName = (platform: Platform, client: string) => `OPERATOR_${platform.toUpperCase()}_TOKEN_${envSlug(client)}`;
 
-export interface ApiEnv { http: HttpEnv; tokens: TokenSource; env: Readonly<Record<string, string | undefined>> }
+export interface ApiEnv {
+  http: HttpEnv; tokens: TokenSource; env: Readonly<Record<string, string | undefined>>;
+  /** The client's Vercel team (operator_clients.vercel_team); null = the token's personal account. */
+  vercelTeam?: (client: string) => Promise<string | null>;
+}
 
-async function token(a: ApiEnv, client: string, platform: Platform, red: Redactor): Promise<Token> {
+export async function token(a: ApiEnv, client: string, platform: Platform, red: Redactor): Promise<Token> {
   const t = await a.tokens(client, platform);
   if (!t) refuse(`No ${platform} API token for ${client}: link one on /operator (Client Vault) or set ${envTokenName(platform, client)}. Use the browser instead, or say so in finish.`);
   red.add(t!.token);
@@ -205,6 +210,10 @@ export async function executeApiAction(a: ApiEnv, x: ActionRow): Promise<ActionO
       case 'webflow_publish': return scrub(await webflowPublish(a, await token(a, x.client_slug, 'webflow', red), x.spec));
       case 'airtable_write': return scrub(await airtableWrite(a, await token(a, x.client_slug, 'airtable', red), x.spec));
       case 'delete': return scrub(await deleteThings(a, x.client_slug, x.spec, red));
+      case 'github_issue': case 'github_comment': case 'github_merge':
+        return scrub(await executeGithub(a, await token(a, x.client_slug, 'github', red), x.kind, x.spec));
+      case 'vercel_redeploy': case 'vercel_promote':
+        return scrub(await executeVercel(a, await token(a, x.client_slug, 'vercel', red), x.client_slug, x.kind, x.spec));
       default: return { ok: false, result: {}, error: `no executor for "${x.kind}": Julev does it by hand` };
     }
   } catch (e) {
