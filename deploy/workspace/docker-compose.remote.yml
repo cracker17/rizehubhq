@@ -1,0 +1,9 @@
+# Separate workspace VPS (docs/17-OPERATOR.md "Moving to its own VPS"): HQ's operator reaches CDP over WireGuard.
+# CDP is published on the WireGuard address ONLY (never 0.0.0.0); the firewall allows 9223/tcp from HQ's tunnel IP only.
+#   docker compose -f docker-compose.yml -f docker-compose.remote.yml --env-file .env up -d
+# On HQ: OPERATOR_CDP_LVLUP=http://<WG_ADDRESS>:9223 in .env, then deploy/update.sh --force.
+services:
+  ws-lvlup:
+    ports:
+      - "${VIEWER_BIND:-127.0.0.1}:3101:3001"
+      - "${WG_ADDRESS:?set WG_ADDRESS (this host's WireGuard IP)}:9223:9223"

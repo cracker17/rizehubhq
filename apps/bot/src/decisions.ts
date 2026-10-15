@@ -3,6 +3,7 @@
 import type { BotDb } from './db';
 import { is2fa } from './format';
 import { renderApproval } from './notifier';
+import { isOperatorReply } from './operator';
 import type { PendingNotes } from './pending';
 import type { Decision } from './types';
 import type { InlineMarkup } from './keyboard';
@@ -18,6 +19,10 @@ const TOAST: Record<string, string> = {
   plan_approved: 'Plan approved: tasks are queued', replan: 'Sent back to the COO', plan_rejected: 'Plan rejected',
   task_done: 'Approved: marked done', task_revision: 'Sent back for changes', task_cancelled: 'Rejected: task cancelled',
   action_approved: 'Approved', action_changes_requested: 'Sent back with your note', action_rejected: 'Rejected',
+};
+
+const OPERATOR_TOAST: Record<string, string> = {
+  action_approved: 'Posting the draft', action_changes_requested: 'Posting your text', action_rejected: 'Skipped',
 };
 
 /** A one-time code as typed ("482 913" → "482913"); null when it doesn't look like one. */
@@ -38,6 +43,10 @@ export async function onButton(d: DecisionDeps, chatId: number, messageId: numbe
   if (is2fa(ap) && action !== 'reject') {
     d.pending.set(chatId, approvalId, messageId, now, 'approve');
     return { kind: 'ask_note', toast: 'Type the code', prompt: `Reply with the one-time code for “${ap.title}” (digits only). It is passed to the agent's login and never shown or logged. /cancel to stop.` };
+  }
+  if (action === 'changes' && isOperatorReply(ap)) {
+    d.pending.set(chatId, approvalId, messageId, now);
+    return { kind: 'ask_note', toast: 'Type the reply', prompt: `Send the reply exactly as it should be posted (it replaces the draft for “${ap.title}”). Write @Full Name for a mention. /cancel to stop.` };
   }
   if (action === 'changes') {
     d.pending.set(chatId, approvalId, messageId, now);
@@ -65,7 +74,9 @@ async function apply(d: DecisionDeps, approvalId: string, action: Decision, note
   const ap = await d.db.getApproval(approvalId);
   if (!ap) throw new Error('approval disappeared');
   const { text, markup } = renderApproval(ap, d.names(), d.dashboardUrl, d.tz());
-  return { kind: 'edit', text, markup, toast: result.startsWith('already_') ? 'Already decided' : TOAST[result] ?? 'Done' };
+  const toast = result.startsWith('already_') ? 'Already decided'
+    : isOperatorReply(ap) ? OPERATOR_TOAST[result] ?? 'Done' : TOAST[result] ?? 'Done';
+  return { kind: 'edit', text, markup, toast };
 }
 
 /**

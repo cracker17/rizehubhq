@@ -18,11 +18,11 @@ export function approvalUrl(dashboardUrl: string, approvalId: string): string {
 }
 
 /** [✅ Approve] [✏️ Changes] [❌ Reject] [🔗 Open]; "Open" is dropped when the dashboard URL is not public. */
-export function approvalKeyboard(approvalId: string, dashboardUrl: string, opts: { changesLabel?: string } = {}): InlineMarkup {
+export function approvalKeyboard(approvalId: string, dashboardUrl: string, opts: { approveLabel?: string; changesLabel?: string; rejectLabel?: string } = {}): InlineMarkup {
   const row: InlineButton[] = [
-    { text: '✅ Approve', callback_data: callbackData(approvalId, 'approve') },
+    { text: opts.approveLabel ?? '✅ Approve', callback_data: callbackData(approvalId, 'approve') },
     { text: opts.changesLabel ?? '✏️ Changes', callback_data: callbackData(approvalId, 'changes') },
-    { text: '❌ Reject', callback_data: callbackData(approvalId, 'reject') },
+    { text: opts.rejectLabel ?? '❌ Reject', callback_data: callbackData(approvalId, 'reject') },
   ];
   const url = approvalUrl(dashboardUrl, approvalId);
   if (isPublicUrl(url)) row.push({ text: '🔗 Open', url });

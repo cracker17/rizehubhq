@@ -33,9 +33,11 @@ export function inQuietHours(now: Date, q: QuietHours, tz = 'Asia/Manila'): bool
   return q.start < q.end ? m >= q.start && m < q.end : m >= q.start || m < q.end;
 }
 
-/** Goes out even in quiet hours: approvals of urgent requests, and "task failed" alerts. */
+/** Goes out even in quiet hours: approvals of urgent requests, "task failed" alerts and operator reply drafts. */
 export function isUrgentApproval(ap: Pick<BotApproval, 'payload' | 'requests'>): boolean {
-  return ap.requests?.priority === 'urgent' || (ap.payload as { type?: string } | null)?.type === 'task_failed';
+  // Operator reply drafts too: a client is waiting in the chat (US daytime is the Manila night).
+  const type = (ap.payload as { type?: string } | null)?.type;
+  return ap.requests?.priority === 'urgent' || type === 'task_failed' || type === 'operator_reply';
 }
 
 export function shouldSendApproval(ap: Pick<BotApproval, 'payload' | 'requests'>, quiet: boolean): boolean {

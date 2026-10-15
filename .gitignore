@@ -6,6 +6,8 @@ workspaces/*
 .env
 .env.*
 !.env.example
+# Operator workspace: browser profiles hold live login cookies. NEVER commit them (docs/17-OPERATOR.md).
+deploy/workspace/profiles/
 *.log
 .DS_Store
 supabase/.temp/

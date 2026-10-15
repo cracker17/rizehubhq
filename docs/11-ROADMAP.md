@@ -103,6 +103,10 @@ Each milestone ends with something you can **see working locally**. Don't start 
 - M14.3 ✅ built: `/brain` UI (animated Core, Ctrl+K search, project view with editable next steps + decisions, New Project wizard, live activity, Devices & accounts with revoke). Acceptance: `lib/brainView.test.ts`, connector test for `/write/*`, local run in DEMO at desktop + 375 px, then on prod a save from Claude Code pulses its project node.
 - Next: M14.4 agents on the brain · M14.5 polish (graph, Ask the Brain, diff/revert, PWA, voice; nightly R2 backup).
 
+## M15 · Julev Operator (docs/17-OPERATOR.md)
+- M15.1 built (branch `feat/operator-phase1`): `apps/operator` (container `hq-operator`) reads LvlUp Google Chat in a persistent workspace browser over CDP every 2 min, classifies + drafts with the Claude Agent SDK and the client's Brain memory, tiers in SQL (auto only ack/status/thanks and only with `operator_auto_send` on; `never` for credentials), Telegram ✅ Send / ✏️ Edit / ⏭ Skip, `/inbox`, `/pause [client]`, `/status <client>`, `/operator` live page, `deploy/workspace` browsers kit. Acceptance: `scripts/db-tests/230-operator.mjs`, `pnpm --filter operator test`, bot `operator.test.ts`, dashboard `operatorView.test.ts`, then the live checklist in docs/17 "Verification".
+- Next: M15.2 the work (Webflow Data API + Airtable tools, approval-gated publish, Brain session proposals), M15.3 more channels (Gmail, Slack, Teams, WhatsApp Business) and clients, AI wall view (every agent's screen at once).
+
 ---
 
 ## Open decisions (answer before/while building)

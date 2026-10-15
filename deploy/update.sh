@@ -15,7 +15,7 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH="${BRANCH:-main}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 KEEP_TAGS="${KEEP_TAGS:-3}"
-SERVICES=(dashboard worker bot brain)
+SERVICES=(dashboard worker bot brain operator)
 HEALTH_ONLY=false
 FORCE=false
 for a in "$@"; do
@@ -40,10 +40,10 @@ cd "$APP_DIR"
 dc() { docker compose "$@"; }
 
 # ---------- health ----------
-# dashboard + worker + brain: Docker HEALTHCHECK must report healthy. bot: running and not restart-looping.
+# dashboard + worker + brain: Docker HEALTHCHECK must report healthy. bot + operator: running and not restart-looping.
 wait_healthy() {
   local deadline=$(( $(date +%s) + HEALTH_TIMEOUT )) svc cid state health pending
-  local bot_restarts=""
+  local -A restarts=()
   while :; do
     pending=()
     for svc in "${SERVICES[@]}"; do
@@ -56,9 +56,9 @@ wait_healthy() {
       fi
       [[ "$health" == unhealthy ]] && { log "$svc is unhealthy"; dc logs --tail=40 "$svc" || true; return 1; }
       if [[ "$health" == none ]]; then
-        # no healthcheck (bot): healthy once it has stayed up without restarts for two checks
+        # no healthcheck (bot, operator): healthy once it has stayed up without restarts for two checks
         local rc; rc="$(docker inspect -f '{{.RestartCount}}' "$cid")"
-        if [[ "$bot_restarts" == "$rc" ]]; then :; else bot_restarts="$rc"; pending+=("$svc:settling"); fi
+        if [[ "${restarts[$svc]:-}" == "$rc" ]]; then :; else restarts[$svc]="$rc"; pending+=("$svc:settling"); fi
       elif [[ "$health" != healthy ]]; then pending+=("$svc:$health"); fi
     done
     if [[ ${#pending[@]} -eq 0 ]]; then
@@ -83,7 +83,9 @@ prepare_env() {
   node_run ro scripts/check-env.mjs --file .env --production >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env ".env check failed"
   # Each container gets only its own variables (the dashboard never sees the service-role or vault key).
   node_run rw scripts/split-env.mjs --in .env >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env "splitting .env failed"
-  chmod 600 .env.dashboard .env.bot .env.worker .env.brain
+  chmod 600 .env.dashboard .env.bot .env.worker .env.brain .env.operator
+  # The operator's network to the workspace browsers (deploy/workspace); compose refuses to start without it.
+  docker network inspect operator-ws >/dev/null 2>&1 || docker network create operator-ws >/dev/null
   node_run ro scripts/check-env.mjs --split --production --file .env >"${TMPDIR:-/tmp}/rizehubhq-check-env-$(id -u).log" 2>&1 || fail_env "per-service env files failed the check"
   bash "${APP_DIR}/deploy/fix-perms.sh" || log "warning: deploy/fix-perms.sh failed (brain/ or workspaces ownership); continuing"
 }

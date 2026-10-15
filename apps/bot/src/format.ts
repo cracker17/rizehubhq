@@ -1,5 +1,6 @@
 // Telegram message text (HTML parse mode). Pure functions; every dynamic string goes through esc().
 import type { SpendSummary } from './budget';
+import { isOperatorReply, operatorDecisionLine, operatorReplyBody } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, QuickFacts } from './types';
 
 export const TG_LIMIT = 4096;
@@ -64,6 +65,8 @@ function actionBody(ap: BotApproval, names: Names): string[] {
   const p = (ap.payload ?? {}) as { type?: string; question?: string; options?: string[]; reason?: string; action_type?: string; executor?: string; spec?: { description?: string; executor?: string } };
   const who = esc(nameOf(names, ap.agent_id));
   switch (p.type) {
+    case 'operator_reply':
+      return operatorReplyBody(ap);
     case 'question':
       return [`❓ <b>QUESTION</b> · ${who}`, esc(p.question ?? ap.summary ?? ap.title), ...(p.options?.length ? [`Options: ${p.options.map(esc).join(' / ')}`] : [])];
     case 'task_failed':
@@ -98,7 +101,7 @@ export function formatApproval(ap: BotApproval, names: Names, tz = 'Asia/Manila'
   const body = ap.kind === 'plan' ? planBody(ap, names) : ap.kind === 'deliverable' ? deliverableBody(ap, names) : actionBody(ap, names);
   if (ap.requests?.priority === 'urgent' && ap.status === 'pending') body[0] = `🔴 <b>URGENT</b> · ${body[0]}`;
   const text = body.filter((l) => l !== '').join('\n');
-  const d = is2fa(ap) ? twofaLine(ap, tz) : decisionLine(ap, tz);
+  const d = is2fa(ap) ? twofaLine(ap, tz) : isOperatorReply(ap) ? operatorDecisionLine(ap, tz) : decisionLine(ap, tz);
   return truncate(d ? `${text}\n\n${d}` : text);
 }
 

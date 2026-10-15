@@ -1,6 +1,7 @@
 // BotDb: everything the bot reads/writes in Supabase (service role, server-only). Decisions go
 // through the decide_approval RPC so the bot and dashboard share one set of rules.
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { NOTICE_ACTIONS, type OperatorNotice, type OperatorStatus } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
 export const APPROVAL_COLS = '*, requests(priority,title,due_date,clients(name))';
@@ -36,6 +37,17 @@ export interface BotDb {
   getVoiceNote(id: string): Promise<VoiceNoteState | null>;
   /** The bot stopped waiting: mark it failed and drop the audio (only while still pending / working). */
   abandonVoiceNote(id: string, error: string): Promise<void>;
+  // ---------- Julev Operator (20261015000000_operator.sql) ----------
+  /** Operator audit rows that may need a Telegram notice and have not been handled yet (oldest first). */
+  unsentOperatorNotices(sinceIso: string): Promise<OperatorNotice[]>;
+  markOperatorNoticeSent(id: number): Promise<void>;
+  /** The kill switch: no operator sends at all while on. */
+  setOperatorPaused(paused: boolean): Promise<void>;
+  setOperatorClientPaused(slug: string, paused: boolean): Promise<void>;
+  operatorStatus(slug: string): Promise<OperatorStatus | null>;
+  operatorClients(): Promise<{ slug: string; name: string }[]>;
+  /** Reply drafts waiting for the CEO (pending operator_reply approvals), oldest first. */
+  pendingOperatorReplies(limit: number): Promise<{ rows: BotApproval[]; total: number }>;
 }
 
 export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
@@ -95,6 +107,27 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
     getVoiceNote: async (id) => must<VoiceNoteState | null>(await sb.from('voice_notes').select('status,text,error').eq('id', id).maybeSingle(), 'voice_notes'),
     abandonVoiceNote: async (id, error) => {
       must(await sb.from('voice_notes').update({ status: 'failed', error, audio: null }).eq('id', id).in('status', ['pending', 'working']), 'voice_notes');
+    },
+    unsentOperatorNotices: async (sinceIso) => {
+      // operator_inbox(...) is a to-one embed (inbox_id → operator_inbox.id): PostgREST returns an object, not a list.
+      const res = await sb.from('operator_actions')
+        .select('id,created_at,client_slug,inbox_id,action,ok,detail,operator_inbox(sender_name,final_text,mode,error,url)')
+        .is('telegram_sent_at', null).in('action', [...NOTICE_ACTIONS]).gte('created_at', sinceIso).order('id').limit(20);
+      return must<OperatorNotice[]>(res as unknown as { data: OperatorNotice[] | null; error: { message: string } | null }, 'operator_actions');
+    },
+    markOperatorNoticeSent: async (id) => {
+      must(await sb.from('operator_actions').update({ telegram_sent_at: new Date().toISOString() }).eq('id', id).is('telegram_sent_at', null), 'operator notice sent');
+    },
+    setOperatorPaused: async (paused) => { must(await sb.rpc('operator_set_paused', { p_paused: paused, p_via: 'telegram' }), 'operator_set_paused'); },
+    setOperatorClientPaused: async (slug, paused) => {
+      must(await sb.rpc('operator_set_client_paused', { p_client: slug, p_paused: paused, p_via: 'telegram' }), 'operator_set_client_paused');
+    },
+    operatorStatus: async (slug) => must<OperatorStatus | null>(await sb.rpc('operator_client_status', { p_client: slug }), 'operator_client_status'),
+    operatorClients: async () => must<{ slug: string; name: string }[]>(await sb.from('operator_clients').select('slug,name').eq('enabled', true).order('slug'), 'operator_clients'),
+    pendingOperatorReplies: async (limit) => {
+      const res = await sb.from('approvals').select(APPROVAL_COLS, { count: 'exact' }).eq('status', 'pending')
+        .eq('payload->>type', 'operator_reply').order('created_at').limit(limit);
+      return { rows: must<BotApproval[]>(res, 'approvals'), total: res.count ?? 0 };
     },
   };
 }

@@ -2,9 +2,9 @@
 // service reads it, and which per-service env file it belongs to in production (docker-compose.yml env_file).
 // Zero dependencies.
 
-export const SERVICES = ['dashboard', 'worker', 'bot', 'brain', 'ops'];
+export const SERVICES = ['dashboard', 'worker', 'bot', 'brain', 'operator', 'ops'];
 /** Production env files (docker-compose.yml). ops variables stay only in the master .env (deploy/backup.sh). */
-export const SERVICE_FILES = { dashboard: '.env.dashboard', bot: '.env.bot', worker: '.env.worker', brain: '.env.brain' };
+export const SERVICE_FILES = { dashboard: '.env.dashboard', bot: '.env.bot', worker: '.env.worker', brain: '.env.brain', operator: '.env.operator' };
 /** Never allowed in a file, whatever the value (even empty): these would put a server secret in that container. */
 export const FORBIDDEN_IN = {
   dashboard: ['SUPABASE_SERVICE_ROLE_KEY', 'VAULT_MASTER_KEY', 'VAULT_PREVIOUS_KEYS', 'SUPABASE_DB_URL', 'TELEGRAM_BOT_TOKEN',
@@ -13,6 +13,10 @@ export const FORBIDDEN_IN = {
   // The worker runs agent code: it never gets the brain's secrets (docs/16-BRAIN.md "Isolation").
   worker: ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'BRAIN_INTERNAL_SECRET', 'BRAIN_WEBHOOK_SECRET', 'BRAIN_OPENAI_API_KEY'],
   brain: ['VAULT_MASTER_KEY', 'VAULT_PREVIOUS_KEYS', 'SUPABASE_DB_URL', 'TELEGRAM_BOT_TOKEN', 'HQ_INTERNAL_SECRET', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'],
+  // The operator reaches the client browsers: it never gets Telegram, the brain's secrets or the worker's internal secret
+  // (docs/17-OPERATOR.md "Isolation"). It keeps the vault key only to read the dashboard's Anthropic key.
+  operator: ['TELEGRAM_BOT_TOKEN', 'SUPABASE_DB_URL', 'HQ_INTERNAL_SECRET', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'BRAIN_INTERNAL_SECRET',
+             'BRAIN_WEBHOOK_SECRET', 'BRAIN_OPENAI_API_KEY'],
 };
 
 // ---------- .env parser (same rules as docker compose: KEY=VALUE, quotes, " #" comments on unquoted values) ----------
@@ -64,19 +68,19 @@ export const CLAUDE_AGENTS = { coo: 'COO', 'web-dev': 'WEB_DEV', designer: 'DESI
 const S = (o) => o;
 export const VARS = [
   // Supabase
-  S({ key: 'SUPABASE_URL', group: 'Supabase', svc: ['worker', 'bot', 'brain'], req: ['worker', 'bot', 'brain'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use the https://<ref>.supabase.co URL in production') }),
-  S({ key: 'SUPABASE_SERVICE_ROLE_KEY', group: 'Supabase', svc: ['worker', 'bot', 'brain'], req: ['worker', 'bot', 'brain'], secret: true, check: supabaseKey('service') }),
+  S({ key: 'SUPABASE_URL', group: 'Supabase', svc: ['worker', 'bot', 'brain', 'operator'], req: ['worker', 'bot', 'brain'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use the https://<ref>.supabase.co URL in production') }),
+  S({ key: 'SUPABASE_SERVICE_ROLE_KEY', group: 'Supabase', svc: ['worker', 'bot', 'brain', 'operator'], req: ['worker', 'bot', 'brain'], secret: true, check: supabaseKey('service') }),
   S({ key: 'NEXT_PUBLIC_SUPABASE_URL', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: (v) => (isUrl(v) ? null : 'must be a URL'), prod: (v) => (v.startsWith('https://') ? null : 'use https in production'), note: 'empty = DEMO mode (mock data)' }),
   S({ key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', group: 'Supabase', svc: ['dashboard'], req: ['dashboard*prod'], check: supabaseKey('anon') }),
   // AI
-  S({ key: 'MODEL_PROFILE', group: 'AI', svc: ['worker'], check: (v) => (['free', 'paid', 'hybrid', 'claude', 'openai', 'kimi'].includes(v) ? null : 'must be free | paid | hybrid | claude | openai | kimi') }),
-  ...['LEAD', 'DEV', 'DESIGN', 'WRITER', 'SALES', 'QA', 'LIGHT'].map((r) => S({ key: `MODEL_ID_${r}`, group: 'AI', svc: ['worker'],
+  S({ key: 'MODEL_PROFILE', group: 'AI', svc: ['worker', 'operator'], check: (v) => (['free', 'paid', 'hybrid', 'claude', 'openai', 'kimi'].includes(v) ? null : 'must be free | paid | hybrid | claude | openai | kimi') }),
+  ...['LEAD', 'DEV', 'DESIGN', 'WRITER', 'SALES', 'QA', 'LIGHT'].map((r) => S({ key: `MODEL_ID_${r}`, group: 'AI', svc: ['worker', 'operator'],
     check: (v) => (/^(google|groq|openrouter|anthropic|openai|moonshot):\S+$/.test(v) ? null : 'must be provider:model, e.g. anthropic:claude-sonnet-5 (providers: google, groq, openrouter, anthropic, openai, moonshot)') })),
-  S({ key: 'DAILY_AI_BUDGET_USD', group: 'AI', svc: ['worker', 'dashboard'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0 (0 = no cap)') }),
-  S({ key: 'MONTHLY_BUDGET_USD', group: 'AI', svc: ['worker', 'bot'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0') }),
+  S({ key: 'DAILY_AI_BUDGET_USD', group: 'AI', svc: ['worker', 'dashboard', 'operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0 (0 = no cap)') }),
+  S({ key: 'MONTHLY_BUDGET_USD', group: 'AI', svc: ['worker', 'bot', 'operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) ? null : 'must be a number ≥ 0') }),
   ...['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'MOONSHOT_API_KEY']
-    .map((key) => S({ key, group: 'AI', svc: ['worker'], secret: true, check: (v) => (v.length >= 20 && !/\s/.test(v) ? null : 'looks too short / has spaces') })),
-  S({ key: 'ANTHROPIC_WORKSPACE_ID', group: 'AI', svc: ['worker'], check: (v) => (/^wrkspc_[A-Za-z0-9]{8,64}$/.test(v) ? null : 'must look like wrkspc_01Jw… (only for a multi-workspace Anthropic key)') }),
+    .map((key) => S({ key, group: 'AI', svc: key === 'ANTHROPIC_API_KEY' ? ['worker', 'operator'] : ['worker'], secret: true, check: (v) => (v.length >= 20 && !/\s/.test(v) ? null : 'looks too short / has spaces') })),
+  S({ key: 'ANTHROPIC_WORKSPACE_ID', group: 'AI', svc: ['worker', 'operator'], check: (v) => (/^wrkspc_[A-Za-z0-9]{8,64}$/.test(v) ? null : 'must look like wrkspc_01Jw… (only for a multi-workspace Anthropic key)') }),
   // Worker
   S({ key: 'POLL_INTERVAL_MS', group: 'Worker', svc: ['worker'], check: intIn(250) }),
   S({ key: 'MAX_PARALLEL_TASKS', group: 'Worker', svc: ['worker'], check: intIn(1, 16) }),
@@ -84,14 +88,14 @@ export const VARS = [
   S({ key: 'MAX_COST_PER_TASK_USD', group: 'Worker', svc: ['worker'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0 (USD)') }),
   S({ key: 'REPORTS_CHECK_MS', group: 'Worker', svc: ['worker'], check: intIn(1000) }),
   S({ key: 'QA_THRESHOLD', group: 'Worker', svc: ['worker'], check: intIn(0, 100) }),
-  S({ key: 'TZ', group: 'Worker', svc: ['worker', 'bot', 'brain'], check: (v) => { try { new Intl.DateTimeFormat('en', { timeZone: v }); return null; } catch { return 'unknown IANA time zone (e.g. Asia/Manila)'; } } }),
+  S({ key: 'TZ', group: 'Worker', svc: ['worker', 'bot', 'brain', 'operator'], check: (v) => { try { new Intl.DateTimeFormat('en', { timeZone: v }); return null; } catch { return 'unknown IANA time zone (e.g. Asia/Manila)'; } } }),
   S({ key: 'WORKER_HTTP_PORT', group: 'Worker', svc: ['worker'], check: intIn(1, 65535) }),
   S({ key: 'HQ_INTERNAL_SECRET', group: 'Worker', svc: ['dashboard', 'worker'], req: ['worker*prod', 'dashboard*prod'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32') }),
   S({ key: 'HQ_WORKER_URL', group: 'Worker', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL'), note: 'docker-compose.yml overrides it with http://hq-worker:4000' }),
   S({ key: 'PLAYWRIGHT_CHROMIUM_PATH', group: 'Worker', svc: ['worker'] }),
   ...['AGENT_UID', 'AGENT_GID'].map((key) => S({ key, group: 'Worker', svc: ['worker'], check: intIn(1, 2147483647), note: 'set by the worker image (1001): agent commands run as this uid' })),
   ...['AGENTS_DIR', 'BRAIN_DIR', 'WORKSPACES_DIR', 'MODELS_FILE']
-    .map((key) => S({ key, group: 'Worker', svc: key === 'AGENTS_DIR' ? ['dashboard', 'worker'] : key === 'MODELS_FILE' ? ['worker', 'brain'] : ['worker'], emptyIsBad: true, note: 'set by the Docker images' })),
+    .map((key) => S({ key, group: 'Worker', svc: key === 'AGENTS_DIR' ? ['dashboard', 'worker'] : key === 'MODELS_FILE' ? ['worker', 'brain', 'operator'] : ['worker'], emptyIsBad: true, note: 'set by the Docker images' })),
   // Research & QA tools (all optional: tools report "not connected" without them)
   ...['TAVILY_API_KEY', 'BRAVE_SEARCH_API_KEY', 'SERPER_API_KEY', 'PAGESPEED_API_KEY', 'SEMRUSH_API_KEY', 'FIGMA_TOKEN', 'MEDIA_PROVIDER_KEY', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REFRESH_TOKEN']
     .map((key) => S({ key, group: 'Research & QA', svc: ['worker'], secret: true, check: (v) => (/\s/.test(v) ? 'has spaces' : null) })),
@@ -109,9 +113,9 @@ export const VARS = [
   S({ key: 'DEV_EXTRA_ALLOWED_HOSTS', group: 'Dev agents', svc: ['worker'], check: (v) => (v.split(',').map((x) => x.trim()).filter(Boolean).every((h) => /^(\*\.)?[a-z0-9.-]+(:\d+)?$/i.test(h)) ? null : 'must be host names, comma-separated (e.g. api.example.com,*.example.net)') }),
   S({ key: 'SHOPIFY_API_VERSION', group: 'Dev agents', svc: ['worker'], check: (v) => (/^\d{4}-\d{2}$/.test(v) || v === 'unstable' ? null : 'must look like 2025-07') }),
   // Vault
-  S({ key: 'VAULT_MASTER_KEY', group: 'Client Vault', svc: ['worker'], req: ['worker*prod'], secret: true, check: b64key32 }),
-  S({ key: 'VAULT_KEY_VERSION', group: 'Client Vault', svc: ['worker'], check: intIn(1) }),
-  S({ key: 'VAULT_PREVIOUS_KEYS', group: 'Client Vault', svc: ['worker'], secret: true, check: (v) => {
+  S({ key: 'VAULT_MASTER_KEY', group: 'Client Vault', svc: ['worker', 'operator'], req: ['worker*prod'], secret: true, check: b64key32 }),
+  S({ key: 'VAULT_KEY_VERSION', group: 'Client Vault', svc: ['worker', 'operator'], check: intIn(1) }),
+  S({ key: 'VAULT_PREVIOUS_KEYS', group: 'Client Vault', svc: ['worker', 'operator'], secret: true, check: (v) => {
     for (const part of v.split(',').map((s) => s.trim()).filter(Boolean)) {
       const i = part.indexOf(':');
       if (i < 1 || !/^\d+$/.test(part.slice(0, i))) return 'must look like 1:<base64>,2:<base64>';
@@ -171,8 +175,19 @@ export const VARS = [
   S({ key: 'CLAUDE_FILE_TOOLS', group: 'Claude runtime', svc: ['worker'], check: (v) => (['hq', 'native'].includes(v) ? null : 'must be hq | native') }),
   S({ key: 'CLAUDE_TIMEOUT_MS', group: 'Claude runtime', svc: ['worker'], check: intIn(10_000) }),
   S({ key: 'CLAUDE_HQ_MCP_URL', group: 'Claude runtime', svc: ['worker'], check: (v) => (isUrl(v) ? null : 'must be a URL, e.g. http://127.0.0.1:4000/mcp') }),
-  ...['', ...Object.values(CLAUDE_AGENTS).map((s) => `_${s}`)].map((s) => S({ key: `CLAUDE_MODEL${s}`, group: 'Claude runtime', svc: ['worker'],
+  ...['', ...Object.values(CLAUDE_AGENTS).map((s) => `_${s}`)].map((s) => S({ key: `CLAUDE_MODEL${s}`, group: 'Claude runtime', svc: s ? ['worker'] : ['worker', 'operator'],
     check: (v) => (/^(anthropic:)?claude-[\w.-]+$/.test(v) ? null : 'must be an Anthropic model id like claude-sonnet-5') })),
+  // Operator (docs/17-OPERATOR.md): container hq-operator. OPERATOR_CDP_<PROFILE> (one per client browser) is not listed:
+  // belongsTo() sends those names to the operator only.
+  S({ key: 'OPERATOR_ENABLED', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
+  S({ key: 'OPERATOR_SENDS', group: 'Operator', svc: ['operator'], check: (v) => (['true', 'false', '1', '0', 'on', 'off', 'yes', 'no'].includes(v.toLowerCase()) ? null : 'must be true | false') }),
+  S({ key: 'OPERATOR_POLL_MS', group: 'Operator', svc: ['operator'], check: intIn(30_000) }),
+  S({ key: 'OPERATOR_TICK_MS', group: 'Operator', svc: ['operator'], check: intIn(1_000) }),
+  S({ key: 'OPERATOR_MODEL_ROLE', group: 'Operator', svc: ['operator'], check: (v) => (['lead', 'specialist', 'dev', 'design', 'writer', 'sales', 'reports', 'qa', 'light'].includes(v) ? null : 'must be a model role (specialist, light, …)') }),
+  S({ key: 'OPERATOR_MAX_USD_PER_MESSAGE', group: 'Operator', svc: ['operator'], check: (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) > 0 ? null : 'must be a number > 0') }),
+  S({ key: 'OPERATOR_CDP_URL', group: 'Operator', svc: ['operator'], check: (v) => (isUrl(v) ? null : 'must be a URL like http://ws-lvlup:9223') }),
+  S({ key: 'OPERATOR_GCHAT_SELECTORS', group: 'Operator', svc: ['operator'], check: (v) => { try { const o = JSON.parse(v); return o && typeof o === 'object' && !Array.isArray(o) ? null : 'must be a JSON object'; } catch { return 'must be JSON'; } } }),
+  S({ key: 'CLAUDE_MODEL_OPERATOR', group: 'Operator', svc: ['operator'], check: (v) => (/^(anthropic:)?claude-[\w.-]+$/.test(v) ? null : 'must be an Anthropic model id like claude-sonnet-5') }),
   // HQ Brain (docs/16-BRAIN.md): container hq-brain; the dashboard only gets the URL + internal secret
   S({ key: 'BRAIN_URL', group: 'Brain', svc: ['dashboard'], check: (v) => (isUrl(v) ? null : 'must be a URL'), note: 'docker-compose.yml overrides it with http://hq-brain:4100' }),
   S({ key: 'BRAIN_INTERNAL_SECRET', group: 'Brain', svc: ['dashboard', 'brain'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32') }),
@@ -208,6 +223,9 @@ export const BY_KEY = new Map(VARS.map((v) => [v.key, v]));
  * only (per-client platform tokens like SHOPIFY_TOKEN_<SLUG>, GITHUB_TOKEN_DEFAULT, DEV_GIT_AUTHOR_NAME, …). */
 export function belongsTo(key, svc) {
   const v = BY_KEY.get(key);
-  if (!v) return svc === 'worker' && !/^(NEXT_PUBLIC_|TELEGRAM_|BACKUP_)/.test(key);
+  if (!v) {
+    if (/^OPERATOR_CDP_[A-Z0-9_]+$/.test(key)) return svc === 'operator'; // one browser endpoint per client profile
+    return svc === 'worker' && !/^(NEXT_PUBLIC_|TELEGRAM_|BACKUP_)/.test(key);
+  }
   return v.svc.includes(svc);
 }

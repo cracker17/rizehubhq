@@ -3,6 +3,7 @@
 #   worker    → no public port; reachable as http://hq-worker:4000 from the dashboard (default network)
 #               and from RizeHub (shared external network `rizehub-internal`, webhooks → /hooks/rizehub)
 #   bot       → Telegram long polling, no inbound port
+#   operator  → no port; reaches the client browsers (deploy/workspace) on network operator-ws (docs/17-OPERATOR.md)
 #   brain     → no public port; http://hq-brain:4100 for the dashboard only (default network). Mirrors the memory vault
 #               repo (deploy key in ./secrets/brain) and indexes it into Supabase (docs/16-BRAIN.md)
 # Before the first `up`: `docker network create rizehub-internal` (deploy/setup-vps.sh does it), a filled master .env,
@@ -130,6 +131,28 @@ services:
     mem_limit: 512m
     logging: *logging
 
+  # Julev Operator (docs/17-OPERATOR.md): idles unless OPERATOR_ENABLED=true. The only HQ container on network
+  # operator-ws, where the client browsers of deploy/workspace listen for CDP (never published). No Telegram token,
+  # no brain secrets; the kill switch (/pause) is enforced in the database.
+  operator:
+    image: rizehubhq-operator:latest
+    build: { context: ., dockerfile: apps/operator/Dockerfile }
+    container_name: hq-operator
+    env_file: .env.operator                    # Supabase service key, vault key (dashboard Anthropic key), budgets, OPERATOR_*
+    environment:
+      MODELS_FILE: /app/config/models.yaml
+    volumes:
+      - ./config:/app/config:ro
+    networks: [default, operator-ws]
+    read_only: true
+    tmpfs: [/tmp]                              # Claude Code's throwaway HOME per call
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    init: true
+    restart: unless-stopped
+    mem_limit: 768m
+    logging: *logging
+
   hermes-web-dev:
     <<: *hermes
     container_name: hermes-web-dev
@@ -183,3 +206,5 @@ networks:
   rizehub-internal:
     external: true   # create once: docker network create rizehub-internal
   hermes: {}         # worker ↔ hermes-* only. Not `internal: true`: Hermes needs HTTPS egress to the model provider API
+  operator-ws:
+    external: true   # operator ↔ client browsers (deploy/workspace); deploy/update.sh creates it: docker network create operator-ws

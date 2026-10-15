@@ -18,6 +18,7 @@ COPY apps/dashboard/package.json apps/dashboard/
 COPY apps/worker/package.json apps/worker/
 COPY apps/bot/package.json apps/bot/
 COPY apps/brain/package.json apps/brain/
+COPY apps/operator/package.json apps/operator/
 COPY packages/shared/package.json packages/shared/
 # Brain + its workspace deps only. Dev deps are kept on purpose: the service runs TypeScript through tsx.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
