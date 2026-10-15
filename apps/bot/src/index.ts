@@ -12,6 +12,7 @@ import type { InlineMarkup } from './keyboard';
 import { notifierTick, renderApproval, tzOf, type NotifierState, type Sender } from './notifier';
 import { createRequest, processText, type ChatIO, type IntakeDeps } from './intake';
 import { PendingNotes } from './pending';
+import { clientArg, formatOperatorStatus } from './operator';
 import { handleVoice, telegramDownloader, type VoiceClip, type VoiceDeps } from './voice';
 
 const cfg = loadBotConfig(process.env);
@@ -54,7 +55,10 @@ const HELP = [
   '/status : who is working, on break or needs you',
   '/report : today\'s CEO digest (or a live summary)',
   '/budget : spend today and this month',
-  '/pause · /resume : stop / restart new work',
+  '/pause · /resume : stop / restart new work AND every operator send (kill switch)',
+  '/pause &lt;client&gt; · /resume &lt;client&gt; : stop / restart the operator for one client',
+  '/inbox : reply drafts from client chats waiting for you',
+  '/status &lt;client&gt; : what the operator saw, sent and is waiting on',
   '/cancel : drop a pending change note',
   '/help : this list',
   `Dashboard: ${cfg.dashboardUrl}`,
@@ -69,6 +73,18 @@ const voiceDeps: VoiceDeps = { ...intake, download: telegramDownloader(cfg.token
 bot.command('assign', (ctx) => createRequest(intake, ctx.match, (m) => ctx.reply(m)));
 
 bot.command('status', async (ctx) => {
+  const slug = clientArg(ctx.match);
+  if (slug) {
+    try {
+      const [s, settings] = await Promise.all([db.operatorStatus(slug), db.getSettings()]);
+      if (!s) {
+        const known = (await db.operatorClients()).map((c) => c.slug);
+        return ctx.reply(`No operator client "${slug}".${known.length ? ` Known: ${known.join(', ')}` : ''}`);
+      }
+      const hb = (settings.operator_heartbeat as { at?: string } | undefined)?.at ?? null;
+      return ctx.reply(formatOperatorStatus(s, hb, new Date(), tz), html());
+    } catch (e) { return ctx.reply(`Couldn't read the operator: ${e instanceof Error ? e.message : String(e)}`); }
+  }
   try {
     const [agents, settings] = await Promise.all([db.agents(), db.getSettings()]);
     return ctx.reply(formatStatus(agents, settings.paused === true || settings.paused === 'true'), html());
@@ -94,13 +110,47 @@ bot.command('report', async (ctx) => {
   return ctx.reply(formatQuickSummary(facts, names, `today ${hhmmIn(new Date().toISOString(), tz)}`), html());
 });
 
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 200);
+
+// /pause = the office AND the operator's kill switch (no client message is posted while it is on);
+// /pause <client> = only that client's operator sends.
 bot.command('pause', async (ctx) => {
+  const slug = clientArg(ctx.match);
+  if (slug) {
+    try { await db.setOperatorClientPaused(slug, true); }
+    catch (e) { return ctx.reply(`Couldn't pause ${slug}: ${errText(e)}`); }
+    return ctx.reply(`⏸ Operator paused for ${slug}: nothing is posted in their chats (drafts still come here). /resume ${slug} to continue.`);
+  }
+  // The operator first: stopping client messages is the urgent part.
+  const op = await db.setOperatorPaused(true).then(() => null, (e) => errText(e));
   await db.setPaused(true);
-  return ctx.reply('⏸ Paused. Agents finish what they are on; nothing new starts. /resume to continue.');
+  const opLine = op ? `⚠️ Operator kill switch NOT set: ${op}` : '🛑 Operator: no client messages are sent.';
+  return ctx.reply(`⏸ Paused. Agents finish what they are on; nothing new starts.\n${opLine}\n/resume to continue.`);
 });
 bot.command('resume', async (ctx) => {
+  const slug = clientArg(ctx.match);
+  if (slug) {
+    try { await db.setOperatorClientPaused(slug, false); }
+    catch (e) { return ctx.reply(`Couldn't resume ${slug}: ${errText(e)}`); }
+    return ctx.reply(`▶️ Operator resumed for ${slug}.`);
+  }
   await db.setPaused(false);
-  return ctx.reply('▶️ Resumed. The team is picking up work again.');
+  const op = await db.setOperatorPaused(false).then(() => null, (e) => errText(e));
+  const opLine = op ? `⚠️ Operator still paused: ${op}` : '💬 Operator: approved replies are posted again.';
+  return ctx.reply(`▶️ Resumed. The team is picking up work again.\n${opLine}`);
+});
+
+bot.command('inbox', async (ctx) => {
+  try {
+    const { rows, total } = await db.pendingOperatorReplies(10);
+    if (!rows.length) return ctx.reply('💬 No reply drafts waiting. /status <client> shows what the operator saw today.');
+    for (const ap of rows) {
+      const { text, markup } = renderApproval(ap, names, cfg.dashboardUrl, tz);
+      const msg = await ctx.reply(text, html(markup));
+      if (!ap.telegram_message_id) await db.setApprovalMessageId(ap.id, msg.message_id);
+    }
+    if (total > rows.length) await ctx.reply(`…and ${total - rows.length} more on ${cfg.dashboardUrl}/operator`);
+  } catch (e) { return ctx.reply(`Couldn't read the inbox: ${errText(e)}`); }
 });
 
 bot.command('budget', async (ctx) => {
@@ -165,7 +215,7 @@ async function tick() {
   ticking = true;
   try {
     const r = await notifierTick({ db, sender, chatId: cfg.notifyChatId, dashboardUrl: cfg.dashboardUrl, names: () => names }, state);
-    if (r.sent || r.reports || r.synced) console.log(`[bot] sent ${r.sent} approval(s), ${r.reports} report(s), updated ${r.synced}${r.held ? `, holding ${r.held} (quiet hours)` : ''}`);
+    if (r.sent || r.reports || r.synced || r.operatorNotices) console.log(`[bot] sent ${r.sent} approval(s), ${r.reports} report(s), ${r.operatorNotices} operator notice(s), updated ${r.synced}${r.held ? `, holding ${r.held} (quiet hours)` : ''}`);
   } catch (e) {
     console.error('[bot] notifier tick failed', e instanceof Error ? e.message : e);
   } finally { ticking = false; }

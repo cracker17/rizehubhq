@@ -1,6 +1,7 @@
 // In-memory BotDb for tests (mirrors decide_approval's pending re-check).
 import { randomUUID } from 'node:crypto';
 import type { BotDb, NewRequest, NewVoiceNote } from './db';
+import type { OperatorNotice, OperatorStatus } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
 export function approval(p: Partial<BotApproval> = {}): BotApproval {
@@ -73,6 +74,22 @@ export class FakeBotDb implements BotDb {
     this.onVoicePoll?.(id, ++this.voicePolls);
     const v = this.voiceNotes.get(id);
     return v ? { status: v.status, text: v.text, error: v.error } : null;
+  }
+  operatorNotices: (OperatorNotice & { telegram_sent_at: string | null })[] = [];
+  operatorStatuses = new Map<string, OperatorStatus>();
+  async unsentOperatorNotices(sinceIso: string) { return this.operatorNotices.filter((n) => !n.telegram_sent_at && n.created_at >= sinceIso); }
+  async markOperatorNoticeSent(id: number) { const n = this.operatorNotices.find((x) => x.id === id); if (n && !n.telegram_sent_at) n.telegram_sent_at = this.now().toISOString(); }
+  async setOperatorPaused(paused: boolean) { this.settings.operator_paused = paused; }
+  async setOperatorClientPaused(slug: string, paused: boolean) {
+    const s = this.operatorStatuses.get(slug);
+    if (!s) throw new Error(`unknown client ${slug}`);
+    s.client.paused = paused;
+  }
+  async operatorStatus(slug: string) { return this.operatorStatuses.get(slug) ?? null; }
+  async operatorClients() { return [...this.operatorStatuses.values()].map((s) => ({ slug: s.client.slug, name: s.client.name })); }
+  async pendingOperatorReplies(limit: number) {
+    const p = this.approvals.filter((a) => a.status === 'pending' && (a.payload as { type?: string } | null)?.type === 'operator_reply');
+    return { rows: p.slice(0, limit), total: p.length };
   }
   async abandonVoiceNote(id: string, error: string) {
     const v = this.voiceNotes.get(id);

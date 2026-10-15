@@ -4,6 +4,7 @@ import type { BotDb } from './db';
 import { formatApproval, formatBudgetAlert, formatReport, isQuestion } from './format';
 import { approvalKeyboard, decidedKeyboard, type InlineMarkup } from './keyboard';
 import { inQuietHours, parseQuietHours, shouldSendApproval } from './quiet';
+import { formatOperatorNotice, isOperatorReply, OPERATOR_LABELS, shouldNotify } from './operator';
 import type { BotApproval } from './types';
 
 export interface Sender {
@@ -22,9 +23,10 @@ export interface NotifierDeps {
 }
 
 export interface NotifierState { lastDecisionSync: string }
-export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean; budgetAlerts: number }
+export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean; budgetAlerts: number; operatorNotices: number }
 
 export const REPORT_LOOKBACK_MS = 36 * 3600_000;
+let lastNoticeError = '';
 
 export function tzOf(settings: Record<string, unknown>): string {
   return typeof settings.timezone === 'string' && settings.timezone ? settings.timezone : 'Asia/Manila';
@@ -34,7 +36,9 @@ export function tzOf(settings: Record<string, unknown>): string {
 export function renderApproval(ap: BotApproval, names: Map<string, string>, dashboardUrl: string, tz: string): { text: string; markup: InlineMarkup } {
   const text = formatApproval(ap, names, tz);
   const markup = ap.status === 'pending'
-    ? approvalKeyboard(ap.id, dashboardUrl, { changesLabel: isQuestion(ap) ? '✏️ Answer' : undefined })
+    ? approvalKeyboard(ap.id, dashboardUrl, isOperatorReply(ap)
+      ? { approveLabel: OPERATOR_LABELS.approve, changesLabel: OPERATOR_LABELS.changes, rejectLabel: OPERATOR_LABELS.reject }
+      : { changesLabel: isQuestion(ap) ? '✏️ Answer' : undefined })
     : decidedKeyboard(ap.id, dashboardUrl);
   return { text, markup };
 }
@@ -45,7 +49,7 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
   const settings = await deps.db.getSettings();
   const tz = tzOf(settings);
   const quiet = inQuietHours(now, parseQuietHours(settings.quiet_hours), tz);
-  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet, budgetAlerts: 0 };
+  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet, budgetAlerts: 0, operatorNotices: 0 };
   const names = deps.names();
 
   // 1. new approvals → one message each (sent once: telegram_message_id is stored)
@@ -91,7 +95,26 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
     }
   }
 
-  // 4. decided in the dashboard → update the Telegram message so it is never actioned twice
+  // 4. operator notices (auto-sends, failures, blocks, a chat it can't read): any hour, each once. Rows that need no
+  //    message (an approved send: you already decided it) are only marked.
+  //    A failing read (e.g. the operator migration not applied yet) must not stop step 5.
+  const notices = await deps.db.unsentOperatorNotices(new Date(now.getTime() - 24 * 3600_000).toISOString()).catch((e) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg !== lastNoticeError) log(`[bot] operator notices unavailable (logged once): ${msg}`);
+    lastNoticeError = msg;
+    return [];
+  });
+  for (const n of notices) {
+    try {
+      if (shouldNotify(n)) { await deps.sender.send(deps.chatId, formatOperatorNotice(n)); r.operatorNotices++; }
+      await deps.db.markOperatorNoticeSent(n.id);
+    } catch (e) {
+      r.errors++;
+      log(`[bot] could not send operator notice ${n.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 5. decided in the dashboard → update the Telegram message so it is never actioned twice
   for (const ap of await deps.db.decidedSince(state.lastDecisionSync)) {
     if (ap.decided_at && ap.decided_at > state.lastDecisionSync) state.lastDecisionSync = ap.decided_at;
     if (ap.decided_via === 'telegram' || !ap.telegram_message_id) continue; // telegram decisions are edited on the spot
