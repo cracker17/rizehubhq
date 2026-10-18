@@ -14,6 +14,7 @@ import { createRequest, processText, type ChatIO, type IntakeDeps } from './inta
 import { PendingNotes } from './pending';
 import { clientArg, formatOperatorStatus } from './operator';
 import { handleVoice, telegramDownloader, type VoiceClip, type VoiceDeps } from './voice';
+import { pollWithRetry } from './polling';
 
 const cfg = loadBotConfig(process.env);
 if (!cfg.supabaseUrl || !cfg.serviceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
@@ -226,5 +227,10 @@ setInterval(() => { void refreshLookups(); }, 10 * 60_000);
 setInterval(() => { void tick(); }, cfg.pollMs);
 void tick();
 
-bot.start({ onStart: (me) => console.log(`[bot] @${me.username} running for ${cfg.allowed.size} user(s); notifying chat ${cfg.notifyChatId} every ${cfg.pollMs / 1000}s`) });
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void bot.stop().finally(() => process.exit(0)); });
+// A 409 (another app reading this bot's updates) is retried with backoff instead of crashing the container.
+let stopping = false;
+void pollWithRetry({
+  start: () => bot.start({ onStart: (me) => console.log(`[bot] @${me.username} running for ${cfg.allowed.size} user(s); notifying chat ${cfg.notifyChatId} every ${cfg.pollMs / 1000}s`) }),
+  stopped: () => stopping,
+}).catch((e: unknown) => { console.error('[bot] polling stopped', e); process.exit(1); });
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { stopping = true; void bot.stop().finally(() => process.exit(0)); });
