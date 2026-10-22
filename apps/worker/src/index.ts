@@ -19,6 +19,7 @@ import { claudeStartupReport } from './claude/config';
 import { startSalesBackground, stopSalesBackground } from './sales/background';
 import { listApprovedGmailSends, startGmailSender } from './connectors/gmailSend';
 import { startCeoEmailSender, supabaseCeoEmailDeps } from './notify/ceoEmail';
+import { bindNotify, parseUptimeUrls, startAlertEmailSender, startUptimeWatch, supabaseAlertStore } from './notify/externalAlerts';
 import { executeApprovedMcpCalls, listApprovedMcpCalls } from './connectors/mcpExecute';
 import { createMcpOpener } from './connectors/mcpClient';
 import { createSupabaseConnectorStore } from './connectors/store';
@@ -142,6 +143,17 @@ async function main() {
     },
     paused: async () => { const v = (await db.getSettings().catch(() => ({} as Record<string, unknown>))).paused; return v === true || v === 'true'; },
   });
+  // External alerts (Hushdesk → POST /api/notify → /hooks/notify): stored once, the bot sends them to Telegram, this
+  // emails them through "Email me updates" (failures). Not paused with HQ: they are about other apps.
+  const alertStore = supabaseAlertStore(sb);
+  bindNotify(alertStore, workerEnv().HQ_NOTIFY_SECRET ?? '');
+  if (!workerEnv().HQ_NOTIFY_SECRET) console.warn('[worker] HQ_NOTIFY_SECRET not set: /hooks/notify answers 503');
+  const alertEmail = startAlertEmailSender({
+    deps: { ...supabaseCeoEmailDeps(sb), alerts: alertStore, store: createSupabaseConnectorStore(sb), keyring, log: (m) => console.log(m) },
+    paused: async () => false,
+  });
+  // Uptime watch (UPTIME_URLS, comma-separated https:// links): a site that is down can't report itself.
+  const uptime = startUptimeWatch({ urls: parseUptimeUrls(workerEnv().UPTIME_URLS), store: alertStore, log: (m) => console.warn(m) });
   // App tool calls the CEO approved (mcp.call, docs/15 §3), same cadence and pause rule.
   const execDb = async (id: string, phase: 'claim' | 'done' | 'failed', result: Record<string, unknown> = {}) => {
     const r = await sb.rpc('external_action_exec', { p_approval: id, p_phase: phase, p_result: result });
@@ -199,6 +211,8 @@ async function main() {
     stopSalesBackground(salesTimers);
     clearInterval(gmailSender);
     clearInterval(ceoEmail);
+    clearInterval(alertEmail);
+    if (uptime) clearInterval(uptime);
     clearInterval(mcpRunner);
     clearInterval(voiceNotes);
     stopSettings();

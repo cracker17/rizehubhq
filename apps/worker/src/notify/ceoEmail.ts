@@ -319,9 +319,9 @@ export function buildTestEmail(ctx: { dashboardUrl: string; from: string }): Omi
 }
 
 // ---------- sending ----------
-interface Account { id: string; email: string; pass: string }
+export interface Account { id: string; email: string; pass: string }
 
-async function openAccount(d: Pick<CeoEmailDeps, 'store' | 'keyring' | 'log'>, connectorId: string): Promise<Account | { skip: 'account' | 'no_keyring' | 'decrypt'; error: string }> {
+export async function openAccount(d: Pick<CeoEmailDeps, 'store' | 'keyring' | 'log'>, connectorId: string): Promise<Account | { skip: 'account' | 'no_keyring' | 'decrypt'; error: string }> {
   const c = await d.store.get(connectorId);
   if (!c || c.kind !== 'gmail' || c.status !== 'active' || !c.account_email || !c.sealed) {
     return { skip: 'account', error: 'The Gmail account chosen to send from is not connected and active. Check Admin → Connectors.' };

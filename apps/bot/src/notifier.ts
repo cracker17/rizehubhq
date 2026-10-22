@@ -1,7 +1,7 @@
 // Outbound notifier (docs/08 "Notifications"): polls Supabase (no realtime needed) and pushes
 // new approvals (with buttons), reports, and dashboard decisions (edits the Telegram message).
 import type { BotDb } from './db';
-import { formatApproval, formatBudgetAlert, formatReport, isQuestion } from './format';
+import { formatApproval, formatBudgetAlert, formatExternalAlert, formatReport, isQuestion } from './format';
 import { approvalKeyboard, decidedKeyboard, type InlineMarkup } from './keyboard';
 import { inQuietHours, parseQuietHours, shouldSendApproval } from './quiet';
 import { formatOperatorNotice, isOperatorReply, OPERATOR_LABELS, shouldNotify } from './operator';
@@ -23,7 +23,7 @@ export interface NotifierDeps {
 }
 
 export interface NotifierState { lastDecisionSync: string }
-export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean; budgetAlerts: number; operatorNotices: number }
+export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean; budgetAlerts: number; operatorNotices: number; externalAlerts: number }
 
 export const REPORT_LOOKBACK_MS = 36 * 3600_000;
 let lastNoticeError = '';
@@ -49,7 +49,7 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
   const settings = await deps.db.getSettings();
   const tz = tzOf(settings);
   const quiet = inQuietHours(now, parseQuietHours(settings.quiet_hours), tz);
-  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet, budgetAlerts: 0, operatorNotices: 0 };
+  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet, budgetAlerts: 0, operatorNotices: 0, externalAlerts: 0 };
   const names = deps.names();
 
   // 1. new approvals → one message each (sent once: telegram_message_id is stored)
@@ -114,7 +114,26 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
     }
   }
 
-  // 5. decided in the dashboard → update the Telegram message so it is never actioned twice
+  // 5. alerts from other apps (Hushdesk, uptime watch): critical at any hour, the rest wait for the morning. Each once;
+  //    older than a day is dropped (a stale "new error" is noise; the app's own page has it). Read errors (migration not
+  //    applied yet) don't stop step 6.
+  const extAlerts = await deps.db.unsentExternalAlerts(new Date(now.getTime() - 24 * 3600_000).toISOString()).catch((e) => {
+    log(`[bot] external alerts unavailable: ${e instanceof Error ? e.message : String(e)}`);
+    return [];
+  });
+  for (const a of extAlerts) {
+    if (quiet && a.level !== 'critical') continue;
+    try {
+      await deps.sender.send(deps.chatId, formatExternalAlert(a));
+      await deps.db.markExternalAlertSent(a.id);
+      r.externalAlerts++;
+    } catch (e) {
+      r.errors++;
+      log(`[bot] could not send external alert ${a.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 6. decided in the dashboard → update the Telegram message so it is never actioned twice
   for (const ap of await deps.db.decidedSince(state.lastDecisionSync)) {
     if (ap.decided_at && ap.decided_at > state.lastDecisionSync) state.lastDecisionSync = ap.decided_at;
     if (ap.decided_via === 'telegram' || !ap.telegram_message_id) continue; // telegram decisions are edited on the spot

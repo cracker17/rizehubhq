@@ -1,7 +1,7 @@
 // Telegram message text (HTML parse mode). Pure functions; every dynamic string goes through esc().
 import type { SpendSummary } from './budget';
 import { isOperatorReply, operatorDecisionLine, operatorReplyBody } from './operator';
-import type { AgentLite, BotApproval, BotReport, BudgetAlert, QuickFacts } from './types';
+import type { AgentLite, BotApproval, BotReport, BudgetAlert, ExternalAlert, QuickFacts } from './types';
 
 export const TG_LIMIT = 4096;
 
@@ -231,4 +231,15 @@ export function formatStatus(agents: AgentLite[], paused: boolean): string {
     `☕ On break (${idle.length}): ${idle.join(', ') || 'nobody'}`,
     `🙋 Need you (${needs.length}): ${needs.join(', ') || 'nobody'}`,
   ].filter(Boolean).join('\n');
+}
+
+const ALERT_ICON: Record<ExternalAlert['level'], string> = { info: 'ℹ️', warning: '⚠️', error: '❗', critical: '🚨' };
+
+/** An alert from another app (Hushdesk) or the uptime watch: "🚨 Hushdesk · critical", title, body, Open link. */
+export function formatExternalAlert(a: Pick<ExternalAlert, 'source' | 'level' | 'title' | 'body' | 'url'>): string {
+  const app = a.source.replace(/(^|-)([a-z])/g, (_, d: string, c: string) => `${d ? ' ' : ''}${c.toUpperCase()}`);
+  const lines = [`${ALERT_ICON[a.level] ?? '❗'} <b>${esc(app)}</b> · ${esc(a.level)}`, `<b>${esc(a.title)}</b>`];
+  if (a.body) lines.push(esc(a.body));
+  if (a.url && /^https:\/\//.test(a.url)) lines.push(`<a href="${esc(a.url)}">Open</a>`);
+  return truncate(lines.join('\n'));
 }

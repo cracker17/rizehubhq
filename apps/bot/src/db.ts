@@ -2,7 +2,7 @@
 // through the decide_approval RPC so the bot and dashboard share one set of rules.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NOTICE_ACTIONS, type OperatorNotice, type OperatorStatus } from './operator';
-import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
+import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, ExternalAlert, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
 export const APPROVAL_COLS = '*, requests(priority,title,due_date,clients(name))';
 const REPORT_COLS = 'id,agent_id,report_date,kind,body_md,data,created_at,telegram_sent_at';
@@ -26,6 +26,9 @@ export interface BotDb {
   /** Daily-budget alerts not yet sent to Telegram (oldest first). */
   unsentBudgetAlerts(): Promise<BudgetAlert[]>;
   markBudgetAlertSent(id: string): Promise<void>;
+  /** Alerts from other apps not yet sent to Telegram (oldest first). */
+  unsentExternalAlerts(sinceIso: string): Promise<ExternalAlert[]>;
+  markExternalAlertSent(id: string): Promise<void>;
   latestReport(kind: BotReport['kind'], date: string): Promise<BotReport | null>;
   reportFacts(date: string): Promise<QuickFacts>;
   spendRows(sinceIso: string): Promise<SpendRow[]>;
@@ -82,6 +85,12 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
       .is('telegram_sent_at', null).order('alert_day').order('level').limit(10), 'budget_alerts'),
     markBudgetAlertSent: async (id) => {
       must(await sb.from('budget_alerts').update({ telegram_sent_at: new Date().toISOString() }).eq('id', id).is('telegram_sent_at', null), 'budget alert sent');
+    },
+    unsentExternalAlerts: async (sinceIso) => must<ExternalAlert[]>(await sb.from('external_alerts')
+      .select('id,source,level,title,body,url,received_at,telegram_sent_at').is('telegram_sent_at', null).gte('received_at', sinceIso)
+      .order('received_at').limit(20), 'external_alerts'),
+    markExternalAlertSent: async (id) => {
+      must(await sb.from('external_alerts').update({ telegram_sent_at: new Date().toISOString() }).eq('id', id).is('telegram_sent_at', null), 'external alert sent');
     },
     latestReport: async (kind, date) => must<BotReport | null>(await sb.from('reports').select(REPORT_COLS)
       .eq('kind', kind).eq('report_date', date).order('created_at', { ascending: false }).limit(1).maybeSingle(), 'report'),

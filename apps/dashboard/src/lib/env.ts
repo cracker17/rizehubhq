@@ -23,6 +23,11 @@ export function workerEnv(): { url: string; secret: string } | null {
   return url && secret ? { url: url.replace(/\/+$/, ''), secret } : null;
 }
 
+/** Worker base URL alone: enough for signed webhooks the worker verifies itself (/hooks/notify). */
+export function workerUrl(): string | null {
+  return readEnv('HQ_WORKER_URL')?.replace(/\/+$/, '') ?? null;
+}
+
 /** Brain service internal API (server-only; docs/16-BRAIN.md). */
 export function brainEnv(): { url: string; secret: string } | null {
   const url = readEnv('BRAIN_URL');

@@ -248,3 +248,22 @@ test('budget alerts: 80% and 100% are sent once each; 80% waits out quiet hours,
   assert.match(night.sender.sent[0]!.text, /Paid models \(Anthropic, OpenAI, Kimi, paid OpenRouter\) stop until midnight Manila time/);
   assert.ok(night.db.budgetAlerts.every((a) => a.telegram_sent_at));
 });
+
+test('external alerts: critical goes out at night, the rest wait for the morning; each is sent once', async () => {
+  const ext = (id: string, level: 'info' | 'error' | 'critical', at = '2026-09-28T14:00:00Z') => ({
+    id, source: 'hushdesk', level, title: `Title ${id}`, body: 'Postmark answered 500 <b>', url: 'https://hushdesk.tech/app/admin/errors',
+    received_at: at, telegram_sent_at: null,
+  });
+  const night = setup(NIGHT);
+  night.db.externalAlerts.push(ext('a1', 'critical'), ext('a2', 'error'), ext('a3', 'info'));
+  const r1 = await notifierTick(night.deps, night.state);
+  assert.equal(r1.externalAlerts, 1);
+  assert.match(night.sender.sent[0]!.text, /🚨 <b>Hushdesk<\/b> · critical/);
+  assert.match(night.sender.sent[0]!.text, /&lt;b&gt;/); // body is escaped
+  assert.match(night.sender.sent[0]!.text, /<a href="https:\/\/hushdesk.tech\/app\/admin\/errors">Open<\/a>/);
+
+  const day = setup(DAY);
+  day.db.externalAlerts.push(ext('b1', 'error', '2026-09-28T05:00:00Z'), ext('old', 'error', '2026-09-26T05:00:00Z'));
+  assert.equal((await notifierTick(day.deps, day.state)).externalAlerts, 1); // the 2-day-old one is dropped
+  assert.equal((await notifierTick(day.deps, day.state)).externalAlerts, 0);
+});

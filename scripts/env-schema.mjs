@@ -128,6 +128,9 @@ export const VARS = [
     prod: (v) => (!v || v.toLowerCase() === 'mock' ? 'still on the built-in MOCK RizeHub (fine until RizeHub exposes /agent-api/v1)' : /\/agent-api\/v1\/?$/.test(v) ? null : 'should end with /agent-api/v1'), prodWarnOnly: true }),
   ...['LEADS', 'ONBOARDING', 'REPORTS', 'READONLY'].map((g) => S({ key: `RIZEHUB_KEY_${g}`, group: 'RizeHub', svc: ['worker'], secret: true })),
   S({ key: 'RIZEHUB_WEBHOOK_SECRET', group: 'RizeHub', svc: ['worker'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32') }),
+  // Alerts from other apps (Hushdesk → /api/notify → worker /hooks/notify) + the uptime watch (notify/externalAlerts.ts)
+  S({ key: 'HQ_NOTIFY_SECRET', group: 'Alerts', svc: ['worker'], secret: true, check: (v) => (v.length >= 32 ? null : 'too short: use openssl rand -hex 32') }),
+  S({ key: 'UPTIME_URLS', group: 'Alerts', svc: ['worker'], check: (v) => { const bad = v.split(',').map((s) => s.trim()).filter((u) => u && !/^https:\/\/\S+$/.test(u)); return bad.length ? `not https:// links: ${bad.join(', ')}` : null; } }),
   S({ key: 'RIZEHUB_JOB_WAIT_MS', group: 'RizeHub', svc: ['worker'], check: intIn(0) }),
   S({ key: 'RIZEHUB_EVENTS_EVERY_MS', group: 'RizeHub', svc: ['worker'], check: intIn(500) }),
   S({ key: 'RIZEHUB_JOB_POLL_MS', group: 'RizeHub', svc: ['worker'], check: intIn(1000) }),

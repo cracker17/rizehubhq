@@ -13,13 +13,23 @@ export function signRizehubBody(rawBody: string | Buffer, secret: string): strin
 
 export type VerifyResult = { ok: true } | { ok: false; reason: string };
 
+export interface SignatureNames { signature: string; timestamp: string; secretName: string }
+const RIZEHUB_NAMES: SignatureNames = { signature: SIGNATURE_HEADER, timestamp: TIMESTAMP_HEADER, secretName: 'RIZEHUB_WEBHOOK_SECRET' };
+
 export function verifyRizehubSignature(
   rawBody: Buffer, headers: Record<string, string | string[] | undefined>, secret: string, nowMs = Date.now(),
 ): VerifyResult {
-  if (!secret) return { ok: false, reason: 'RIZEHUB_WEBHOOK_SECRET is not configured' };
+  return verifyHmacSignature(rawBody, headers, secret, nowMs, RIZEHUB_NAMES);
+}
+
+/** The same scheme under other header names (e.g. /hooks/notify: X-HQ-Signature + X-HQ-Timestamp, HQ_NOTIFY_SECRET). */
+export function verifyHmacSignature(
+  rawBody: Buffer, headers: Record<string, string | string[] | undefined>, secret: string, nowMs: number, names: SignatureNames,
+): VerifyResult {
+  if (!secret) return { ok: false, reason: `${names.secretName} is not configured` };
   const h = (n: string) => { const v = headers[n]; return (Array.isArray(v) ? v[0] : v)?.trim() ?? ''; };
-  const sig = h(SIGNATURE_HEADER).replace(/^sha256=/i, '').toLowerCase();
-  const ts = h(TIMESTAMP_HEADER);
+  const sig = h(names.signature).replace(/^sha256=/i, '').toLowerCase();
+  const ts = h(names.timestamp);
   if (!sig) return { ok: false, reason: 'missing signature' };
   if (!/^\d{9,11}$/.test(ts)) return { ok: false, reason: 'missing or invalid timestamp' };
   if (Math.abs(nowMs / 1000 - Number(ts)) > TOLERANCE_SEC) return { ok: false, reason: 'timestamp outside the 5 minute window' };
