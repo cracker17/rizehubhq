@@ -10,6 +10,7 @@ import { search } from './queries';
 import { clientCheck, issueCode, register, revoke, token, type OAuthDeps } from './oauth/server';
 import { handleMcpPost, MCP_MAX_BODY } from './mcp/server';
 import { createProjectOp, updateMemoryOp, WriteError, type NewProject } from './write/vault';
+import { deviceReport, setupScript } from './setup/devices';
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 export { DEFAULT_SEARCH_KINDS } from './queries';
@@ -40,6 +41,10 @@ export interface ApiDeps {
   vaultDir: string;
   /** extra https redirect hosts for OAuth clients (BRAIN_OAUTH_REDIRECT_HOSTS) */
   redirectHosts: readonly string[];
+  /** public HQ origin the installer reports to (BRAIN_PUBLIC_URL) */
+  publicUrl?: string;
+  /** vault remote (the installer clones its HTTPS form) */
+  repoUrl?: string;
 }
 
 type Result = [number, unknown];
@@ -152,6 +157,14 @@ async function route(d: ApiDeps, req: http.IncomingMessage, url: URL, res: http.
       if (e instanceof WriteError) return [400, { error: e.message }];
       throw e;
     }
+  }
+  // P1 device setup: the dashboard forwards /setup/<code> (installer script) and /api/brain/device (step reports).
+  const setup = { store: d.store, publicUrl: d.publicUrl || 'https://hq.rizehub.ph', repoUrl: d.repoUrl ?? '', log: d.log };
+  if (req.method === 'GET' && p === '/setup/script') return [200, { script: await setupScript(setup, (q.get('code') ?? '').toLowerCase()) }];
+  if (req.method === 'POST' && p === '/device/report') {
+    let b: Record<string, unknown>;
+    try { b = JSON.parse((await readRaw(req, 16 * 1024)).toString('utf8') || '{}'); } catch { return [400, { error: 'invalid JSON' }]; }
+    return deviceReport(setup, header(req, 'x-device-authorization'), b && typeof b === 'object' ? b : {});
   }
   if (req.method === 'POST' && p === '/reindex') {
     const report = await d.service.sync({ reason: 'reindex', actor: 'brain-service', full: q.get('full') === '1' });

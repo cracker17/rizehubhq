@@ -17,7 +17,7 @@ export async function start(config: BrainConfig, store: Store, embedder: Embedde
   // Serve right away (health shows "running"); the first sync clones/pulls and indexes in the background.
   const server = createHttpServer({
     store, embedder, service, internalSecret: config.internalSecret, webhookSecret: config.webhookSecret, branch: config.branch, log,
-    vaultDir: config.vaultDir, redirectHosts: config.oauthRedirectHosts,
+    vaultDir: config.vaultDir, redirectHosts: config.oauthRedirectHosts, publicUrl: config.publicUrl, repoUrl: config.repoUrl,
   });
   server.listen(config.httpPort, () => log(`API on :${config.httpPort}`));
   service.trigger({ reason: 'boot' });

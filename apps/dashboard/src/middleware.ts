@@ -16,7 +16,9 @@ function env(name: string) {
 // /oauth/* and /.well-known/oauth-* + /mcp/brain are the Brain MCP connector (lib/brainConnector.ts): discovery
 // documents, OAuth endpoints and the MCP endpoint (the brain checks the access token); /oauth/authorize gates itself
 // (HQ sign-in + 2FA, CEO only).
-const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain'];
+// /setup/<code> serves a device's one-time installer and /api/brain/device takes its step reports (HQ Brain P1): the
+// brain service checks the one-time code / device token itself.
+const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain', '/setup', '/api/brain/device'];
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');

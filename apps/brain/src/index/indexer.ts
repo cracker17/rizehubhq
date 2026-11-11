@@ -9,6 +9,7 @@ import { chunkMarkdown, embedInput, sha256 } from './chunk';
 import { classify, docDate, docTitle, parseFrontmatter, SLUG_RE, type DocKind } from './documents';
 import { toPgVector, type Embedder } from './embed';
 import { parseMemory } from './memoryParse';
+import { checkRoundTrips } from '../setup/devices';
 
 export const MAX_FILE_BYTES = 512 * 1024;
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.obsidian', '.trash']);
@@ -153,6 +154,8 @@ export async function indexVault(o: IndexOptions): Promise<IndexReport> {
     }
     (before ? report.changed : report.added).push(d.path);
   }
+  // P1 device round trip: a PC's devices/<id>.md test note arrived through GitHub (no-op if the devices migration is missing)
+  await checkRoundTrips(o.store, docs, new Set([...report.added, ...report.changed]), log);
   report.removed = Object.keys(manifest).filter((p) => !current.has(p));
   if (report.removed.length) await o.store.rpc('brain_delete_documents', { p_paths: report.removed });
   await o.store.rpc('brain_refresh_projects');

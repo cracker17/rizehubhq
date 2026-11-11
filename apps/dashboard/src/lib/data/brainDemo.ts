@@ -1,5 +1,6 @@
 // DEMO-mode data for /brain (no Supabase): a small, plausible vault so the page renders and animates locally.
 import type { BrainBundle, BrainConnection, BrainEvent, BrainHealth, BrainProject } from '@/lib/brainView';
+import type { BrainDevice } from '@/lib/brainDevices';
 
 const day = (n: number) => new Date(Date.now() - n * 86400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 const iso = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -52,6 +53,33 @@ export function demoPulse(projects: BrainProject[]): BrainEvent {
 export const demoConnections = (): BrainConnection[] => [
   { family_id: '00000000-0000-4000-8000-000000000001', client_id: 'hqbc_demo', client_name: 'Claude Code (hq-brain)', redirect_uris: ['http://localhost:33418/callback'], subject: 'ceo', scopes: ['brain:read', 'brain:write'], approved_at: iso(40), last_used_at: iso(2), expires_at: iso(-86400) },
 ];
+
+/** DEMO devices: a healthy PC, one mid-setup, one Claude app. */
+export function demoDevices(now = Date.now()): BrainDevice[] {
+  const t = (min: number) => new Date(now - min * 60_000).toISOString();
+  const done = (detail: string) => ({ s: 'done' as const, detail, at: t(30) });
+  const base = { owner_label: 'Julev', track: 'owner' as const, setup_expires_at: null, revoked_at: null, last_sync_error: null, connected_at: null, tested_at: null };
+  return [
+    {
+      ...base, id: 'demo-pc-2', name: 'Second PC', kind: 'pc', setup_used_at: t(120), created_at: t(125), ready_at: t(110),
+      checklist: { claude: done('Claude desktop app found'), ps: done('PowerShell 5.1'), git: done('Git 2.47'), python: { s: 'skip', detail: 'Optional' },
+        folder: done('D:\\Personal Projects\\claude-memory-vault'), clone: done('1,284 files'), cmds: done('/load /save /recall /projects /new-project'),
+        task: done('Every 15 minutes and at sign-in'), mcp: done('Written to ~/.claude.json') },
+      info: { vault_path: 'D:\\Personal Projects\\claude-memory-vault', git: '2.47', computer: 'DESKTOP-2' },
+      roundtrip: { written_at: t(112), pushed_at: t(111.9), indexed_at: t(111.6), readable_at: t(111.55) },
+      last_seen_at: t(6), last_pull_at: t(6), last_push_at: t(6),
+    },
+    {
+      ...base, id: 'demo-pc-3', name: 'Office laptop', kind: 'pc', setup_used_at: t(2), setup_expires_at: t(-28), created_at: t(3), ready_at: null,
+      checklist: { claude: done('Claude desktop app found'), ps: done('PowerShell 5.1'), git: { s: 'run', detail: 'Installing quietly', at: t(0) } },
+      info: {}, roundtrip: {}, last_seen_at: t(0), last_pull_at: null, last_push_at: null,
+    },
+    {
+      ...base, id: 'demo-app', name: 'Claude (web + phone)', kind: 'claude', setup_used_at: null, created_at: t(3000), ready_at: null,
+      checklist: {}, info: {}, roundtrip: {}, last_seen_at: null, last_pull_at: null, last_push_at: null, connected_at: t(2990), tested_at: t(14),
+    },
+  ];
+}
 
 export function demoBundle(slug: string): BrainBundle | null {
   const project = demoProjects.find((p) => p.slug === slug);

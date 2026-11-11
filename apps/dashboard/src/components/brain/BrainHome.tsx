@@ -157,7 +157,7 @@ export function BrainHome({ data, error }: { data: HomeData; error?: string }) {
 
       <section ref={devicesRef} id="devices" aria-labelledby="brain-devices" className="card scroll-mt-4 p-4 sm:p-5">
         <h2 id="brain-devices" className="mb-3 font-semibold">Devices &amp; accounts</h2>
-        <DevicesPanel connections={data.connections} health={h} demo={data.demo} />
+        <DevicesPanel connections={data.connections} health={h} demo={data.demo} devices={data.devices} />
       </section>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} projects={data.projects}

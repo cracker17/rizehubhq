@@ -30,6 +30,8 @@ export interface BrainConfig {
   timeZone: string;
   /** chunks per embedding write (each write updates the HNSW index; small batches stay under the DB timeout) */
   embedBatch: number;
+  /** public HQ origin (setup installer reports to <publicUrl>/api/brain/device) */
+  publicUrl: string;
 }
 
 export const DEFAULT_EMBED_MODEL = 'openai:text-embedding-3-small';
@@ -75,5 +77,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BrainConfig {
       .filter((h) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h)),
     timeZone: validZone(env.BRAIN_TIMEZONE) ?? 'Asia/Manila',
     embedBatch: int(env.BRAIN_EMBED_BATCH, 32, 4, 500),
+    publicUrl: /^https?:\/\/[^\s/]+$/.test(env.BRAIN_PUBLIC_URL ?? '') ? env.BRAIN_PUBLIC_URL! : 'https://hq.rizehub.ph',
   };
 }

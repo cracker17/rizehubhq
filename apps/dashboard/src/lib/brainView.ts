@@ -11,6 +11,8 @@ export interface BrainHealth {
   status: string; error: string | null; head_sha: string | null; embed_model: string | null;
   last_pull_at: string | null; last_index_at: string | null; last_webhook_at: string | null;
   projects: number; documents: number; chunks: number; embedded: number;
+  /** files the last run could not index (P0); 'estimated' counts on a big chunk table */
+  failed?: Array<{ path: string; error: string }>; counts?: 'exact' | 'estimated';
 }
 export interface BrainConnection {
   family_id: string; client_id: string | null; client_name: string | null; redirect_uris: string[] | null; subject: string;

@@ -3,8 +3,11 @@
 // approvals), with revoke, and the steps for a new computer or Claude account.
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Copy, Laptop, MessageSquare, Terminal } from 'lucide-react';
+import Link from 'next/link';
+import { Check, Copy, Laptop, MessageSquare, Monitor, Plus, Terminal } from 'lucide-react';
 import { btn } from '@/components/clients/ui';
+import { deviceHealth, type BrainDevice } from '@/lib/brainDevices';
+import { HealthPill } from './HealthPill';
 import { useHq } from '@/lib/data/store';
 import { revokeBrainConnectionAction } from '@/app/brain-actions';
 import { ago, type BrainConnection, type BrainHealth } from '@/lib/brainView';
@@ -12,7 +15,7 @@ import { ago, type BrainConnection, type BrainHealth } from '@/lib/brainView';
 const CONNECTOR_URL = 'https://hq.rizehub.ph/mcp/brain';
 const CLI = `claude mcp add --scope user --transport http hq-brain ${CONNECTOR_URL}`;
 
-function CopyLine({ value, label }: { value: string; label: string }) {
+export function CopyLine({ value, label }: { value: string; label: string }) {
   const [done, setDone] = useState(false);
   return (
     <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[#07061a] py-1.5 pl-3 pr-1.5">
@@ -24,7 +27,7 @@ function CopyLine({ value, label }: { value: string; label: string }) {
   );
 }
 
-export function DevicesPanel({ connections, health, demo }: { connections: BrainConnection[]; health: BrainHealth | null; demo: boolean }) {
+export function DevicesPanel({ connections, health, demo, devices = [] }: { connections: BrainConnection[]; health: BrainHealth | null; demo: boolean; devices?: BrainDevice[] }) {
   const router = useRouter();
   const { toast } = useHq();
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -71,19 +74,33 @@ export function DevicesPanel({ connections, health, demo }: { connections: Brain
       </div>
 
       <div className="flex min-w-0 flex-col gap-3">
-        <h3 className="text-sm font-semibold">Set up a new device</h3>
-        <ol className="flex flex-col gap-3 text-sm">
-          <li className="flex flex-col gap-2">
-            <span><strong>Claude Code</strong> (any computer): run once in a terminal, then type <code className="font-mono text-[#99f6e4]">/mcp</code> › hq-brain › Authenticate.</span>
+        <h3 className="text-sm font-semibold">Computers</h3>
+        {devices.length === 0 && <p className="item px-4 py-3 text-sm text-[var(--color-muted)]">No computers set up through HQ yet.</p>}
+        <ul className="flex flex-col gap-2">
+          {devices.slice(0, 4).map((d) => {
+            const h = deviceHealth(d);
+            return (
+              <li key={d.id} className="item flex min-w-0 items-center gap-3 px-4 py-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--color-panel-2)]">{d.kind === 'pc' ? <Monitor size={17} className="text-[var(--color-muted)]" aria-hidden /> : <MessageSquare size={17} className="text-[#5eead4]" aria-hidden />}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{d.name}</span><span className="block truncate text-xs text-[var(--color-muted)]">{h.why}</span></span>
+                <HealthPill level={h.level} label={h.label} />
+              </li>
+            );
+          })}
+        </ul>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/brain/devices/new" className={btn.primary}><Plus size={16} aria-hidden />Set up a computer</Link>
+          <Link href="/brain/devices" className={btn.ghost}>All devices</Link>
+        </div>
+        <details className="text-sm text-[var(--color-muted)]">
+          <summary className="cursor-pointer select-none">Manual steps (Claude Code command, connector URL)</summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <span><strong className="text-[var(--color-ink)]">Claude Code</strong>: run once, then <code className="font-mono text-[#99f6e4]">/mcp</code> › hq-brain › Authenticate.</span>
             <CopyLine value={CLI} label="Claude Code command" />
-          </li>
-          <li className="flex flex-col gap-2">
-            <span><strong>Claude app</strong> (web, desktop, phone): Settings › Connectors › Add custom connector › this URL. On a Team plan the organization owner adds it once, then you tap Connect.</span>
+            <span><strong className="text-[var(--color-ink)]">Claude app</strong>: on your Team plan HQ Brain is already listed; tap Connect. Otherwise add this URL as a custom connector.</span>
             <CopyLine value={CONNECTOR_URL} label="connector URL" />
-          </li>
-          <li className="text-[var(--color-muted)]">You approve every new app on an HQ page after sign-in + 2FA. Then ask it to “load &lt;project&gt;” or “save to the brain”.</li>
-          <li className="text-[var(--color-muted)]">A new PC that should keep its own vault copy: clone the vault and run <code className="font-mono">scripts/install.ps1</code> (docs/new-computer-setup.md).</li>
-        </ol>
+          </div>
+        </details>
       </div>
     </div>
   );

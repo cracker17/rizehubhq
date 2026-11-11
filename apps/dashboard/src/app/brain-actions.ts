@@ -6,7 +6,8 @@ import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
 import { callBrain } from '@/lib/brainCall';
 import { nextStepLines, parseMarkdown, stripFrontmatter, type BrainHit } from '@/lib/brainView';
-import { demoBundle, demoProjects } from '@/lib/data/brainDemo';
+import { demoBundle, demoDevices, demoProjects } from '@/lib/data/brainDemo';
+import type { BrainDevice } from '@/lib/brainDevices';
 
 export type BrainResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 type Db = NonNullable<Awaited<ReturnType<typeof createSupabaseServer>>>;
@@ -101,5 +102,62 @@ export async function revokeBrainConnectionAction(familyId: unknown): Promise<Br
   if (ceo.demo) return { ok: false, error: DEMO };
   const { error } = await ceo.db.rpc('brain_revoke_connection', { p_family_id: familyId });
   if (error) return { ok: false, error: /permission|42501/i.test(error.message) ? 'This account is not allowed to do that.' : error.message };
+  return { ok: true };
+}
+
+// ---------- P1 devices: "Set up a computer" ----------
+
+const friendly = (msg: string) => /permission|42501/i.test(msg) ? 'This account is not allowed to do that.'
+  : /brain_device|does not exist|42883|PGRST202/i.test(msg) ? 'Devices are not switched on yet: apply migration 20261111010000_brain_devices.sql.'
+  : msg;
+
+/** New device + one-time setup link (PC) or a Claude-only device to watch for its first connection. */
+export async function createBrainDeviceAction(input: unknown): Promise<BrainResult<{ device: BrainDevice; code: string | null }>> {
+  const b = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const name = text(b.name, 60);
+  const kind = b.kind === 'claude' ? 'claude' : 'pc';
+  if (!name) return { ok: false, error: 'Give the device a name, like "Office PC".' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) {
+    const d = demoDevices().find((x) => x.kind === kind)!;
+    return { ok: true, device: { ...d, id: `demo-${Date.now()}`, name, created_at: new Date().toISOString(), checklist: {}, info: {}, roundtrip: {}, ready_at: null, setup_used_at: null, setup_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(), tested_at: null, connected_at: null }, code: kind === 'pc' ? '0123456789abcdef0123' : null };
+  }
+  const { data, error } = await ceo.db.rpc('brain_device_create', { p_name: name, p_kind: kind, p_owner_label: text(b.owner, 80) || 'Julev', p_track: 'owner' });
+  if (error) return { ok: false, error: friendly(error.message) };
+  const { code, ...device } = data as BrainDevice & { code: string | null };
+  return { ok: true, device: device as BrainDevice, code };
+}
+
+/** The wizard polls this every few seconds while a device is being set up. */
+export async function brainDeviceStatusAction(id: unknown): Promise<BrainResult<{ device: BrainDevice | null }>> {
+  if (typeof id !== 'string' || !(ID.test(id) || id.startsWith('demo-'))) return { ok: false, error: 'Unknown device.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: true, device: null };
+  const { data, error } = await ceo.db.rpc('brain_device_get', { p_id: id });
+  if (error) return { ok: false, error: friendly(error.message) };
+  return { ok: true, device: (data as BrainDevice | null) ?? null };
+}
+
+/** A fresh 30-minute link for a PC whose link expired or whose setup stopped. */
+export async function newBrainDeviceLinkAction(id: unknown): Promise<BrainResult<{ device: BrainDevice; code: string }>> {
+  if (typeof id !== 'string' || !ID.test(id)) return { ok: false, error: 'Unknown device.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const { data, error } = await ceo.db.rpc('brain_device_new_link', { p_id: id });
+  if (error) return { ok: false, error: friendly(error.message) };
+  const { code, ...device } = data as BrainDevice & { code: string };
+  return { ok: true, device: device as BrainDevice, code };
+}
+
+export async function revokeBrainDeviceAction(id: unknown): Promise<BrainResult> {
+  if (typeof id !== 'string' || !ID.test(id)) return { ok: false, error: 'Unknown device.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const { error } = await ceo.db.rpc('brain_device_revoke', { p_id: id });
+  if (error) return { ok: false, error: friendly(error.message) };
   return { ok: true };
 }
