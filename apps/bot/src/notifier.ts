@@ -1,6 +1,6 @@
 // Outbound notifier (docs/08 "Notifications"): polls Supabase (no realtime needed) and pushes
 // new approvals (with buttons), reports, and dashboard decisions (edits the Telegram message).
-import type { BotDb } from './db';
+import type { BotDb, BrainAlert } from './db';
 import { formatApproval, formatBudgetAlert, formatReport, isQuestion } from './format';
 import { approvalKeyboard, decidedKeyboard, type InlineMarkup } from './keyboard';
 import { inQuietHours, parseQuietHours, shouldSendApproval } from './quiet';
@@ -23,7 +23,15 @@ export interface NotifierDeps {
 }
 
 export interface NotifierState { lastDecisionSync: string }
-export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean; budgetAlerts: number; operatorNotices: number }
+export interface TickResult { sent: number; held: number; reports: number; synced: number; errors: number; quiet: boolean; budgetAlerts: number; operatorNotices: number; brainAlerts: number }
+
+const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Telegram HTML for a brain alert. */
+export function formatBrainAlert(a: Pick<BrainAlert, 'kind' | 'text'>, dashboardUrl: string): string {
+  const title = a.kind === 'index_lagging' ? '🧠 Brain index is behind' : a.kind === 'device_unhealthy' ? '🧠 A device stopped syncing' : '🧠 Brain alert';
+  return `<b>${title}</b>\n${escHtml(a.text)}\n<a href="${dashboardUrl.replace(/\/$/, '')}/brain">Open the Brain</a>`;
+}
 
 export const REPORT_LOOKBACK_MS = 36 * 3600_000;
 let lastNoticeError = '';
@@ -49,7 +57,7 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
   const settings = await deps.db.getSettings();
   const tz = tzOf(settings);
   const quiet = inQuietHours(now, parseQuietHours(settings.quiet_hours), tz);
-  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet, budgetAlerts: 0, operatorNotices: 0 };
+  const r: TickResult = { sent: 0, held: 0, reports: 0, synced: 0, errors: 0, quiet, budgetAlerts: 0, operatorNotices: 0, brainAlerts: 0 };
   const names = deps.names();
 
   // 1. new approvals → one message each (sent once: telegram_message_id is stored)
@@ -111,6 +119,20 @@ export async function notifierTick(deps: NotifierDeps, state: NotifierState): Pr
     } catch (e) {
       r.errors++;
       log(`[bot] could not send operator notice ${n.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 4b. HQ Brain alerts (index behind the vault, a device stopped syncing): any hour, each once. A failing read (the
+  //     brain migration not applied yet) must not stop step 5.
+  const brainAlerts = await deps.db.unsentBrainAlerts().catch(() => []);
+  for (const a of brainAlerts) {
+    try {
+      await deps.sender.send(deps.chatId, formatBrainAlert(a, deps.dashboardUrl));
+      await deps.db.markBrainAlertSent(a.id);
+      r.brainAlerts++;
+    } catch (e) {
+      r.errors++;
+      log(`[bot] could not send brain alert ${a.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

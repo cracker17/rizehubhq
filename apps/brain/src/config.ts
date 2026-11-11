@@ -28,6 +28,8 @@ export interface BrainConfig {
   oauthRedirectHosts: string[];
   /** IANA zone for dates written into the vault (session file names, "updated:", decisions) */
   timeZone: string;
+  /** chunks per embedding write (each write updates the HNSW index; small batches stay under the DB timeout) */
+  embedBatch: number;
 }
 
 export const DEFAULT_EMBED_MODEL = 'openai:text-embedding-3-small';
@@ -72,5 +74,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BrainConfig {
     oauthRedirectHosts: (env.BRAIN_OAUTH_REDIRECT_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase())
       .filter((h) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h)),
     timeZone: validZone(env.BRAIN_TIMEZONE) ?? 'Asia/Manila',
+    embedBatch: int(env.BRAIN_EMBED_BATCH, 32, 4, 500),
   };
 }

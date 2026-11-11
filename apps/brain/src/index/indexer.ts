@@ -26,6 +26,9 @@ export interface IndexOptions {
   /** drop the whole index first ("Rebuild index") */
   full?: boolean;
   log?: (msg: string) => void;
+  /** chunks per embedding write (BRAIN_EMBED_BATCH, default 32). Each write also updates the HNSW index, so big batches
+   *  on a small database hit the statement timeout; a failing batch is retried at half size down to MIN_EMBED_BATCH. */
+  embedBatch?: number;
 }
 
 export interface IndexReport {
@@ -34,10 +37,18 @@ export interface IndexReport {
   changed: string[];
   removed: string[];
   blocked: Array<{ path: string; reason: string; kind: 'secret' | 'size' }>;
+  /** files whose index write failed this run: skipped (kept at their old version), retried next run */
+  failed: Array<{ path: string; error: string }>;
   embedded: number;
   pendingEmbeddings: number;
+  /** why embedding stopped early this run (the rest is picked up next run), or null */
+  embedError: string | null;
   ms: number;
 }
+
+export const DEFAULT_EMBED_BATCH = 32;
+export const MIN_EMBED_BATCH = 4;
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 300);
 
 interface ParsedDoc {
   path: string;
@@ -76,7 +87,7 @@ export async function indexVault(o: IndexOptions): Promise<IndexReport> {
   const t0 = Date.now();
   const log = o.log ?? (() => {});
   const actor = o.actor ?? 'brain-service';
-  const report: IndexReport = { files: 0, added: [], changed: [], removed: [], blocked: [], embedded: 0, pendingEmbeddings: 0, ms: 0 };
+  const report: IndexReport = { files: 0, added: [], changed: [], removed: [], blocked: [], failed: [], embedded: 0, pendingEmbeddings: 0, embedError: null, ms: 0 };
 
   // 1. read + parse every markdown file
   const docs: ParsedDoc[] = [];
@@ -123,15 +134,23 @@ export async function indexVault(o: IndexOptions): Promise<IndexReport> {
     const before = manifest[d.path];
     if (before === d.sha) continue;
     const facts = d.kind === 'memory' ? parseMemory(d.body) : null;
-    await o.store.rpc('brain_upsert_document', {
-      p_doc: {
-        path: d.path, project_slug: d.project, kind: d.kind, title: d.title, doc_date: d.date, frontmatter: d.frontmatter,
-        body: d.body, content_sha: d.sha, git_sha: o.gitSha ?? null,
-      },
-      p_chunks: chunkMarkdown(d.title, d.body),
-      p_decisions: facts?.decisions ?? [],
-      p_next_steps: facts?.next_steps ?? [],
-    });
+    try {
+      await o.store.rpc('brain_upsert_document', {
+        p_doc: {
+          path: d.path, project_slug: d.project, kind: d.kind, title: d.title, doc_date: d.date, frontmatter: d.frontmatter,
+          body: d.body, content_sha: d.sha, git_sha: o.gitSha ?? null,
+        },
+        p_chunks: chunkMarkdown(d.title, d.body),
+        p_decisions: facts?.decisions ?? [],
+        p_next_steps: facts?.next_steps ?? [],
+      });
+    } catch (e) {
+      // One bad or huge file must not stop the rest of the vault (2026-10/11: one timeout froze the index for 4 weeks).
+      // The manifest keeps its old sha, so the next run tries this file again.
+      report.failed.push({ path: d.path, error: errText(e) });
+      log(`index: ${d.path} failed: ${errText(e)}`);
+      continue;
+    }
     (before ? report.changed : report.added).push(d.path);
   }
   report.removed = Object.keys(manifest).filter((p) => !current.has(p));
@@ -151,8 +170,12 @@ export async function indexVault(o: IndexOptions): Promise<IndexReport> {
   for (const b of report.blocked) {
     await o.store.rpc('brain_log_event', { p_actor: 'brain-service', p_action: b.kind === 'secret' ? 'blocked_secret' : 'blocked_size', p_project: classify(b.path).project, p_path: b.path, p_summary: b.reason, p_meta: {} });
   }
+  for (const f of report.failed.slice(0, MAX_FILE_EVENTS)) {
+    await o.store.rpc('brain_log_event', { p_actor: 'brain-service', p_action: 'index_failed', p_project: projectOf.get(f.path) ?? null, p_path: f.path, p_summary: f.error, p_meta: {} });
+  }
 
-  // 5. embeddings for every chunk that has none (new text, or everything after a model change)
+  // 5. embeddings for every chunk that has none (new text, or everything after a model change). Small batches; a failed
+  //    write is retried at half size, and if even the smallest fails, embedding stops for this run (next run resumes).
   if (o.embedder) {
     const state = await o.store.rpc<{ embed_model: string | null }>('brain_health');
     if (state?.embed_model && state.embed_model !== o.embedder.model) {
@@ -160,14 +183,22 @@ export async function indexVault(o: IndexOptions): Promise<IndexReport> {
       log(`embedding model changed ${state.embed_model} → ${o.embedder.model}: cleared ${n} vectors`);
     }
     await o.store.rpc('brain_set_sync_state', { p: { embed_model: o.embedder.model } });
+    let size = Math.max(MIN_EMBED_BATCH, Math.min(500, o.embedBatch ?? DEFAULT_EMBED_BATCH));
     for (;;) {
-      const batch = await o.store.rpc<Array<{ id: number; title: string; heading: string; text: string }>>('brain_chunks_missing_embedding', { p_limit: 96 });
+      const batch = await o.store.rpc<Array<{ id: number; title: string; heading: string; text: string }>>('brain_chunks_missing_embedding', { p_limit: size });
       if (!batch?.length) break;
-      const vectors = await o.embedder.embed(batch.map((c) => embedInput(c.title, c.heading, c.text)));
-      report.embedded += await o.store.rpc<number>('brain_set_embeddings', {
-        p_items: batch.map((c, i) => ({ id: c.id, embedding: toPgVector(vectors[i]) })),
-      });
-      if (batch.length < 96) break;
+      try {
+        const vectors = await o.embedder.embed(batch.map((c) => embedInput(c.title, c.heading, c.text)));
+        report.embedded += await o.store.rpc<number>('brain_set_embeddings', {
+          p_items: batch.map((c, i) => ({ id: c.id, embedding: toPgVector(vectors[i]) })),
+        });
+      } catch (e) {
+        if (size > MIN_EMBED_BATCH) { size = Math.max(MIN_EMBED_BATCH, Math.floor(size / 2)); log(`embed: batch failed (${errText(e)}), retrying with ${size}`); continue; }
+        report.embedError = errText(e);
+        log(`embed: stopped for this run: ${report.embedError}`);
+        break;
+      }
+      if (batch.length < size) break;
     }
   }
   const health = await o.store.rpc<{ chunks: number; embedded: number }>('brain_health');
@@ -177,11 +208,11 @@ export async function indexVault(o: IndexOptions): Promise<IndexReport> {
   if (touched || o.full) {
     await o.store.rpc('brain_log_event', {
       p_actor: actor, p_action: 'indexed', p_project: null, p_path: null,
-      p_summary: `${report.added.length} added · ${report.changed.length} changed · ${report.removed.length} removed · ${report.embedded} embedded`,
-      p_meta: { files: report.files, blocked: report.blocked.length, git_sha: o.gitSha ?? null, full: !!o.full },
+      p_summary: `${report.added.length} added · ${report.changed.length} changed · ${report.removed.length} removed · ${report.embedded} embedded${report.failed.length ? ` · ${report.failed.length} failed` : ''}`,
+      p_meta: { files: report.files, blocked: report.blocked.length, failed: report.failed.length, git_sha: o.gitSha ?? null, full: !!o.full },
     });
   }
   report.ms = Date.now() - t0;
-  log(`indexed ${report.files} files in ${report.ms} ms: +${report.added.length} ~${report.changed.length} -${report.removed.length}, ${report.embedded} embedded, ${report.blocked.length} blocked`);
+  log(`indexed ${report.files} files in ${report.ms} ms: +${report.added.length} ~${report.changed.length} -${report.removed.length}, ${report.embedded} embedded, ${report.blocked.length} blocked, ${report.failed.length} failed`);
   return report;
 }

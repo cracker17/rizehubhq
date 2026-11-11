@@ -1,6 +1,6 @@
 // In-memory BotDb for tests (mirrors decide_approval's pending re-check).
 import { randomUUID } from 'node:crypto';
-import type { BotDb, NewRequest, NewVoiceNote } from './db';
+import type { BotDb, BrainAlert, NewRequest, NewVoiceNote } from './db';
 import type { OperatorNotice, OperatorStatus } from './operator';
 import type { AgentLite, BotApproval, BotReport, BudgetAlert, Decision, QuickFacts, SpendRow, VoiceNoteState } from './types';
 
@@ -17,6 +17,7 @@ export class FakeBotDb implements BotDb {
   approvals: BotApproval[] = [];
   reports: BotReport[] = [];
   budgetAlerts: BudgetAlert[] = [];
+  brainAlerts: BrainAlert[] = [];
   settings: Record<string, unknown> = { timezone: 'Asia/Manila' };
   requests: NewRequest[] = [];
   /** voice_notes rows; tests play the worker by editing them (or via onVoicePoll). */
@@ -78,6 +79,8 @@ export class FakeBotDb implements BotDb {
   operatorNotices: (OperatorNotice & { telegram_sent_at: string | null })[] = [];
   operatorStatuses = new Map<string, OperatorStatus>();
   async unsentOperatorNotices(sinceIso: string) { return this.operatorNotices.filter((n) => !n.telegram_sent_at && n.created_at >= sinceIso); }
+  async unsentBrainAlerts() { return this.brainAlerts.filter((a) => !a.sent_at).sort((a, b) => a.id - b.id); }
+  async markBrainAlertSent(id: number) { const a = this.brainAlerts.find((x) => x.id === id); if (a && !a.sent_at) a.sent_at = this.now().toISOString(); }
   async markOperatorNoticeSent(id: number) { const n = this.operatorNotices.find((x) => x.id === id); if (n && !n.telegram_sent_at) n.telegram_sent_at = this.now().toISOString(); }
   async setOperatorPaused(paused: boolean) { this.settings.operator_paused = paused; }
   async setOperatorClientPaused(slug: string, paused: boolean) {

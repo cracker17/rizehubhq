@@ -17,6 +17,35 @@ export interface ServiceDeps {
   log: (msg: string) => void;
   /** IANA zone for the dates written into the vault (BRAIN_TIMEZONE, default Asia/Manila) */
   timeZone?: string;
+  /** chunks per embedding write (BRAIN_EMBED_BATCH) */
+  embedBatch?: number;
+  /** clock for tests */
+  now?: () => Date;
+}
+
+/** Index more than this far behind the last pull → one Telegram alert (then at most every LAG_REALERT_MS). */
+export const LAG_ALERT_MS = 60 * 60_000;
+export const LAG_REALERT_MS = 6 * 60 * 60_000;
+
+/** Sync-state status + error text for a finished run. Pure, so it is easy to test. */
+export function runOutcome(report: Pick<IndexReport, 'blocked' | 'failed' | 'pendingEmbeddings' | 'embedError'>, hasEmbedder: boolean):
+  { status: 'ok' | 'degraded'; error: string | null } {
+  if (report.failed.length) {
+    const f = report.failed[0];
+    return { status: 'degraded', error: `${report.failed.length} file${report.failed.length === 1 ? '' : 's'} could not be indexed (first: ${f.path}: ${f.error})` };
+  }
+  if (report.embedError) return { status: 'degraded', error: `embedding paused until the next run: ${report.embedError}` };
+  if (report.blocked.length || (hasEmbedder ? report.pendingEmbeddings > 0 : true)) return { status: 'degraded', error: null };
+  return { status: 'ok', error: null };
+}
+
+/** Should a "brain index is behind" alert go out now? */
+export function lagAlertDue(lastIndexAt: string | null, lastPullAt: string | null, lastAlertAt: string | null, now: Date): boolean {
+  if (!lastPullAt) return false;
+  const indexed = lastIndexAt ? Date.parse(lastIndexAt) : 0;
+  if (now.getTime() - indexed < LAG_ALERT_MS) return false; // a complete index ran recently
+  if (Date.parse(lastPullAt) <= indexed) return false;       // nothing new was pulled since, so not behind
+  return !lastAlertAt || now.getTime() - Date.parse(lastAlertAt) >= LAG_REALERT_MS;
 }
 
 export interface SyncRequest { reason: string; actor?: string; full?: boolean }
@@ -54,6 +83,22 @@ export function createBrainService(d: ServiceDeps): BrainService {
     return r;
   };
 
+  /** Index stuck behind the vault for over an hour → one alert for the Telegram bot (brain_alerts), repeated every 6 h. */
+  async function maybeAlertLag(): Promise<void> {
+    const clock = d.now ?? (() => new Date());
+    const h = await d.store.rpc<{ last_index_at: string | null; last_pull_at: string | null; error: string | null; lag_alerted_at?: string | null }>('brain_sync_state_row')
+      .catch(() => null);
+    if (!h || !lagAlertDue(h.last_index_at, h.last_pull_at, h.lag_alerted_at ?? null, clock())) return;
+    const since = h.last_index_at ? new Date(h.last_index_at).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'never';
+    await d.store.rpc('brain_raise_alert', {
+      p_kind: 'index_lagging',
+      p_text: `HQ Brain index is behind the vault (last full index: ${since}). ${h.error ? `Last error: ${h.error.slice(0, 200)}` : ''}`.trim(),
+      p_meta: { last_index_at: h.last_index_at, last_pull_at: h.last_pull_at },
+    });
+    await d.store.rpc('brain_set_sync_state', { p: { lag_alerted_at: clock().toISOString() } });
+    d.log('alert: index lagging (sent to brain_alerts)');
+  }
+
   async function runOnce(req: SyncRequest): Promise<IndexReport | null> {
     const now = () => new Date().toISOString();
     try {
@@ -75,14 +120,18 @@ export function createBrainService(d: ServiceDeps): BrainService {
       needsIndex = false;
       const report = await indexVault({
         store: d.store, embedder: d.embedder, vaultDir: d.git.dir, gitSha: await head(d.git),
-        actor: req.actor ?? 'brain-service', full: req.full, log: d.log,
+        actor: req.actor ?? 'brain-service', full: req.full, log: d.log, embedBatch: d.embedBatch,
       });
+      const outcome = runOutcome(report, !!d.embedder);
+      // last_index_at = the last *complete* index: a run with failed files leaves it alone, so the UI's VPS light and the
+      // lag alert show that part of the vault is behind.
       await d.store.rpc('brain_set_sync_state', {
         p: {
-          last_index_at: now(), error: null,
-          status: report.blocked.length || (d.embedder ? report.pendingEmbeddings > 0 : true) ? 'degraded' : 'ok',
+          error: outcome.error, status: outcome.status, failed: report.failed.slice(0, 50),
+          ...(report.failed.length ? {} : { last_index_at: now(), lag_alerted_at: null }),
         },
       });
+      if (report.failed.length) await maybeAlertLag();
       lastReport = report;
       lastError = null;
       return report;
@@ -93,6 +142,7 @@ export function createBrainService(d: ServiceDeps): BrainService {
       await d.store.rpc('brain_log_event', {
         p_actor: 'brain-service', p_action: 'error', p_project: null, p_path: null, p_summary: lastError.slice(0, 500), p_meta: { reason: req.reason },
       }).catch(() => {});
+      await maybeAlertLag().catch(() => {});
       throw e;
     } finally {
       lastRunAt = now();

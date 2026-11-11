@@ -48,7 +48,13 @@ export interface BotDb {
   operatorClients(): Promise<{ slug: string; name: string }[]>;
   /** Reply drafts waiting for the CEO (pending operator_reply approvals), oldest first. */
   pendingOperatorReplies(limit: number): Promise<{ rows: BotApproval[]; total: number }>;
+  // ---------- HQ Brain (20261111000000_brain_reliability.sql) ----------
+  /** Brain alerts not sent yet (index lagging, device unhealthy), oldest first. */
+  unsentBrainAlerts(): Promise<BrainAlert[]>;
+  markBrainAlertSent(id: number): Promise<void>;
 }
+
+export interface BrainAlert { id: number; created_at: string; kind: string; text: string; sent_at: string | null }
 
 export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
   const must = <T>(res: { data: T | null; error: { message: string } | null }, what: string): T => {
@@ -117,6 +123,11 @@ export function createSupabaseBotDb(sb: SupabaseClient): BotDb {
     },
     markOperatorNoticeSent: async (id) => {
       must(await sb.from('operator_actions').update({ telegram_sent_at: new Date().toISOString() }).eq('id', id).is('telegram_sent_at', null), 'operator notice sent');
+    },
+    unsentBrainAlerts: async () => must<BrainAlert[]>(await sb.from('brain_alerts').select('id,created_at,kind,text,sent_at')
+      .is('sent_at', null).order('id').limit(10), 'brain_alerts'),
+    markBrainAlertSent: async (id) => {
+      must(await sb.from('brain_alerts').update({ sent_at: new Date().toISOString() }).eq('id', id).is('sent_at', null), 'brain alert sent');
     },
     setOperatorPaused: async (paused) => { must(await sb.rpc('operator_set_paused', { p_paused: paused, p_via: 'telegram' }), 'operator_set_paused'); },
     setOperatorClientPaused: async (slug, paused) => {
