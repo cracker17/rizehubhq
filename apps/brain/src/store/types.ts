@@ -6,4 +6,6 @@
 export interface Store {
   rpc<T = unknown>(fn: string, args?: Record<string, unknown>): Promise<T>;
   close?(): Promise<void>;
+  /** P2 join flow: create a confirmed HQ login for an invited person (Supabase Auth admin API). Returns the user id. */
+  createUser?(email: string, password: string): Promise<{ id: string } | { error: string }>;
 }

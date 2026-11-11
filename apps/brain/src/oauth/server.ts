@@ -135,7 +135,9 @@ export async function token(d: OAuthDeps, b: Record<string, unknown>): Promise<R
     if (!pkceOk(b.code_verifier, row.code_challenge)) return oauthError(400, 'invalid_grant', 'PKCE verification failed');
     if (typeof b.resource === 'string' && row.resource && b.resource !== row.resource) return oauthError(400, 'invalid_target', 'resource does not match the approval');
     d.log(`oauth: tokens issued to "${client.client_name}"`);
-    return issuePair(d, { family_id: row.family_id, client_id: client.client_id, user_id: row.user_id, subject: 'ceo', scopes: row.scopes, resource: row.resource });
+    // P2: the code says whether it was approved by the CEO or by an invited person (people get filtered access).
+    const subject = (row as { subject?: string }).subject === 'person' ? 'person' : 'ceo';
+    return issuePair(d, { family_id: row.family_id, client_id: client.client_id, user_id: row.user_id, subject, scopes: row.scopes, resource: row.resource });
   }
   if (b.grant_type === 'refresh_token') {
     if (typeof b.refresh_token !== 'string' || b.refresh_token.length > 200) return oauthError(400, 'invalid_request', 'refresh_token is required');

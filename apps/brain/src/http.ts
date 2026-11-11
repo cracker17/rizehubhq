@@ -11,6 +11,7 @@ import { clientCheck, issueCode, register, revoke, token, type OAuthDeps } from 
 import { handleMcpPost, MCP_MAX_BODY } from './mcp/server';
 import { createProjectOp, updateMemoryOp, WriteError, type NewProject } from './write/vault';
 import { deviceReport, setupScript } from './setup/devices';
+import { joinWithInvite, peekInvite } from './people';
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 export { DEFAULT_SEARCH_KINDS } from './queries';
@@ -165,6 +166,16 @@ async function route(d: ApiDeps, req: http.IncomingMessage, url: URL, res: http.
     let b: Record<string, unknown>;
     try { b = JSON.parse((await readRaw(req, 16 * 1024)).toString('utf8') || '{}'); } catch { return [400, { error: 'invalid JSON' }]; }
     return deviceReport(setup, header(req, 'x-device-authorization'), b && typeof b === 'object' ? b : {});
+  }
+  // P2 join flow (the dashboard's public /join/<code> page calls these server-side).
+  if (req.method === 'GET' && p === '/people/invite') {
+    const inv = await peekInvite(d.store, (q.get('code') ?? '').toLowerCase());
+    return inv ? [200, { name: inv.name, email: inv.email, role: inv.role, projects: inv.projects }] : [404, { error: 'This invite has expired or was already used.' }];
+  }
+  if (req.method === 'POST' && p === '/people/join') {
+    let b: Record<string, unknown>;
+    try { b = JSON.parse((await readRaw(req, 8 * 1024)).toString('utf8') || '{}'); } catch { return [400, { error: 'invalid JSON' }]; }
+    return joinWithInvite(d.store, String(b.code ?? '').toLowerCase(), String(b.password ?? ''), d.log);
   }
   if (req.method === 'POST' && p === '/reindex') {
     const report = await d.service.sync({ reason: 'reindex', actor: 'brain-service', full: q.get('full') === '1' });

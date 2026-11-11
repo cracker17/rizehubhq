@@ -10,6 +10,7 @@ import path from 'node:path';
 import type { Store } from '../store/types';
 import type { BrainService } from '../service';
 import { authenticate, type Caller } from '../oauth/server';
+import { actorFor, canCreateProjects, canSeePath, canSeeProject, canWriteProject, loadAccess, OWNER, type Access } from '../access';
 import { createProjectOp, saveSessionOp, updateMemoryOp, WriteError, type NewProject, type SessionInput } from '../write/vault';
 import { search, type SearchDeps } from '../queries';
 
@@ -38,34 +39,42 @@ interface ToolDef {
   name: string; title: string; description: string; scope: 'brain:read' | 'brain:write';
   inputSchema: Record<string, unknown>; annotations: Record<string, boolean>;
   /** text for Claude, plus the project it touched (recorded on the tool_call event: the /brain page lights it up) */
-  run: (d: McpDeps, args: Record<string, unknown>, caller: Caller) => Promise<string | { text: string; project: string | null }>;
+  run: (d: McpDeps, args: Record<string, unknown>, caller: Caller, acc: Access) => Promise<string | { text: string; project: string | null }>;
 }
 
 const READ = { readOnlyHint: true, openWorldHint: false };
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 
 const cap = (s: string) => (s.length > MAX_TEXT ? `${s.slice(0, MAX_TEXT)}\n\n[… cut at ${MAX_TEXT} characters; open the file with brain_get_document]` : s);
-const actorOf = (c: Caller) => `claude:${(c.clientName ?? 'connector').replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 40)}`;
 
 interface ProjectRow { slug: string; name: string; aliases: string[]; status: string | null; last_activity: string | null; sessions: number; open_next_steps: number; listed: boolean }
 
-async function projects(d: McpDeps): Promise<ProjectRow[]> {
-  return (await d.store.rpc<ProjectRow[]>('brain_list_projects')) ?? [];
+/** Projects this caller may see (P2: people see only their grants). */
+async function projects(d: McpDeps, acc: Access = OWNER): Promise<ProjectRow[]> {
+  return ((await d.store.rpc<ProjectRow[]>('brain_list_projects')) ?? []).filter((p) => canSeeProject(acc, p.slug));
 }
 
-/** Slug, name or alias → slug (exact first, then a unique partial match). */
-async function resolveSlug(d: McpDeps, ask: unknown): Promise<string> {
+/** Slug, name or alias → slug (exact first, then a unique partial match), among the caller's visible projects only,
+ *  so an error message never names a project they can't see. */
+async function resolveSlug(d: McpDeps, ask: unknown, acc: Access = OWNER): Promise<string> {
   const q = String(ask ?? '').trim().toLowerCase();
   if (!q) throw new WriteError('project is required');
-  const all = (await projects(d)).filter((p) => p.listed);
+  const all = (await projects(d, acc)).filter((p) => p.listed);
   const hit = (p: ProjectRow, exact: boolean) => [p.slug, p.name.toLowerCase(), ...p.aliases.map((a) => a.toLowerCase())]
     .some((k) => (exact ? k === q : k.includes(q)));
   const exact = all.filter((p) => hit(p, true));
   if (exact.length === 1) return exact[0]!.slug;
   const partial = exact.length ? exact : all.filter((p) => hit(p, false));
   if (partial.length === 1) return partial[0]!.slug;
-  if (!partial.length) throw new WriteError(`No project matches "${ask}". Call brain_list_projects to see them all.`);
+  if (!partial.length) throw new WriteError(`No project matches "${ask}"${acc.role === 'owner' ? '' : ' among the projects you have access to'}. Call brain_list_projects to see them.`);
   throw new WriteError(`"${ask}" matches several projects: ${partial.slice(0, 10).map((p) => `${p.slug} (${p.name})`).join(', ')}. Ask which one.`);
+}
+
+/** A project the caller may edit, resolved among the projects they can see. */
+async function writableSlug(d: McpDeps, ask: unknown, acc: Access): Promise<string> {
+  const slug = await resolveSlug(d, ask, acc);
+  if (!canWriteProject(acc, slug)) throw new WriteError(`You can read ${slug} but not edit it. Ask Julev for edit access.`);
+  return slug;
 }
 
 const readVaultFile = (d: McpDeps, rel: string) => {
@@ -77,9 +86,9 @@ export const TOOLS: ToolDef[] = [
     name: 'brain_list_projects', title: 'List projects', scope: 'brain:read', annotations: READ,
     description: "All projects in Julev's memory vault with status and last activity (= /projects).",
     inputSchema: { type: 'object', properties: {} },
-    async run(d) {
-      const rows = (await projects(d)).filter((p) => p.listed);
-      if (!rows.length) return 'The brain has no projects indexed yet.';
+    async run(d, _a, _c, acc) {
+      const rows = (await projects(d, acc)).filter((p) => p.listed);
+      if (!rows.length) return acc.role === 'owner' ? 'The brain has no projects indexed yet.' : 'You have no projects yet. Ask Julev to give you access.';
       return rows.map((p) => `- **${p.name}** (\`${p.slug}\`) · last ${p.last_activity ?? 'n/a'} · ${p.sessions} sessions · ${p.open_next_steps} open steps`
         + (p.status ? `\n  ${p.status.split('\n')[0]!.replace(/^[-*]\s*/, '').slice(0, 160)}` : '')).join('\n');
     },
@@ -95,20 +104,20 @@ export const TOOLS: ToolDef[] = [
         include_profile: { type: 'boolean', description: "Include Julev's profile (default true). Skip it when already read in this chat." },
       },
     },
-    async run(d, a) {
-      const slug = await resolveSlug(d, a.project);
+    async run(d, a, _c, acc) {
+      const slug = await resolveSlug(d, a.project, acc);
       const n = Number.isInteger(a.sessions) ? Math.max(0, Math.min(10, a.sessions as number)) : 2;
       const b = await d.store.rpc<null | { project: { name: string; slug: string; last_activity: string | null }; memory: { path: string; body: string } | null; sessions: Array<{ path: string; title: string; doc_date: string | null; body: string }>; documents: Array<{ path: string; kind: string }> }>(
         'brain_project_bundle', { p_slug: slug, p_sessions: n });
       if (!b) throw new WriteError(`Project ${slug} is not indexed yet.`);
       const out = [`# ${b.project.name} (\`${slug}\`) · last activity ${b.project.last_activity ?? 'n/a'}`];
-      if (a.include_profile !== false) {
+      if (a.include_profile !== false && acc.role === 'owner') {
         const prof = await d.store.rpc<null | { body: string }>('brain_get_document', { p_path: 'profile/profile.md' });
         if (prof) out.push(`## Julev's profile (profile/profile.md)\n${prof.body.trim()}`);
       }
       out.push(b.memory ? `## Memory (${b.memory.path})\n${b.memory.body.trim()}` : '## Memory\n(no memory.md yet)');
-      for (const s of b.sessions) out.push(`## Session ${s.doc_date ?? ''}: ${s.title} (${s.path})\n${s.body.trim()}`);
-      const others = b.documents.filter((x) => x.kind === 'project_doc').map((x) => x.path);
+      for (const s of b.sessions.filter((x) => canSeePath(acc, x.path))) out.push(`## Session ${s.doc_date ?? ''}: ${s.title} (${s.path})\n${s.body.trim()}`);
+      const others = b.documents.filter((x) => x.kind === 'project_doc' && canSeePath(acc, x.path, x.kind)).map((x) => x.path);
       if (others.length) out.push(`## Other project files (open with brain_get_document)\n${others.map((p) => `- ${p}`).join('\n')}`);
       return cap(out.join('\n\n'));
     },
@@ -125,11 +134,14 @@ export const TOOLS: ToolDef[] = [
         limit: { type: 'integer', minimum: 1, maximum: 25, description: 'Default 8.' },
       },
     },
-    async run(d, a) {
+    async run(d, a, _c, acc) {
       const q = String(a.query ?? '').trim();
       if (!q) throw new WriteError('query is required');
-      const project = a.project ? await resolveSlug(d, a.project) : null;
-      const r = await search(d, { q, project, kinds: a.include_transcripts === true ? ['all'] : [], k: Number(a.limit) || 8 });
+      const project = a.project ? await resolveSlug(d, a.project, acc) : null;
+      const want = Math.max(1, Math.min(25, Number(a.limit) || 8));
+      // People: over-fetch, then keep only what they may see (their projects, no owner-only files, transcripts per grant).
+      const r = await search(d, { q, project, kinds: a.include_transcripts === true ? ['all'] : [], k: acc.role === 'owner' ? want : Math.min(50, want * 4) });
+      r.results = r.results.filter((h) => canSeePath(acc, h.path, h.kind)).slice(0, want);
       if (!r.results.length) return `Nothing found for "${q}"${project ? ` in ${project}` : ''}.`;
       return { project, text: cap([`Search "${q}" (semantic ${r.semantic}):`, ...r.results.map((h, i) =>
         `${i + 1}. ${h.path}${h.heading ? ` › ${h.heading}` : ''} (${h.kind}${h.doc_date ? `, ${h.doc_date}` : ''})\n${h.text.trim()}`)].join('\n\n')) };
@@ -139,11 +151,12 @@ export const TOOLS: ToolDef[] = [
     name: 'brain_get_document', title: 'Read a vault file', scope: 'brain:read', annotations: READ,
     description: 'Read one vault file by path, e.g. "projects/hq-brain/memory.md" or "profile/profile.md".',
     inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string', description: 'Vault-relative path of a .md file.' } } },
-    async run(d, a) {
+    async run(d, a, _c, acc) {
       const p = String(a.path ?? '').trim().replace(/^\/+/, '');
       if (!p || p.length > 400) throw new WriteError('path is required');
-      const doc = await d.store.rpc<null | { path: string; body: string; doc_date: string | null }>('brain_get_document', { p_path: p });
-      if (!doc) throw new WriteError(`${p} is not in the brain (not indexed, blocked as a secret, or it does not exist).`);
+      const doc = await d.store.rpc<null | { path: string; body: string; doc_date: string | null; kind?: string }>('brain_get_document', { p_path: p });
+      // Same answer for "hidden" and "missing": a person can't probe what exists outside their projects.
+      if (!doc || !canSeePath(acc, doc.path, doc.kind)) throw new WriteError(`${p} is not in the brain (not indexed, blocked as a secret, or it does not exist).`);
       return cap(`# ${doc.path}\n\n${doc.body}`);
     },
   },
@@ -151,11 +164,13 @@ export const TOOLS: ToolDef[] = [
     name: 'brain_recent_activity', title: 'Recent activity', scope: 'brain:read', annotations: READ,
     description: 'What changed in the brain lately, and who changed it (PC syncs, connector saves, agents).',
     inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 25.' } } },
-    async run(d, a) {
+    async run(d, a, _c, acc) {
       const n = Math.max(1, Math.min(100, Number(a.limit) || 25));
-      const ev = (await d.store.rpc<Array<{ ts: string; actor: string; action: string; project_slug: string | null; path: string | null; summary: string }>>('brain_recent_events', { p_limit: n * 3 })) ?? [];
-      // Tool-call audit rows are noise here; show what changed.
-      const rows = ev.filter((e) => e.action !== 'tool_call').slice(0, n);
+      const ev = (await d.store.rpc<Array<{ ts: string; actor: string; action: string; project_slug: string | null; path: string | null; summary: string }>>('brain_recent_events', { p_limit: acc.role === 'owner' ? n * 3 : 500 })) ?? [];
+      // Tool-call audit rows are noise here; show what changed. People: only events of their projects.
+      const rows = ev.filter((e) => e.action !== 'tool_call')
+        .filter((e) => acc.role === 'owner' || (!!e.project_slug && canSeeProject(acc, e.project_slug) && (!e.path || canSeePath(acc, e.path))))
+        .slice(0, n);
       if (!rows.length) return 'No activity yet.';
       return rows.map((e) => `- ${e.ts.slice(0, 16).replace('T', ' ')} UTC · ${e.actor} · ${e.action}${e.project_slug ? ` · ${e.project_slug}` : ''}${e.path ? ` · ${e.path}` : ''}${e.summary ? ` · ${e.summary}` : ''}`).join('\n');
     },
@@ -164,7 +179,14 @@ export const TOOLS: ToolDef[] = [
     name: 'brain_get_setup_kit', title: 'New device setup kit', scope: 'brain:read', annotations: READ,
     description: 'Everything needed to set up a new computer or Claude account: the setup guide, the memory-vault skill, the /load /save /new-project /projects /recall command files, and the scheduled-task prompts.',
     inputSchema: { type: 'object', properties: {} },
-    async run(d) {
+    async run(d, _a, _c, acc) {
+      if (acc.role !== 'owner') {
+        // People get their own short kit: no owner guides, command files with local paths, or scheduled tasks (client e-mails).
+        return ['# HQ Brain for your Claude', `Signed in as ${acc.name ?? acc.email ?? 'a team member'} (${acc.role}).`,
+          'In Claude: Settings › Connectors › HQ Brain › Connect (your Team plan already lists it).',
+          'Say "list my projects", "load <project>" to start, and "save this session to <project>" when done.',
+          acc.role === 'viewer' ? 'Your access is read-only.' : 'Saving needs edit access on that project.'].join('\n');
+      }
       const part = (title: string, rel: string) => { const t = readVaultFile(d, rel); return t ? `## ${title} (${rel})\n\n${t.trim()}` : null; };
       const listDir = (rel: string) => { try { return fs.readdirSync(path.join(d.vaultDir, rel)).filter((f) => f.endsWith('.md')).sort(); } catch { return []; } };
       const out = [
@@ -196,8 +218,9 @@ export const TOOLS: ToolDef[] = [
         facts: { type: 'array', description: 'Optional durable facts: bullets added to a memory.md section.', items: { type: 'object', required: ['section', 'lines'], properties: { section: { type: 'string', description: 'e.g. Links, Contacts, Overview' }, lines: lines('Bullets to add.') } } },
       },
     },
-    async run(d, a, caller) {
-      const r = await d.service.write(saveSessionOp(a as unknown as SessionInput), actorOf(caller));
+    async run(d, a, caller, acc) {
+      const slug = await writableSlug(d, a.project, acc);
+      const r = await d.service.write(saveSessionOp({ ...a, project: slug } as unknown as SessionInput), actorFor(acc, caller));
       return { project: r.project, text: `Saved to ${r.project}: ${r.detail?.file ?? r.paths[0]} (commit ${r.sha.slice(0, 7)}). Files: ${r.paths.join(', ')}.` };
     },
   },
@@ -214,8 +237,9 @@ export const TOOLS: ToolDef[] = [
         facts: { type: 'array', items: { type: 'object', required: ['section', 'lines'], properties: { section: str, lines: lines('Bullets to add.') } } },
       },
     },
-    async run(d, a, caller) {
-      const r = await d.service.write(updateMemoryOp(String(a.project ?? ''), a), actorOf(caller));
+    async run(d, a, caller, acc) {
+      const slug = await writableSlug(d, a.project, acc);
+      const r = await d.service.write(updateMemoryOp(slug, a), actorFor(acc, caller));
       return { project: r.project, text: `Updated ${r.paths[0]}: ${r.summary.replace(/^memory: /, '')} (commit ${r.sha.slice(0, 7)}).` };
     },
   },
@@ -232,8 +256,9 @@ export const TOOLS: ToolDef[] = [
         links: lines('Links bullets, e.g. "Site: https://…", "Repo: github.com/…".'),
       },
     },
-    async run(d, a, caller) {
-      const r = await d.service.write(createProjectOp(a as unknown as NewProject), actorOf(caller));
+    async run(d, a, caller, acc) {
+      if (!canCreateProjects(acc)) throw new WriteError('Only Julev or an admin can create projects. Ask Julev to add it and give you access.');
+      const r = await d.service.write(createProjectOp(a as unknown as NewProject), actorFor(acc, caller));
       return { project: r.project, text: `Created ${r.detail?.slug ?? r.project} (commit ${r.sha.slice(0, 7)}). It is the active project now: brain_save_session writes there.` };
     },
   },
@@ -242,11 +267,11 @@ export const TOOLS: ToolDef[] = [
 const byName = new Map(TOOLS.map((t) => [t.name, t]));
 const textResult = (text: string, isError = false) => ({ content: [{ type: 'text', text }], isError });
 
-function visible(caller: Caller) {
-  return TOOLS.filter((t) => caller.scopes.includes(t.scope));
+function visible(caller: Caller, acc: Access) {
+  return TOOLS.filter((t) => caller.scopes.includes(t.scope) && (t.name !== 'brain_create_project' || canCreateProjects(acc)));
 }
 
-async function callTool(d: McpDeps, caller: Caller, params: unknown) {
+async function callTool(d: McpDeps, caller: Caller, params: unknown, acc: Access) {
   const p = (params ?? {}) as { name?: unknown; arguments?: unknown };
   if (typeof p.name !== 'string') throw new RpcError(-32602, 'tools/call needs params.name');
   const tool = byName.get(p.name);
@@ -257,7 +282,7 @@ async function callTool(d: McpDeps, caller: Caller, params: unknown) {
   let ok = false;
   let project: string | null = null;
   try {
-    const out = await tool.run(d, args, caller);
+    const out = await tool.run(d, args, caller, acc);
     ok = true;
     if (typeof out === 'string') return textResult(out);
     project = out.project;
@@ -268,13 +293,13 @@ async function callTool(d: McpDeps, caller: Caller, params: unknown) {
     return textResult(e instanceof WriteError ? msg : `Error: ${msg.slice(0, 500)}`, true);
   } finally {
     await d.store.rpc('brain_log_event', {
-      p_actor: actorOf(caller), p_action: 'tool_call', p_project: project, p_path: null, p_summary: tool.name,
-      p_meta: { tool: tool.name, ok, ms: Date.now() - started, client_id: caller.clientId },
+      p_actor: actorFor(acc, caller), p_action: 'tool_call', p_project: project, p_path: null, p_summary: tool.name,
+      p_meta: { tool: tool.name, ok, ms: Date.now() - started, client_id: caller.clientId, ...(acc.personId ? { person: acc.personId } : {}) },
     }).catch(() => {});
   }
 }
 
-async function handleOne(d: McpDeps, caller: Caller, msg: RpcRequest): Promise<RpcResponse | null> {
+async function handleOne(d: McpDeps, caller: Caller, msg: RpcRequest, acc: Access): Promise<RpcResponse | null> {
   const isNotification = msg.id === undefined;
   const id: Id = msg.id ?? null;
   try {
@@ -286,17 +311,20 @@ async function handleOne(d: McpDeps, caller: Caller, msg: RpcRequest): Promise<R
         const version = (MCP_PROTOCOL_VERSIONS as readonly unknown[]).includes(asked) ? asked : MCP_PROTOCOL_VERSIONS[0];
         result = {
           protocolVersion: version, capabilities: { tools: { listChanged: false } }, serverInfo: MCP_SERVER_INFO,
-          instructions: "Julev's long-term project memory (the HQ Brain). /load or \"load <project>\" → brain_load_project; /save → brain_save_session; "
-            + '/new-project → brain_create_project; /projects → brain_list_projects; /recall → brain_search. '
+          instructions: (acc.role === 'owner'
+            ? "Julev's long-term project memory (the HQ Brain). /load or \"load <project>\" → brain_load_project; /save → brain_save_session; "
+              + '/new-project → brain_create_project; /projects → brain_list_projects; /recall → brain_search. '
+            : `The HQ Brain: shared project memory. You (${acc.name ?? 'team member'}) can see only the projects Julev gave you access to. `
+              + '"load <project>" → brain_load_project; "save this session" → brain_save_session (needs edit access); list → brain_list_projects; search → brain_search. ')
             + 'Never write secrets (keys, passwords, tokens) into the brain: note where they are stored instead.',
         };
         break;
       }
       case 'ping': result = {}; break;
       case 'tools/list':
-        result = { tools: visible(caller).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, ...t.annotations } })) };
+        result = { tools: visible(caller, acc).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, ...t.annotations } })) };
         break;
-      case 'tools/call': result = await callTool(d, caller, msg.params); break;
+      case 'tools/call': result = await callTool(d, caller, msg.params, acc); break;
       case 'resources/list': result = { resources: [] }; break;
       case 'prompts/list': result = { prompts: [] }; break;
       default:
@@ -316,7 +344,9 @@ export interface McpReply { status: number; body?: unknown; unauthorized?: boole
 /** POST /mcp. `authorization` = the caller's Authorization header, passed through by the dashboard. */
 export async function handleMcpPost(d: McpDeps, authorization: string | undefined, raw: Buffer): Promise<McpReply> {
   const caller = await authenticate(d.store, authorization);
-  if (!caller) return { status: 401, unauthorized: true, body: { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'unauthorized: connect the Brain connector (OAuth)' } } };
+  // Access is loaded once per request: a person disabled a second ago gets nothing (their token check also fails).
+  const acc = caller ? await loadAccess(d.store, caller) : null;
+  if (!caller || !acc) return { status: 401, unauthorized: true, body: { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'unauthorized: connect the Brain connector (OAuth)' } } };
   if (raw.length > MCP_MAX_BODY) return { status: 413, body: { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'body too large' } } };
   let body: unknown;
   try { body = JSON.parse(raw.toString('utf8')); } catch { return { status: 400, body: { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } } }; }
@@ -325,7 +355,7 @@ export async function handleMcpPost(d: McpDeps, authorization: string | undefine
   if (!msgs.length || msgs.length > 20) return { status: 400, body: { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } } };
   const out: RpcResponse[] = [];
   for (const m of msgs) {
-    const r = await handleOne(d, caller, m && typeof m === 'object' ? m : {});
+    const r = await handleOne(d, caller, m && typeof m === 'object' ? m : {}, acc);
     if (r) out.push(r);
   }
   if (!out.length) return { status: 202 };

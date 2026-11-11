@@ -10,5 +10,10 @@ export function createSupabaseStore(url: string, serviceKey: string): Store {
       if (error) throw new Error(`${fn}: ${error.message}`);
       return data as T;
     },
+    async createUser(email, password) {
+      const { data, error } = await client.auth.admin.createUser({ email, password, email_confirm: true });
+      if (error || !data.user) return { error: error?.message ?? 'could not create the account' };
+      return { id: data.user.id };
+    },
   };
 }

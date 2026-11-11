@@ -49,6 +49,10 @@ export async function createPgliteStore(migrationsDir: string): Promise<PgliteSt
       }
     },
     async exec(sql, params = []) { return (await db.query<Record<string, unknown>>(sql, params)).rows; },
+    async createUser(email) {
+      const r = await db.query<{ id: string }>('insert into auth.users (email) values ($1) returning id', [email]);
+      return { id: r.rows[0]!.id };
+    },
     close: () => db.close(),
   };
 }
