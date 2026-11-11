@@ -1,6 +1,7 @@
 // DEMO-mode data for /brain (no Supabase): a small, plausible vault so the page renders and animates locally.
 import type { BrainBundle, BrainConnection, BrainEvent, BrainHealth, BrainProject } from '@/lib/brainView';
 import type { BrainDevice } from '@/lib/brainDevices';
+import type { BrainPerson } from '@/lib/brainPeople';
 
 const day = (n: number) => new Date(Date.now() - n * 86400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 const iso = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
@@ -53,6 +54,17 @@ export function demoPulse(projects: BrainProject[]): BrainEvent {
 export const demoConnections = (): BrainConnection[] => [
   { family_id: '00000000-0000-4000-8000-000000000001', client_id: 'hqbc_demo', client_name: 'Claude Code (hq-brain)', redirect_uris: ['http://localhost:33418/callback'], subject: 'ceo', scopes: ['brain:read', 'brain:write'], approved_at: iso(40), last_used_at: iso(2), expires_at: iso(-86400) },
 ];
+
+/** DEMO people (invented, marked as examples in the UI). */
+export function demoPeople(): BrainPerson[] {
+  const slugs = demoProjects.map((p) => p.slug);
+  return [
+    { id: 'demo-p1', email: 'maria@example.com', name: 'Maria Santos', title: 'Virtual assistant (example)', role: 'member', invited_at: '2026-11-01T00:00:00Z', invite_expires_at: null, joined_at: '2026-11-02T00:00:00Z', disabled_at: null,
+      grants: slugs.slice(0, 2).map((slug, i) => ({ slug, access: i === 0 ? 'write' : 'read', transcripts: false, expires_at: null })), last_active_at: '2026-11-11T08:00:00Z', connections: 1 },
+    { id: 'demo-p2', email: 'lea@example.com', name: 'Lea Ramos', title: 'Client reviewer (example)', role: 'viewer', invited_at: '2026-11-10T00:00:00Z', invite_expires_at: '2026-11-17T00:00:00Z', joined_at: null, disabled_at: null,
+      grants: slugs.slice(2, 3).map((slug) => ({ slug, access: 'read', transcripts: false, expires_at: '2026-11-30' })), last_active_at: null, connections: 0 },
+  ];
+}
 
 /** DEMO devices: a healthy PC, one mid-setup, one Claude app. */
 export function demoDevices(now = Date.now()): BrainDevice[] {

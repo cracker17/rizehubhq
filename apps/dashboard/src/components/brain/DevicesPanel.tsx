@@ -91,6 +91,7 @@ export function DevicesPanel({ connections, health, demo, devices = [] }: { conn
         <div className="flex flex-wrap gap-2">
           <Link href="/brain/devices/new" className={btn.primary}><Plus size={16} aria-hidden />Set up a computer</Link>
           <Link href="/brain/devices" className={btn.ghost}>All devices</Link>
+          <Link href="/brain/people" className={btn.ghost}>People &amp; access</Link>
         </div>
         <details className="text-sm text-[var(--color-muted)]">
           <summary className="cursor-pointer select-none">Manual steps (Claude Code command, connector URL)</summary>

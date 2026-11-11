@@ -152,6 +152,60 @@ export async function newBrainDeviceLinkAction(id: unknown): Promise<BrainResult
   return { ok: true, device: device as BrainDevice, code };
 }
 
+// ---------- P2 people + project access ----------
+
+const ROLES = new Set(['admin', 'member', 'viewer']);
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const cleanGrants = (v: unknown) => (Array.isArray(v) ? v : []).slice(0, 200).flatMap((g) => {
+  const o = (g && typeof g === 'object' ? g : {}) as Record<string, unknown>;
+  const slug = typeof o.slug === 'string' && SLUG.test(o.slug) ? o.slug : null;
+  if (!slug || (o.access !== 'read' && o.access !== 'write')) return [];
+  const exp = typeof o.expires_at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.expires_at) ? o.expires_at : null;
+  return [{ slug, access: o.access, transcripts: o.transcripts === true, expires_at: exp }];
+});
+const peopleError = (msg: string) => /brain_person|brain_people|does not exist|42883|PGRST202/i.test(msg)
+  ? 'People are not switched on yet: apply migration 20261111020000_brain_people.sql.' : friendly(msg);
+
+/** Invite (or re-invite) a person with their projects. Returns the one-time join code (shown once). */
+export async function inviteBrainPersonAction(input: unknown): Promise<BrainResult<{ id: string; code: string | null }>> {
+  const b = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const email = text(b.email, 200).toLowerCase();
+  const name = text(b.name, 80);
+  const role = typeof b.role === 'string' && ROLES.has(b.role) ? b.role : 'member';
+  if (!name) return { ok: false, error: 'Add their name.' };
+  if (!EMAIL.test(email)) return { ok: false, error: 'That e-mail address does not look right.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: true, id: `demo-${Date.now()}`, code: '0123456789abcdef0123456789abcdef01234567' };
+  const { data, error } = await ceo.db.rpc('brain_person_invite', { p: { email, name, title: text(b.title, 80), role, grants: cleanGrants(b.grants) } });
+  if (error) return { ok: false, error: peopleError(error.message) };
+  return { ok: true, ...(data as { id: string; code: string | null }) };
+}
+
+/** Save role + project access from the person screen. Takes effect on the connector at once. */
+export async function updateBrainPersonAction(id: unknown, input: unknown): Promise<BrainResult> {
+  if (typeof id !== 'string' || !ID.test(id)) return { ok: false, error: 'Unknown person.' };
+  const b = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const role = typeof b.role === 'string' && ROLES.has(b.role) ? b.role : undefined;
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const { error } = await ceo.db.rpc('brain_person_update', { p_person: id, p: { ...(role ? { role } : {}), grants: cleanGrants(b.grants) } });
+  if (error) return { ok: false, error: peopleError(error.message) };
+  return { ok: true };
+}
+
+/** Disable (connections stop at once) or enable again. */
+export async function setBrainPersonDisabledAction(id: unknown, disabled: unknown): Promise<BrainResult> {
+  if (typeof id !== 'string' || !ID.test(id)) return { ok: false, error: 'Unknown person.' };
+  const ceo = await requireCeo();
+  if ('error' in ceo) return { ok: false, error: ceo.error };
+  if (ceo.demo) return { ok: false, error: DEMO };
+  const { error } = await ceo.db.rpc('brain_person_disable', { p_person: id, p_disabled: disabled === true });
+  if (error) return { ok: false, error: peopleError(error.message) };
+  return { ok: true };
+}
+
 export async function revokeBrainDeviceAction(id: unknown): Promise<BrainResult> {
   if (typeof id !== 'string' || !ID.test(id)) return { ok: false, error: 'Unknown device.' };
   const ceo = await requireCeo();

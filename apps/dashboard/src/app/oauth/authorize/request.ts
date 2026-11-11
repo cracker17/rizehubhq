@@ -27,7 +27,7 @@ export type Check =
   | { kind: 'fatal'; message: string }                                   // show an error page, never redirect
   | { kind: 'client_error'; redirect: string }                           // bounce back to the client with ?error=
   | { kind: 'login'; to: string }                                        // HQ sign-in (or its 2FA step) first
-  | { kind: 'ok'; client: ClientInfo; userId: string; origin: string; wantsWrite: boolean };
+  | { kind: 'ok'; client: ClientInfo; userId: string; origin: string; wantsWrite: boolean; person?: { name: string; role: string; projects: number } | null };
 
 export function withParams(uri: string, params: Record<string, string>): string {
   const u = new URL(uri);
@@ -59,12 +59,18 @@ export async function checkAuthorize(p: AuthorizeParams): Promise<Check> {
   const state = await totpState(db);
   if (!state) return { kind: 'login', to: `/login?next=${encodeURIComponent(next)}` };
   if (state.factorId && state.currentLevel !== 'aal2') return { kind: 'login', to: `/login?step=totp&next=${encodeURIComponent(next)}` };
-  if (!state.factorId) return { kind: 'fatal', message: 'Turn on two-factor sign-in first (Admin → Security). The Brain holds all your project memory, so connecting it needs 2FA.' };
   const { data: { user } } = await db.auth.getUser();
   if (!user) return { kind: 'login', to: `/login?next=${encodeURIComponent(next)}` };
   const ceo = await db.from('ceo_users').select('user_id').eq('user_id', user.id).maybeSingle();
-  if (!ceo.data) return { kind: 'fatal', message: 'Only the CEO account can connect the Brain.' };
+  // HQ Brain P2: invited people (brain_people) may connect too; the brain filters what they see.
+  const person = ceo.data ? null : (await db.rpc('brain_my_access')).data as { role: string; name: string; projects: unknown[] } | null;
+  if (!ceo.data && !person) return { kind: 'fatal', message: 'This account has no access to the HQ Brain. Ask Julev for an invite.' };
+  if (!state.factorId) {
+    return { kind: 'fatal', message: ceo.data
+      ? 'Turn on two-factor sign-in first (Admin → Security). The Brain holds all your project memory, so connecting it needs 2FA.'
+      : 'Turn on two-factor sign-in first: open hq.rizehub.ph/member and follow the 2FA step.' };
+  }
   const asked = p.scope.split(/\s+/).filter(Boolean);
-  const wantsWrite = !asked.some((s) => s.startsWith('brain:')) || asked.includes('brain:write');
-  return { kind: 'ok', client, userId: user.id, origin, wantsWrite };
+  const wantsWrite = person?.role !== 'viewer' && (!asked.some((s) => s.startsWith('brain:')) || asked.includes('brain:write'));
+  return { kind: 'ok', client, userId: user.id, origin, wantsWrite, person: person ? { name: person.name, role: person.role, projects: person.projects.length } : null };
 }

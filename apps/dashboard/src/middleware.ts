@@ -18,7 +18,11 @@ function env(name: string) {
 // (HQ sign-in + 2FA, CEO only).
 // /setup/<code> serves a device's one-time installer and /api/brain/device takes its step reports (HQ Brain P1): the
 // brain service checks the one-time code / device token itself.
-const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain', '/setup', '/api/brain/device'];
+// /join/<code> is the invite page for people (HQ Brain P2).
+const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain', '/setup', '/api/brain/device', '/join'];
+// Signed-in accounts that are not the CEO (invited Brain people) may only use these; everything else sends them to /member.
+const MEMBER_PATHS = [...PUBLIC, '/member', '/reset-password'];
+const allowedFor = (list: string[], path: string) => list.some((p) => path === p || path.startsWith(`${p}/`));
 
 export async function middleware(request: NextRequest) {
   const url = env('NEXT_PUBLIC_SUPABASE_URL');
@@ -70,6 +74,12 @@ export async function middleware(request: NextRequest) {
     return redirect(to);
   }
   if (gate === 'to_home') return redirect(new URL('/', request.url));
+  // HQ is the CEO's office: other signed-in accounts (invited Brain people) only get their member page and the connector
+  // consent. RLS already hides the data; this keeps them out of empty CEO screens too.
+  if (user && !allowedFor(MEMBER_PATHS, path)) {
+    const { data: ceo } = await supabase.from('ceo_users').select('user_id').eq('user_id', user.id).maybeSingle();
+    if (!ceo) return redirect(new URL('/member', request.url));
+  }
   return response;
 }
 

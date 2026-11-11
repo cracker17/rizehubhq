@@ -40,19 +40,27 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
   const back = new URL(check.client.redirect_uri);
   return (
     <Shell>
-      <h1 className="text-xl font-semibold">Connect {check.client.client_name} to your Brain?</h1>
+      <h1 className="text-xl font-semibold">Connect {check.client.client_name} to {check.person ? 'the HQ Brain' : 'your Brain'}?</h1>
       <p className="mt-2 text-sm text-[var(--color-muted)]">
-        It will be able to read your project memory, sessions and profile from the HQ Brain.
+        {check.person
+          ? `It will be able to read the ${check.person.projects} project${check.person.projects === 1 ? '' : 's'} Julev shared with you, and nothing else.`
+          : 'It will be able to read your project memory, sessions and profile from the HQ Brain.'}
       </p>
       <form action={decideAction} className="mt-5 flex flex-col gap-4">
         {PARAM_NAMES.map((n) => p[n] && <input key={n} type="hidden" name={n} value={p[n]} />)}
-        <label className="flex items-start gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] p-3 text-sm">
-          <input type="checkbox" name="write" defaultChecked={check.wantsWrite} className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]" />
-          <span>
-            <span className="block font-medium">Also allow saving</span>
-            <span className="block text-[var(--color-muted)]">Save sessions, update memory and create projects. Every save is a commit in the vault, so it can be undone.</span>
-          </span>
-        </label>
+        {check.person?.role === 'viewer' ? (
+          <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] p-3 text-sm text-[var(--color-muted)]">Your access is read-only.</p>
+        ) : (
+          <label className="flex items-start gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-2)] p-3 text-sm">
+            <input type="checkbox" name="write" defaultChecked={check.wantsWrite} className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]" />
+            <span>
+              <span className="block font-medium">Also allow saving</span>
+              <span className="block text-[var(--color-muted)]">{check.person
+                ? 'Save sessions and update memory on projects where you have edit access. Every save is logged with your name and can be undone.'
+                : 'Save sessions, update memory and create projects. Every save is a commit in the vault, so it can be undone.'}</span>
+            </span>
+          </label>
+        )}
         <p className="text-xs text-[var(--color-dim)]">
           Returns to <span className="font-mono">{back.host}</span>. You can revoke it any time. Secrets are never stored in the Brain.
         </p>

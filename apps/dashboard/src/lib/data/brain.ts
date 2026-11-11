@@ -6,7 +6,8 @@ import { createSupabaseServer } from '@/lib/supabase/server';
 import { supabaseEnv } from '@/lib/env';
 import type { BrainBundle, BrainConnection, BrainEvent, BrainHealth, BrainProject } from '@/lib/brainView';
 import type { BrainDevice } from '@/lib/brainDevices';
-import { demoBundle, demoConnections, demoDevices, demoEvents, demoHealth, demoProjects } from './brainDemo';
+import type { BrainPerson } from '@/lib/brainPeople';
+import { demoBundle, demoConnections, demoDevices, demoEvents, demoHealth, demoPeople, demoProjects } from './brainDemo';
 
 export interface Loaded<T> { data: T; error?: string }
 export interface BrainHome { health: BrainHealth | null; projects: BrainProject[]; events: BrainEvent[]; connections: BrainConnection[]; devices: BrainDevice[]; demo: boolean }
@@ -42,6 +43,19 @@ export async function loadBrainHome(): Promise<Loaded<BrainHome>> {
       connections: val(connections, []), devices: val(devices, []), demo: false,
     },
     error: failed.length ? `Could not load the brain's ${failed.join(', ')} just now. The rest of the page is current; refresh in a minute.` : undefined,
+  };
+}
+
+export interface BrainPeopleData { people: BrainPerson[]; projects: Array<{ slug: string; name: string }>; demo: boolean }
+
+export async function loadBrainPeople(): Promise<Loaded<BrainPeopleData>> {
+  const db = await liveDb();
+  const listed = (ps: BrainProject[]) => ps.filter((p) => p.listed !== false).map((p) => ({ slug: p.slug, name: p.name })).sort((a, b) => a.name.localeCompare(b.name));
+  if (!db) return { data: { people: demoPeople(), projects: listed(demoProjects), demo: true } };
+  const [people, projects] = await Promise.allSettled([rpc<BrainPerson[]>(db, 'brain_people_list'), rpc<BrainProject[]>(db, 'brain_list_projects')]);
+  return {
+    data: { people: people.status === 'fulfilled' ? people.value ?? [] : [], projects: projects.status === 'fulfilled' ? listed(projects.value ?? []) : [], demo: false },
+    error: people.status === 'rejected' ? 'People are not switched on yet (apply migration 20261111020000_brain_people.sql).' : undefined,
   };
 }
 
