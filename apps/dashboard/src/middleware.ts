@@ -19,7 +19,7 @@ function env(name: string) {
 // /setup/<code> serves a device's one-time installer and /api/brain/device takes its step reports (HQ Brain P1): the
 // brain service checks the one-time code / device token itself.
 // /join/<code> is the invite page for people (HQ Brain P2).
-const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain', '/setup', '/api/brain/device', '/join'];
+const PUBLIC = ['/login', '/api/health', '/access', '/auth', '/oauth', '/api/brain/github', '/.well-known', '/mcp/brain', '/setup', '/api/brain/device', '/api/brain/sync', '/join'];
 // Signed-in accounts that are not the CEO (invited Brain people) may only use these; everything else sends them to /member.
 const MEMBER_PATHS = [...PUBLIC, '/member', '/reset-password'];
 const allowedFor = (list: string[], path: string) => list.some((p) => path === p || path.startsWith(`${p}/`));

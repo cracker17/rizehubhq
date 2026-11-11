@@ -12,6 +12,7 @@ import { handleMcpPost, MCP_MAX_BODY } from './mcp/server';
 import { createProjectOp, updateMemoryOp, WriteError, type NewProject } from './write/vault';
 import { deviceReport, setupScript } from './setup/devices';
 import { joinWithInvite, peekInvite } from './people';
+import { handleSync } from './sync/hqsync';
 
 export const MAX_BODY_BYTES = 1024 * 1024;
 export { DEFAULT_SEARCH_KINDS } from './queries';
@@ -166,6 +167,13 @@ async function route(d: ApiDeps, req: http.IncomingMessage, url: URL, res: http.
     let b: Record<string, unknown>;
     try { b = JSON.parse((await readRaw(req, 16 * 1024)).toString('utf8') || '{}'); } catch { return [400, { error: 'invalid JSON' }]; }
     return deviceReport(setup, header(req, 'x-device-authorization'), b && typeof b === 'object' ? b : {});
+  }
+  // P3 HQ Sync for team members' PCs (the dashboard's public /api/brain/sync/<action> forwards here).
+  const sm = /^\/sync\/(manifest|file|upload)$/.exec(p);
+  if (req.method === 'POST' && sm) {
+    let b: Record<string, unknown>;
+    try { b = JSON.parse((await readRaw(req, 700 * 1024)).toString('utf8') || '{}'); } catch { return [400, { error: 'invalid JSON' }]; }
+    return handleSync({ store: d.store, service: d.service, vaultDir: d.vaultDir, log: d.log }, sm[1]!, b && typeof b === 'object' ? b : {});
   }
   // P2 join flow (the dashboard's public /join/<code> page calls these server-side).
   if (req.method === 'GET' && p === '/people/invite') {

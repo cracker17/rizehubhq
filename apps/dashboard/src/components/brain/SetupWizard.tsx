@@ -49,10 +49,11 @@ function demoAdvance(d: BrainDevice, tick: number): BrainDevice {
   };
 }
 
-export function SetupWizard({ demo }: { demo: boolean }) {
+export function SetupWizard({ demo, people = [] }: { demo: boolean; people?: Array<{ id: string; name: string }> }) {
   const { toast } = useHq();
   const [step, setStep] = useState<Step>(1);
   const [kind, setKind] = useState<'pc' | 'claude'>('pc');
+  const [owner, setOwner] = useState<string>(''); // '' = me (Julev); else a person id (P3: HQ Sync PC)
   const [name, setName] = useState('');
   const [device, setDevice] = useState<BrainDevice | null>(null);
   const [code, setCode] = useState<string | null>(null);
@@ -82,14 +83,14 @@ export function SetupWizard({ demo }: { demo: boolean }) {
   // move forward on their own when the signal arrives (the person can still go back)
   useEffect(() => {
     if (!device) return;
-    if (step === 2 && progress?.allDone) setStep(3);
+    if (step === 2 && progress?.allDone) setStep(device.track === 'member' ? 4 : 3); // member PCs need no sign-in on the PC
     if (step === 3 && device.kind === 'pc' && stepState(device, 'github').s === 'done' && stepState(device, 'roundtrip').s !== 'wait') setStep(4);
     if (step === 3 && device.kind === 'claude' && device.tested_at) setStep(4);
   }, [device, step, progress?.allDone]);
 
   const create = () => start(async () => {
     setError(null);
-    const r = await createBrainDeviceAction({ name: name || (kind === 'pc' ? 'New PC' : 'Claude app'), kind });
+    const r = await createBrainDeviceAction({ name: name || (kind === 'pc' ? 'New PC' : 'Claude app'), kind, person: owner || null });
     if (!r.ok) { setError(r.error); return; }
     setDevice(r.device);
     setCode(r.code);
@@ -137,6 +138,15 @@ export function SetupWizard({ demo }: { demo: boolean }) {
         <section className="card p-4 sm:p-5" aria-live="polite">
           {step === 1 && (
             <div className="flex flex-col gap-5">
+              {people.length > 0 && (
+                <label className="flex flex-col gap-1.5 text-sm">
+                  <span className="font-semibold">Whose device?</span>
+                  <select id="device-owner" value={owner} onChange={(e) => setOwner(e.target.value)} className="h-10 rounded-[10px] border border-[var(--color-line)] bg-[#07061a] px-2.5 text-sm">
+                    <option value="">Me (Julev): full vault with Git</option>
+                    {people.map((p) => <option key={p.id} value={p.id}>{p.name}: only their projects (HQ Sync)</option>)}
+                  </select>
+                </label>
+              )}
               <fieldset className="flex flex-col gap-2.5">
                 <legend className="mb-1 text-sm font-semibold">What kind of device?</legend>
                 <div className="grid gap-2.5 sm:grid-cols-2">
@@ -237,7 +247,9 @@ export function SetupWizard({ demo }: { demo: boolean }) {
                 <h2 className="font-semibold">Prove it works</h2>
                 <p className="mt-1 text-sm text-[var(--color-muted)]">{device.kind === 'pc' ? 'The installer wrote a small test note. It has to reach GitHub, get indexed by HQ Brain and be readable again.' : 'One real request, end to end.'}</p>
               </div>
-              {device.kind === 'pc' ? (
+              {device.kind === 'pc' && device.track === 'member' ? (
+                <p className="text-sm text-[var(--color-muted)]">For a team member&rsquo;s PC the test is the first HQ Sync: their projects download, and the PC reports back. {stepState(device, 'hqsync').detail ? `Last sync: ${stepState(device, 'hqsync').detail}.` : ''}</p>
+              ) : device.kind === 'pc' ? (
                 <ol className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                   {stages.map((s, i) => {
                     const doneS = !!s.at; const runS = !doneS && (i === 0 || !!stages[i - 1].at);

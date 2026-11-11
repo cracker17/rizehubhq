@@ -123,7 +123,11 @@ export async function createBrainDeviceAction(input: unknown): Promise<BrainResu
     const d = demoDevices().find((x) => x.kind === kind)!;
     return { ok: true, device: { ...d, id: `demo-${Date.now()}`, name, created_at: new Date().toISOString(), checklist: {}, info: {}, roundtrip: {}, ready_at: null, setup_used_at: null, setup_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(), tested_at: null, connected_at: null }, code: kind === 'pc' ? '0123456789abcdef0123' : null };
   }
-  const { data, error } = await ceo.db.rpc('brain_device_create', { p_name: name, p_kind: kind, p_owner_label: text(b.owner, 80) || 'Julev', p_track: 'owner' });
+  // P3: a computer for an invited person (track member, HQ Sync) or for the owner (track owner, git vault)
+  const person = typeof b.person === 'string' && ID.test(b.person) ? b.person : null;
+  const { data, error } = person
+    ? await ceo.db.rpc('brain_device_create_for', { p_name: name, p_kind: kind, p_person: person })
+    : await ceo.db.rpc('brain_device_create', { p_name: name, p_kind: kind, p_owner_label: 'Julev', p_track: 'owner' });
   if (error) return { ok: false, error: friendly(error.message) };
   const { code, ...device } = data as BrainDevice & { code: string | null };
   return { ok: true, device: device as BrainDevice, code };

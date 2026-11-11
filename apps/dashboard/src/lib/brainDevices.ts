@@ -31,7 +31,14 @@ export const PC_STEPS: StepDef[] = [
   { id: 'mcp', label: 'HQ Brain in Claude Code', hint: 'Written to ~/.claude.json, no CLI needed' },
 ];
 
-export const stepsFor = (track: Track): StepDef[] => PC_STEPS.filter((s) => track === 'owner' || !s.ownerOnly);
+const MEMBER_LABELS: Record<string, Partial<StepDef>> = {
+  folder: { label: 'HQ Brain folder', hint: 'Only this person’s projects go here' },
+  clone: { label: 'Their projects (HQ Sync)', hint: 'Downloaded from HQ, no Git or GitHub needed' },
+  cmds: { label: 'Claude commands', hint: 'Load and save through the HQ Brain connector' },
+  task: { label: 'HQ Brain Sync every 15 min', hint: 'Edits go back where they have edit access' },
+};
+export const stepsFor = (track: Track): StepDef[] => PC_STEPS.filter((s) => track === 'owner' || !s.ownerOnly)
+  .map((s) => (track === 'member' ? { ...s, ...MEMBER_LABELS[s.id] } : s));
 export const stepState = (d: Pick<BrainDevice, 'checklist'>, id: string): StepState => d.checklist?.[id] ?? { s: 'wait' };
 
 export function installProgress(d: Pick<BrainDevice, 'checklist' | 'track'>): { done: number; total: number; failed: StepDef | null; allDone: boolean } {

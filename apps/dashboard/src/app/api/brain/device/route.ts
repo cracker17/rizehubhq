@@ -5,6 +5,7 @@ import { callBrain } from '@/lib/brainCall';
 // token; the brain service checks it against the stored hash and ignores anything it doesn't know.
 export const dynamic = 'force-dynamic';
 const MAX = 16 * 1024;
+// (HQ Sync's own calls go to /api/brain/sync/<action>.)
 
 export async function POST(request: NextRequest) {
   if (Number(request.headers.get('content-length') ?? 0) > MAX) return NextResponse.json({ error: 'payload too large' }, { status: 413 });

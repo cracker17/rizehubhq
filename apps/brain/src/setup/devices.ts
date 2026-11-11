@@ -62,8 +62,12 @@ export function cleanReport(b: Record<string, unknown>): Record<string, unknown>
 export async function deviceReport(d: SetupDeps, bearer: string | undefined, body: Record<string, unknown>): Promise<[number, unknown]> {
   const token = (bearer?.replace(/^Bearer\s+/i, '') || (typeof body.token === 'string' ? body.token : '')).trim();
   if (!DEVICE_TOKEN_RE.test(token)) return [401, { error: 'unknown device' }];
-  const r = await d.store.rpc<{ id: string } | null>('brain_device_report', { p_token_hash: sha256hex(token), p: cleanReport(body) });
-  return r ? [200, { ok: true }] : [401, { error: 'unknown or revoked device' }];
+  const clean = cleanReport(body);
+  const r = await d.store.rpc<{ id: string } | null>('brain_device_report', { p_token_hash: sha256hex(token), p: clean });
+  if (!r) return [401, { error: 'unknown or revoked device' }];
+  // P3: a member PC is ready after its first good HQ Sync
+  if (clean.step === 'hqsync' && clean.s === 'done') await d.store.rpc('brain_device_mark_ready', { p_token_hash: sha256hex(token) }).catch(() => undefined);
+  return [200, { ok: true }];
 }
 
 /** After an index run: a changed devices/<id>.md with a round-trip nonce → mark it indexed, then read it back. */

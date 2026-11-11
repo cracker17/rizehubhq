@@ -5,7 +5,9 @@
 // directly), winget hangs (download the signed Git release and check its signature), no E: drive (pick the folder and
 // save it in ~/.claude/hq-brain.json), Git sign-in needs an interactive window (this script runs in one).
 
-export const INSTALLER_VERSION = '1.0.0';
+import { HQ_SYNC_PS } from '../sync/client';
+
+export const INSTALLER_VERSION = '1.1.0';
 
 export interface InstallerInput {
   /** public HQ origin, e.g. https://hq.rizehub.ph */
@@ -48,7 +50,9 @@ export function renderInstaller(i: InstallerInput): string {
     `$RepoUrl = ${psq(httpsRepoUrl(i.repoUrl))}`,
     `$InstallerVersion = ${psq(INSTALLER_VERSION)}`,
   ].join('\n');
-  return `${head}\n${BODY}`;
+  // Members get the HQ Sync script (a single-quoted here-string: nothing inside is expanded).
+  const sync = i.track === 'member' ? `\n$HqSyncScript = @'\n${HQ_SYNC_PS.replace(/^'@/gm, "' @")}\n'@\n` : '';
+  return `${head}${sync}\n${BODY}`;
 }
 
 // The script body is static (no interpolation): everything device-specific is in the variables above.
@@ -156,8 +160,44 @@ Ok $vault
 Report 'folder' 'done' $vault @{ info = @{ vault_path = $vault } }
 
 if ($Track -ne 'owner') {
-  Report 'clone' 'fail' 'Team-member PC copies (HQ Sync) are not switched on yet. Use the Claude app for now.'
-  Warn 'Team-member PC copies are coming soon. You can already use HQ Brain in the Claude app.'
+  # Team member: HQ Sync (no git, no GitHub). Only your projects come down; edits go back where you have edit access.
+  Title 'Your projects (HQ Sync)'
+  Report 'clone' 'run' 'Downloading your projects'
+  $syncDir = Join-Path $env:LOCALAPPDATA 'HQBrain'
+  New-Item -ItemType Directory -Force -Path $syncDir | Out-Null
+  $syncPs = Join-Path $syncDir 'hq-sync.ps1'
+  [IO.File]::WriteAllText($syncPs, $HqSyncScript, (New-Object Text.UTF8Encoding($true)))
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $syncPs | Out-Null
+  $files = @(Get-ChildItem -LiteralPath $vault -Recurse -File -Filter '*.md' -ErrorAction SilentlyContinue).Count
+  $logTail = if (Test-Path (Join-Path $vault '.hq-sync.log')) { (Get-Content (Join-Path $vault '.hq-sync.log') -Tail 1) } else { '' }
+  if ($logTail -match 'sync failed') { Report 'clone' 'fail' $logTail; Warn $logTail }
+  else { Ok "$files files"; Report 'clone' 'done' "$files files from your projects" }
+  Report 'github' 'skip' 'Not needed for team members'
+  Report 'cmds' 'skip' 'Use HQ Brain in Claude: load and save through the connector'
+  try {
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $syncPs + '"')
+    $t1 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650)
+    $t2 = New-ScheduledTaskTrigger -AtLogOn
+    Register-ScheduledTask -TaskName 'HQ Brain Sync' -Action $action -Trigger @($t1, $t2) -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries) -Force | Out-Null
+    Ok 'Sync every 15 minutes'
+    Report 'task' 'done' 'HQ Brain Sync: every 15 minutes and at sign-in'
+  } catch { Report 'task' 'fail' $_.Exception.Message; Warn $_.Exception.Message }
+}
+
+if ($Track -ne 'owner') {
+  # the Claude Code connector entry is the same for everyone
+  Title 'HQ Brain in Claude Code'
+  try {
+    $cj = Join-Path $HOME '.claude.json'
+    if (Test-Path $cj) { Copy-Item $cj "$cj.bak-hq-brain" -Force; $j = Get-Content $cj -Raw -Encoding UTF8 | ConvertFrom-Json } else { $j = New-Object psobject }
+    if (-not $j.PSObject.Properties['mcpServers']) { $j | Add-Member -NotePropertyName mcpServers -NotePropertyValue (New-Object psobject) }
+    $entry = [pscustomobject]@{ type = 'http'; url = "$Server/mcp/brain" }
+    if ($j.mcpServers.PSObject.Properties['hq-brain']) { $j.mcpServers.'hq-brain' = $entry } else { $j.mcpServers | Add-Member -NotePropertyName 'hq-brain' -NotePropertyValue $entry }
+    [IO.File]::WriteAllText($cj, ($j | ConvertTo-Json -Depth 100), (New-Object Text.UTF8Encoding($false)))
+    Report 'mcp' 'done' 'Written to ~/.claude.json'
+  } catch { Report 'mcp' 'fail' $_.Exception.Message }
+  Write-Host ''
+  Write-Host 'Done. Your projects are in the folder above and stay in sync. Back in HQ, the page shows the result.' -ForegroundColor Green
   return
 }
 
