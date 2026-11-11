@@ -45,7 +45,7 @@ grant select, insert, update, delete on brain_people, brain_project_grants to se
 -- Owner-only areas: never shown to anyone but the CEO (profile, guides, scheduled tasks with client e-mails, the secrets
 -- index, rules, projects.json, the cross-project session log, device notes, secrets maps).
 create or replace function brain_owner_only(p_path text) returns boolean
-language sql immutable as $$
+language sql immutable set search_path = public, extensions as $$
   select p_path ~ '^(profile|docs|scheduled-tasks|skills|claude-commands|devices|scripts)/'
       or p_path in ('env-index.md', 'CLAUDE.md', 'projects.json', 'LOG.md', 'README.md')
       or p_path ~ '(^|/)secrets-map\.md$';
@@ -265,6 +265,8 @@ begin
     execute format('revoke execute on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);
   end loop;
+  execute 'revoke execute on function brain_owner_only(text) from public, anon';
+  execute 'grant execute on function brain_owner_only(text) to authenticated, service_role';
   execute 'revoke execute on function brain_my_access() from public, anon';
   execute 'grant execute on function brain_my_access() to authenticated, service_role';
 end $$;

@@ -17,6 +17,10 @@ searchable index in Supabase that is rebuildable from git at any time. The full 
 | M14.3 | Brain UI v1 at `/brain` (Core, Ctrl+K, project view, New Project wizard, activity, Devices & accounts) | built |
 | M14.4 | Agents on the brain (scoped tokens, auto-load per client, proposals, digest), fold `brain/` in | |
 | M14.5 | Polish: graph, Ask the Brain, diff/revert, PWA, voice; nightly R2 backup | |
+| P0 | Reliability (2026-11-11): text_sha index, incremental chunk writes, fast `brain_health`, indexer survives failing files, small embedding batches, lag alerts on Telegram | built (branch) |
+| P1 | Devices: "Set up a computer" wizard, one-line installer, self-ticking checklist, round-trip test, device health | built (branch) |
+| P2 | People & per-project access: invites, join + 2FA, filtered connector for people | built (branch) |
+| P3 | HQ Sync: team members' PCs get a filtered local copy without git | built (branch) |
 
 ## Architecture (M14.1)
 
@@ -171,3 +175,52 @@ A real OpenAI key for local runs goes in `apps/brain/.env.local` (gitignored). T
 
 Recovery: the index is disposable (`POST /reindex?full=1`), the clone is disposable (`docker volume rm rizehubhq_brain-vault`),
 GitHub and the PC hold the history.
+
+## Devices, people & HQ Sync (P0–P3, 2026-11-11)
+
+Plan + decisions: vault `projects/hq-brain/onboarding-and-access-plan.md` (Process v2, §7 answered). UI prototype:
+vault `projects/hq-brain/onboarding-prototype.html`.
+
+**P0 reliability** (`20261111000000_brain_reliability.sql`). Records the fixes applied by hand on prod on 2026-11-11
+(text_sha index, incremental `brain_replace_chunks` in `language sql`, fast `brain_health` with estimated counts over 20k
+chunks, `service_role` statement_timeout 300 s). The indexer now skips a file whose write fails (`index_failed` event,
+retried next run, `brain_sync_state.failed`), embeds in batches of `BRAIN_EMBED_BATCH` (default 32, halves on failure down
+to 4, then pauses until the next run), and only moves `last_index_at` on a complete index. Index more than 1 h behind the
+last pull → a `brain_alerts` row that the bot sends to Telegram (again every 6 h). `/brain` loads each part on its own, so
+one failing call no longer blanks the page.
+
+**P1 devices** (`20261111010000_brain_devices.sql`). `/brain/devices` lists computers + Claude apps with health in words
+(green < 30 min since sync, amber < 24 h, red after) and flags approvals unused for a week. `/brain/devices/new`:
+whose device → kind (Windows PC = installer; phone/web/Mac = Claude only) → a one-time setup link (30 min) →
+`irm https://hq.rizehub.ph/setup/<code> | iex`. The installer (`apps/brain/src/setup/installer.ts`) checks the Claude app,
+installs Git from the signed release (Authenticode check, no winget), picks the folder and writes `~/.claude/hq-brain.json`
+(device token, folder), clones the vault (browser sign-in), runs the vault's `install.ps1`, writes the MCP entry into
+`~/.claude.json`, and writes `devices/<id>.md` with a nonce; the indexer marks the round trip indexed + readable → ready.
+Every step POSTs to `/api/brain/device`; `sync.ps1` keeps reporting after setup. Codes and tokens are stored as sha256 only.
+
+**P2 people** (`20261111020000_brain_people.sql`). `/brain/people`: invite (name, e-mail, role, projects) → a 7-day
+`/join/<code>` link to send yourself (nothing is e-mailed) → they set a password, turn on 2FA, connect Claude. Roles:
+admin (every project, not the owner-only areas, can create projects), member (granted projects, read or edit), viewer
+(read only). Owner-only areas: `profile/`, `docs/`, `scheduled-tasks/`, `skills/`, `claude-commands/`, `devices/`,
+`scripts/`, `env-index.md`, `CLAUDE.md`, `projects.json`, `LOG.md`, `README.md`, any `secrets-map.md`. Raw `-code-`
+transcripts only where a grant switches them on. Enforcement: tokens of invited people have subject `person`;
+`apps/brain/src/access.ts` filters every MCP tool (hidden and missing look the same), writes need edit access and commit
+as `user:<email>`. Disabling a person revokes their tokens at once. Middleware: signed-in non-CEO accounts only reach
+`/member`, `/join`, sign-in and the connector consent.
+
+**P3 HQ Sync** (`20261111030000_brain_hq_sync.sql`). A device created for a person installs `hq-sync.ps1`
+(`apps/brain/src/sync/client.ts`, task "HQ Brain Sync" every 15 min) instead of Git: `/api/brain/sync/manifest|file|upload`
+with the device token. Only visible files come down; uploads need edit access, refuse secrets, keep both on a conflict
+(`*.conflict-<device>-<time>.md`); read-only edits are kept as `*.local-copy.md`; revoked projects leave the PC.
+
+| Route (public, dashboard → brain) | Does |
+|---|---|
+| `GET /setup/<code>` → `/setup/script` | redeem a setup link, return that device's installer (always PowerShell) |
+| `POST /api/brain/device` → `/device/report` | installer / sync.ps1 / hq-sync.ps1 step reports (device token) |
+| `POST /api/brain/sync/<action>` → `/sync/<action>` | HQ Sync manifest / file / upload (device token) |
+| `/join/<code>` → `/people/invite`, `/people/join` | invite page; the brain creates the confirmed HQ login (service key) |
+
+Env: optional `BRAIN_PUBLIC_URL` (default `https://hq.rizehub.ph`), `BRAIN_EMBED_BATCH` (default 32).
+
+**Deploy order:** apply the four migrations (20261111000000 → 030000) in the SQL editor first (P0 is safe on prod:
+idempotent, and parts already exist), then `notify pgrst, 'reload schema';`, then merge the branch.
